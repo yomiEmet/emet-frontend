@@ -4,7 +4,6 @@ export default function WhisperCard({ text }) {
   return (
     <div className="whisper">
       <div className="whisper__label">
-        <span>🦦</span>
         <span>today&apos;s whisper</span>
       </div>
       <p className="whisper__text">{text}</p>

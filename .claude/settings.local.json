@@ -11,7 +11,8 @@
       "Bash(curl -s --noproxy '*' http://localhost:5173/)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git -c user.name=\"静怡\" -c user.email=\"aandxiaobao@gmail.com\" commit -q -m \"主页第一版\")"
+      "Bash(git -c user.name=\"静怡\" -c user.email=\"aandxiaobao@gmail.com\" commit -q -m \"主页第一版\")",
+      "Bash(curl -s --noproxy '*' -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5173/)"
     ]
   }
 }

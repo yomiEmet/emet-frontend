@@ -107,84 +107,317 @@
   color: var(--text);
 }
 
-/* ── 正计时 / Slogan 卡片 ───────────── */
-.hero {
-  padding: 22px 20px;
-  text-align: left;
+/* ── 第二区：Emet Memory（收小）+ 天气 ─ */
+.emet-row {
+  display: grid;
+  grid-template-columns: 1fr 92px;
+  gap: 12px;
+  align-items: stretch;
 }
 
-.hero__brand {
-  font-size: 11px;
+.emet-brand {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.emet-brand__name {
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.18em;
   color: var(--text-faint);
   text-transform: uppercase;
 }
 
-.hero__slogan {
+.emet-brand__slogan {
   font-family: var(--font-serif);
-  font-size: 22px;
-  line-height: 1.4;
-  color: var(--text);
-  margin: 6px 0 18px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin: 4px 0 10px;
 }
 
-.hero__counter {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+.emet-brand__counter {
+  font-size: 13px;
+  color: var(--text-muted);
 }
-
-.hero__days {
+.emet-brand__counter strong {
   font-family: var(--font-serif);
-  font-size: 40px;
+  font-size: 20px;
   font-weight: 600;
-  line-height: 1;
   color: var(--accent);
-  background: var(--accent-bg);
-  border-radius: var(--radius-sm);
-  padding: 10px 16px;
-  min-width: 88px;
-  text-align: center;
+  margin-right: 4px;
 }
 
-.hero__since {
+/* ── 天气卡片（占位）─────────────────── */
+.weather-card {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 12px 8px;
 }
-.hero__since strong {
+.weather-card__icon {
+  color: var(--blue);
+}
+.weather-card__temp {
+  font-family: var(--font-serif);
+  font-size: 20px;
   font-weight: 600;
+  color: var(--text);
+  margin-top: 4px;
 }
-.hero__since small {
+.weather-card__city {
   font-size: 12px;
   color: var(--text-muted);
 }
+.weather-card__tag {
+  font-size: 10px;
+}
 
-/* ── 健康卡片 ───────────────────────── */
-.health-row {
+/* ── 第三区：今日数据 2x2 ─────────────── */
+.today-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.health-card {
-  padding: 14px 16px;
+.today-card--wide {
+  grid-column: 1 / -1;
 }
 
-.health-card__label {
+.today-card {
+  padding: 14px 16px;
+  min-height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.today-card__label {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
   color: var(--text-muted);
-  margin-bottom: 8px;
 }
 
-.health-card__value {
+.today-card__value {
   font-family: var(--font-serif);
   font-size: 24px;
   font-weight: 500;
   color: var(--text);
+  margin-top: 8px;
+}
+.today-card__value .today-card__unit,
+.today-card__unit {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.today-card__value.is-muted {
+  font-size: 15px;
+  color: var(--text-faint);
+}
+
+/* today's mood —— 手绘表情选择 */
+.mood-card {
+  padding: 16px 18px;
+}
+.mood-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.mood-picker {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+.mood-face {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #F1EADF; /* 淡米色 */
+  color: var(--accent); /* 赤陶线条 */
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.mood-face:hover {
+  background: var(--accent-bg);
+}
+.mood-face.is-selected {
+  background: var(--accent);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+/* 今日数据：三个统计小卡片一行 */
+.today-grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* ── 第四区：待办 ─────────────────────── */
+.todo {
+  padding: 16px 18px;
+}
+.todo__head {
+  margin-bottom: 10px;
+}
+.todo__list {
+  list-style: none;
+}
+.todo__empty {
+  font-size: 13px;
+  padding: 6px 0;
+}
+.todo__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+.todo__item + .todo__item {
+  border-top: 1px dashed var(--border-soft);
+}
+.todo__check {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1.6px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: all 0.15s ease;
+}
+.todo__item.is-done .todo__check {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.todo__text {
+  flex: 1;
+  font-size: 14px;
+  cursor: pointer;
+}
+.todo__item.is-done .todo__text {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+.todo__del {
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.todo__add {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.todo__input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  outline: none;
+}
+.todo__input:focus {
+  border-color: var(--accent-soft);
+}
+.todo__add-btn {
+  width: 38px;
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── 第五区：记忆热力图 ───────────────── */
+.heatmap {
+  padding: 16px 18px;
+}
+.heatmap__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.heatmap__sub {
+  font-size: 11px;
+}
+.heatmap__months {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 4px;
+}
+.heatmap__month {
+  font-size: 9px;
+  color: var(--text-faint);
+  text-align: left;
+}
+.heatmap__grid {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+}
+.heat-cell {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--border-soft);
+}
+.heat-cell.is-empty {
+  background: transparent;
+}
+.heat-cell.lvl-0 {
+  background: #EFEBE4;
+}
+.heat-cell.lvl-1 {
+  background: #F0D4C5;
+}
+.heat-cell.lvl-2 {
+  background: #E0A988;
+}
+.heat-cell.lvl-3 {
+  background: #D4845F;
+}
+.heat-cell.lvl-4 {
+  background: var(--accent);
+}
+.heat-cell.is-today {
+  outline: 1.5px solid var(--text);
+  outline-offset: 1px;
+}
+.heatmap__legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 10px;
+  font-size: 10px;
+}
+.heatmap__legend .heat-cell {
+  width: 11px;
+  height: 11px;
+  aspect-ratio: auto;
 }
 
 /* ── 纪念日列表 ─────────────────────── */
@@ -261,21 +494,187 @@
 .stats-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 14px 18px;
-  font-size: 13px;
+  gap: 8px;
+  padding: 16px 18px;
+  font-size: 15px;
+  line-height: 1.7;
   color: var(--text-muted);
 }
 .stats-bar svg {
   color: var(--accent);
+  flex-shrink: 0;
 }
 .stats-bar strong {
   color: var(--text);
   font-weight: 600;
+  font-size: 16px;
 }
 .stats-bar .dot-sep {
   color: var(--text-faint);
   margin: 0 4px;
+}
+
+/* ════════════════════════════════════════
+   记忆页
+   ════════════════════════════════════════ */
+
+/* 顶部子 Tab */
+.subtabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-sidebar);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  margin-bottom: 16px;
+}
+.subtab {
+  flex: 1;
+  padding: 8px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+.subtab.is-active {
+  background: var(--bg-card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+/* 搜索框 */
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  margin-bottom: 12px;
+}
+.search-box__icon {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+.search-box__input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+/* 分类筛选 chips */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.chip {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 5px 13px;
+  transition: all 0.15s ease;
+}
+.chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 排序 */
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.sort-sep {
+  margin: 0 6px;
+}
+.sort-btn {
+  color: var(--text-muted);
+}
+.sort-btn.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.sort-btn:disabled {
+  opacity: 0.4;
+}
+
+/* 列表提示 */
+.list-hint {
+  text-align: center;
+  padding: 32px 0;
+  font-size: 13px;
+}
+
+/* 记忆卡片 */
+.mem-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  transition: border-color 0.15s ease;
+}
+.mem-card:active {
+  border-color: var(--accent-soft);
+}
+.mem-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.mem-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tag-color);
+  background: color-mix(in srgb, var(--tag-color) 12%, transparent);
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+.mem-card__content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.mem-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.mem-hashtag {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.mem-card__meta {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+/* 重要度圆点 */
+.dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.dot.is-on {
+  background: var(--accent);
 }
 
 /* ════════════════════════════════════════
