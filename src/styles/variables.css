@@ -1,0 +1,54 @@
+:root {
+  /* ── 主色 ───────────────────────────── */
+  --accent: #C96442;        /* 赤陶橙——按钮、强调、Emet 的颜色 */
+  --accent-soft: #E8B89F;   /* 浅赤陶——hover、边框 */
+  --accent-bg: #FDF5F0;     /* 极淡赤陶——卡片高亮底色 */
+
+  /* ── 背景层次 ───────────────────────── */
+  --bg: #F8F8F6;            /* 页面底色：暖白 */
+  --bg-card: #FFFFFF;       /* 卡片底色 */
+  --bg-sidebar: #F2F2EF;    /* 侧栏底色 */
+  --bg-human: #EEEEEC;      /* 用户消息气泡 */
+
+  /* ── 文字 ───────────────────────────── */
+  --text: #2C2A24;          /* 正文 */
+  --text-muted: #7E7867;    /* 次要文字 */
+  --text-faint: #ADA796;    /* 最淡文字 */
+
+  /* ── 边框 ───────────────────────────── */
+  --border: #E5E2D4;
+  --border-soft: #EDEBE0;
+
+  /* ── 语义色 ─────────────────────────── */
+  --green: #7EA67E;         /* 成功/在线 */
+  --red: #C47060;           /* 警告/超标 */
+  --blue: #6A8EB0;          /* 信息 */
+
+  /* ── 记忆分类配色 ───────────────────── */
+  --cat-core: #C96442;      /* 核心 */
+  --cat-scene: #7EA67E;     /* 情景 */
+  --cat-emotion: #C47060;   /* 情绪 */
+  --cat-semantic: #6A8EB0;  /* 语义 */
+  --cat-image: #D4956A;     /* 形象 */
+  --cat-procedure: #8A8477; /* 程序 */
+
+  /* ── 字体 ───────────────────────────── */
+  --font-serif: 'Source Serif 4', 'Songti SC', 'Noto Serif SC', Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* ── 圆角 ───────────────────────────── */
+  --radius-lg: 12px;        /* 大卡片 */
+  --radius-sm: 8px;         /* 小卡片、按钮 */
+  --radius-bubble: 20px;    /* 聊天气泡 */
+
+  /* ── 阴影 ───────────────────────────── */
+  --shadow-card: 0 1px 2px rgba(44, 42, 36, 0.04), 0 1px 8px rgba(44, 42, 36, 0.03);
+
+  /* ── 布局 ───────────────────────────── */
+  --tabbar-height: 60px;
+  --content-max: 480px;     /* 手机优先，桌面端居中限宽 */
+}
+
+/* 未来：深色主题（三套光之"深夜"） */
+/* [data-theme="night"] { ... } */

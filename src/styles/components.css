@@ -1,0 +1,306 @@
+/* ════════════════════════════════════════
+   底部 Tab 导航
+   ════════════════════════════════════════ */
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--content-max);
+  height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  background: rgba(248, 248, 246, 0.88);
+  backdrop-filter: saturate(180%) blur(16px);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  border-top: 1px solid var(--border-soft);
+  z-index: 50;
+}
+
+.tabbar__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-faint);
+  transition: color 0.18s ease;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.tabbar__item.is-active {
+  color: var(--accent);
+}
+
+.tabbar__item svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.8;
+}
+
+.tabbar__item span {
+  line-height: 1;
+}
+
+/* ════════════════════════════════════════
+   通用卡片
+   ════════════════════════════════════════ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.stack > * + * {
+  margin-top: 14px;
+}
+
+/* ════════════════════════════════════════
+   主页 · Header
+   ════════════════════════════════════════ */
+.home-header {
+  margin-bottom: 22px;
+}
+
+.home-header__date {
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.home-header__greet {
+  font-family: var(--font-serif);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+/* ── 悄悄话卡片 ─────────────────────── */
+.whisper {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+}
+
+.whisper__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.whisper__text {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* ── 正计时 / Slogan 卡片 ───────────── */
+.hero {
+  padding: 22px 20px;
+  text-align: left;
+}
+
+.hero__brand {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--text-faint);
+  text-transform: uppercase;
+}
+
+.hero__slogan {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.4;
+  color: var(--text);
+  margin: 6px 0 18px;
+}
+
+.hero__counter {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero__days {
+  font-family: var(--font-serif);
+  font-size: 40px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-radius: var(--radius-sm);
+  padding: 10px 16px;
+  min-width: 88px;
+  text-align: center;
+}
+
+.hero__since {
+  display: flex;
+  flex-direction: column;
+}
+.hero__since strong {
+  font-weight: 600;
+}
+.hero__since small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 健康卡片 ───────────────────────── */
+.health-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.health-card {
+  padding: 14px 16px;
+}
+
+.health-card__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.health-card__value {
+  font-family: var(--font-serif);
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* ── 纪念日列表 ─────────────────────── */
+.milestones {
+  padding: 16px 18px;
+}
+
+.milestone {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+}
+.milestone + .milestone {
+  border-top: 1px dashed var(--border-soft);
+}
+
+.milestone__name {
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.milestone__dots {
+  flex: 1;
+  border-bottom: 1px dotted var(--border);
+  transform: translateY(-3px);
+}
+
+.milestone__when {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.milestone__when.is-future {
+  color: var(--accent);
+}
+
+/* ── 作品入口卡片 ───────────────────── */
+.works-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.work-card {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.work-card:active {
+  transform: scale(0.97);
+  border-color: var(--accent-soft);
+}
+
+.work-card__icon {
+  color: var(--accent);
+}
+.work-card__count {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
+.work-card__name {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── 统计摘要 ───────────────────────── */
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.stats-bar svg {
+  color: var(--accent);
+}
+.stats-bar strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.stats-bar .dot-sep {
+  color: var(--text-faint);
+  margin: 0 4px;
+}
+
+/* ════════════════════════════════════════
+   占位页（Chat / Memory / Mail / Settings 骨架）
+   ════════════════════════════════════════ */
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  min-height: 60vh;
+  color: var(--text-faint);
+}
+.placeholder svg {
+  color: var(--accent-soft);
+}
+.placeholder h2 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 20px;
+  color: var(--text-muted);
+}
+.placeholder p {
+  font-size: 13px;
+  max-width: 240px;
+}
