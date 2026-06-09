@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
-import { Search, TreePine } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Search, TreePine, CalendarDays, Plus, X } from 'lucide-react'
 import MemoryCard from '../components/MemoryCard.jsx'
+import Galaxy from '../components/Galaxy.jsx'
 import { CATEGORIES } from '../utils/categories.js'
-import { memoryList, memorySearch } from '../api.js'
+import { monthLabel } from '../utils/time.js'
+import { memoryAll, countByCategory } from '../api.js'
 
 const FILTERS = [{ key: 'all', label: '全部' }, ...CATEGORIES]
 const SORTS = [
@@ -11,17 +14,22 @@ const SORTS = [
 ]
 
 export default function Memory() {
-  const [tab, setTab] = useState('memory') // memory | rings
+  const [tab, setTab] = useState('memory') // memory | galaxy | rings
 
   return (
     <div className="page">
-      {/* 顶部子 Tab */}
       <div className="subtabs">
         <button
           className={'subtab' + (tab === 'memory' ? ' is-active' : '')}
           onClick={() => setTab('memory')}
         >
           记忆
+        </button>
+        <button
+          className={'subtab' + (tab === 'galaxy' ? ' is-active' : '')}
+          onClick={() => setTab('galaxy')}
+        >
+          星图
         </button>
         <button
           className={'subtab' + (tab === 'rings' ? ' is-active' : '')}
@@ -31,52 +39,147 @@ export default function Memory() {
         </button>
       </div>
 
-      {tab === 'memory' ? <MemoryManage /> : <RingsStub />}
+      {tab === 'memory' && <MemoryManage />}
+      {tab === 'galaxy' && <Galaxy />}
+      {tab === 'rings' && <RingsStub />}
     </div>
   )
 }
 
 function MemoryManage() {
+  const navigate = useNavigate()
+  const [all, setAll] = useState(null) // null=loading
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('all')
   const [sort, setSort] = useState('recent')
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [month, setMonth] = useState('all')
+  const [calOpen, setCalOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
-    setLoading(true)
-    const q = query.trim()
-    const req = q ? memorySearch({ query: q, category }) : memoryList({ category, sort })
-    req
-      .then((res) => {
-        if (alive) setItems(res.items || [])
-      })
-      .catch(() => {
-        if (alive) setItems([])
-      })
-      .finally(() => {
-        if (alive) setLoading(false)
-      })
+    memoryAll()
+      .then((list) => alive && setAll(list))
+      .catch(() => alive && setAll([]))
     return () => {
       alive = false
     }
-  }, [query, category, sort])
+  }, [])
+
+  const counts = useMemo(() => (all ? countByCategory(all) : {}), [all])
+
+  // 日历可选月份（去重、倒序）
+  const months = useMemo(() => {
+    if (!all) return []
+    const set = new Set()
+    all.forEach((m) => {
+      const ym = (m.created_at || '').slice(0, 7)
+      if (ym.length === 7) set.add(ym)
+    })
+    return Array.from(set).sort().reverse()
+  }, [all])
+
+  const list = useMemo(() => {
+    if (!all) return []
+    let arr = all
+    if (category !== 'all') arr = arr.filter((m) => m.category === category)
+    if (month !== 'all') arr = arr.filter((m) => (m.created_at || '').slice(0, 7) === month)
+    const q = query.trim().toLowerCase()
+    if (q) {
+      arr = arr.filter(
+        (m) =>
+          m.content.toLowerCase().includes(q) ||
+          m.tags.some((t) => t.toLowerCase().includes(q)),
+      )
+    }
+    arr = [...arr]
+    if (sort === 'importance') arr.sort((a, b) => b.rawImportance - a.rawImportance)
+    else arr.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+    arr.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) // 置顶在前
+    return arr
+  }, [all, category, month, query, sort])
+
+  // 按年分组月份，给日历抽屉用
+  const monthsByYear = useMemo(() => {
+    const groups = []
+    let cur = null
+    months.forEach((ym) => {
+      const y = ym.slice(0, 4)
+      if (!cur || cur.year !== y) {
+        cur = { year: y, items: [] }
+        groups.push(cur)
+      }
+      cur.items.push(ym)
+    })
+    return groups
+  }, [months])
 
   return (
     <>
-      {/* 搜索框 */}
-      <div className="search-box">
-        <Search size={16} className="search-box__icon" />
-        <input
-          className="search-box__input"
-          placeholder="搜索记忆…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+      {/* 搜索 + 日历 */}
+      <div className="mem-controls">
+        <div className="search-box">
+          <Search size={16} className="search-box__icon" />
+          <input
+            className="search-box__input"
+            placeholder="搜索记忆…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <button
+          className={'cal-btn' + (month !== 'all' || calOpen ? ' is-active' : '')}
+          onClick={() => setCalOpen((v) => !v)}
+          aria-label="按月浏览"
+        >
+          <CalendarDays size={18} />
+        </button>
       </div>
 
-      {/* 分类筛选 */}
+      {/* 日历抽屉 */}
+      {calOpen && (
+        <div className="cal-drawer card">
+          <button
+            className={'cal-month' + (month === 'all' ? ' is-active' : '')}
+            onClick={() => {
+              setMonth('all')
+              setCalOpen(false)
+            }}
+          >
+            全部
+          </button>
+          {monthsByYear.map((g) => (
+            <div key={g.year} className="cal-year">
+              <div className="cal-year__label">{g.year}年</div>
+              <div className="cal-year__months">
+                {g.items.map((ym) => (
+                  <button
+                    key={ym}
+                    className={'cal-month' + (month === ym ? ' is-active' : '')}
+                    onClick={() => {
+                      setMonth(ym)
+                      setCalOpen(false)
+                    }}
+                  >
+                    {parseInt(ym.slice(5, 7), 10)}月
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 当前月份提示 */}
+      {month !== 'all' && (
+        <div className="mem-month-tag">
+          {monthLabel(month)}
+          <button onClick={() => setMonth('all')} aria-label="清除月份">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* 分类筛选 + 数量 */}
       <div className="chips">
         {FILTERS.map((f) => (
           <button
@@ -85,6 +188,7 @@ function MemoryManage() {
             onClick={() => setCategory(f.key)}
           >
             {f.label}
+            <em className="chip-count">{counts[f.key] || 0}</em>
           </button>
         ))}
       </div>
@@ -98,7 +202,6 @@ function MemoryManage() {
             <button
               className={'sort-btn' + (sort === s.key ? ' is-active' : '')}
               onClick={() => setSort(s.key)}
-              disabled={!!query.trim()}
             >
               {s.label}
             </button>
@@ -108,14 +211,21 @@ function MemoryManage() {
 
       {/* 列表 */}
       <div className="mem-list stack">
-        {loading ? (
+        {all === null ? (
           <p className="faint list-hint">加载中…</p>
-        ) : items.length === 0 ? (
+        ) : list.length === 0 ? (
           <p className="faint list-hint">没有匹配的记忆</p>
         ) : (
-          items.map((m) => <MemoryCard key={m.id} memory={m} />)
+          list.map((m) => (
+            <MemoryCard key={m.id} memory={m} onClick={() => navigate(`/memory/${m.id}`)} />
+          ))
         )}
       </div>
+
+      {/* 新增按钮 */}
+      <button className="fab" onClick={() => navigate('/memory/new')} aria-label="新增记忆">
+        <Plus size={24} />
+      </button>
     </>
   )
 }

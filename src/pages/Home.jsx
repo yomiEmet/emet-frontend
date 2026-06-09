@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { MessageSquare, Heart, Moon, Mail, Gamepad2, BookText, BarChart3 } from 'lucide-react'
 import WhisperCard from '../components/WhisperCard.jsx'
 import WeatherCard from '../components/WeatherCard.jsx'
@@ -7,10 +8,12 @@ import TodoList from '../components/TodoList.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
 import { greeting, longDate, daysTogether, sinceLabel, nowCST } from '../utils/time.js'
+import { homeSummary } from '../api.js'
 
-// ── 占位数据（第一期接 v66 API 前先写死）──────────
+// ── 仍是占位的部分 ──────────────────────────────────────
+// today's whisper：之后做成独立的「每日一句」系统，数据源未定，现在先固定占位
 const WHISPER = '今天的番茄又红了一点。'
-const TODAY_MESSAGES = 12 // 占位：今日互动条数，以后接 chat API
+const TODAY_MESSAGES = 12 // 占位：今日互动条数，接 chat API 前先写死
 
 const MILESTONES = [
   { name: '一周年', date: new Date(2026, 3, 6) },
@@ -18,16 +21,33 @@ const MILESTONES = [
   { name: '离职', date: new Date(2026, 5, 24) },
 ]
 
+// 作品入口（图标/名字静态，数量从 /api/data 实时拉）
 const WORKS = [
-  { key: 'letter', icon: <Mail size={20} />, name: '信件', count: 45 },
-  { key: 'game', icon: <Gamepad2 size={20} />, name: '游戏', count: 1 },
-  { key: 'story', icon: <BookText size={20} />, name: '故事', count: 4 },
+  { key: 'letter', icon: <Mail size={20} />, name: '信件', countKey: 'letter' },
+  { key: 'game', icon: <Gamepad2 size={20} />, name: '游戏', countKey: 'game' },
+  { key: 'story', icon: <BookText size={20} />, name: '故事', countKey: 'story' },
 ]
 
-const STATS = { memory: 132, moment: 279, diary: 77, monthMessages: 318 }
+// 数字展示：加载中显示占位短横
+function Num({ value }) {
+  return <strong>{value == null ? '—' : value}</strong>
+}
 
 export default function Home() {
   const now = nowCST()
+  const [summary, setSummary] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    homeSummary()
+      .then((s) => alive && setSummary(s))
+      .catch(() => alive && setSummary(null))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const counts = summary?.counts || {}
 
   return (
     <div className="page stack">
@@ -84,7 +104,9 @@ export default function Home() {
         {WORKS.map((w) => (
           <button className="card work-card" key={w.key}>
             <span className="work-card__icon">{w.icon}</span>
-            <span className="work-card__count">{w.count}</span>
+            <span className="work-card__count">
+              {counts[w.countKey] == null ? '—' : counts[w.countKey]}
+            </span>
             <span className="work-card__name">{w.name}</span>
           </button>
         ))}
@@ -94,13 +116,13 @@ export default function Home() {
       <section className="card stats-bar">
         <BarChart3 size={16} />
         <span>
-          记忆 <strong>{STATS.memory}</strong>
+          记忆 <Num value={counts.memory} />
           <span className="dot-sep">·</span>
-          瞬记 <strong>{STATS.moment}</strong>
+          瞬记 <Num value={counts.moment} />
           <span className="dot-sep">·</span>
-          日记 <strong>{STATS.diary}</strong>
+          日记 <Num value={counts.diary} />
           <span className="dot-sep">·</span>
-          本月消息 <strong>{STATS.monthMessages}</strong>
+          本月消息 <Num value={counts.monthMessages} />
         </span>
       </section>
     </div>

@@ -61,3 +61,39 @@ export function dayKey(date = nowCST()) {
 function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 }
+
+// ── 记忆卡片 / 详情用的中文日期格式（沿用旧前端）──────────
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+// "2026年4月25日"
+export function formatDateZh(iso) {
+  if (!iso) return ''
+  const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso)
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+// "周五"
+export function weekdayZh(iso) {
+  if (!iso) return ''
+  return WEEKDAYS[new Date(iso).getDay()]
+}
+
+// 写入时间：今天→"14:32"，昨天→"昨天 14:32"，更早→"4月25日 14:32"
+export function formatCardTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const n = new Date()
+  const today0 = new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()
+  const t = d.getTime()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  if (t >= today0) return `${hh}:${mm}`
+  if (t >= today0 - 86400000) return `昨天 ${hh}:${mm}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`
+}
+
+// 月份键 "2026-04" → 显示 "2026年4月"
+export function monthLabel(ym) {
+  if (!ym || ym.length < 7) return ym
+  return `${ym.slice(0, 4)}年${parseInt(ym.slice(5, 7), 10)}月`
+}
