@@ -196,6 +196,59 @@ export function memoryCreate({ content, category, importance, arousal, valence, 
   })
 }
 
+// ── 年轮：瞬记 / 日记（一期第 5 步）──────────────────────
+export async function momentAll() {
+  const data = await getData()
+  return [...(data.moments || [])].sort(byCreatedDesc)
+}
+
+// 日记展示日期优先 diary_date（补写的日记 created_at 是补写时间，不是日记当天）
+export function diaryDate(d) {
+  return d.diary_date || (d.created_at || '').slice(0, 10)
+}
+
+export async function diaryAll() {
+  const data = await getData()
+  return [...(data.diaries || [])].sort((a, b) => {
+    const da = diaryDate(a)
+    const db = diaryDate(b)
+    return da < db ? 1 : da > db ? -1 : byCreatedDesc(a, b)
+  })
+}
+
+export async function diaryGet(id) {
+  const list = await diaryAll()
+  return list.find((d) => d.id === id) || null
+}
+
+// ── 留言板 / 灵感板（一期第 6 步，写入走 X-Admin-Key）────
+export async function messageAll() {
+  const data = await getData()
+  return [...(data.messages || [])].sort(byCreatedDesc)
+}
+
+// 后端 message_leave：不传 from/to 会默认成 emet→yomi，前端发的一律 yomi→emet
+export function messageLeave(content) {
+  return writeJSON('POST', '/api/message', { content, from: 'yomi', to: 'emet' })
+}
+
+export async function ideaAll() {
+  const data = await getData()
+  return [...(data.ideas || [])].sort(byCreatedDesc)
+}
+
+// 后端 idea_save：tags 传逗号分隔字符串（同 memory_save）
+export function ideaCreate({ content, tags }) {
+  return writeJSON('POST', '/api/idea', {
+    content,
+    tags: Array.isArray(tags) ? tags.join(',') : tags || '',
+  })
+}
+
+export function ideaDelete(id) {
+  return writeJSON('DELETE', `/api/idea/${id}`)
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()

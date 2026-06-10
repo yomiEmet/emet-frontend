@@ -1349,3 +1349,337 @@
   color: var(--accent);
   text-align: right;
 }
+
+/* ════════════════════════════════════════
+   年轮 · 瞬记/日记切换（二级分段控件）
+   ════════════════════════════════════════ */
+.seg-row {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.seg {
+  display: inline-flex;
+  background: var(--bg-sidebar);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.seg-btn {
+  padding: 5px 22px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.seg-btn.is-active {
+  background: var(--bg-card);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+/* ════════════════════════════════════════
+   年轮 · 瞬记时间线
+   ════════════════════════════════════════ */
+.timeline {
+  position: relative;
+  padding-left: 18px;
+  margin: 4px 0 8px 5px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.tl-month {
+  margin-bottom: 22px;
+}
+
+.tl-month__label {
+  position: relative;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.tl-month__label::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 2.5px solid var(--bg);
+}
+
+.tl-item {
+  margin-bottom: 16px;
+}
+
+.tl-item__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.tl-item__date {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tl-item__tod {
+  font-size: 12px;
+}
+
+.tl-item__content {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+/* ════════════════════════════════════════
+   年轮 · 日记列表 + 阅读页
+   ════════════════════════════════════════ */
+.diary-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+}
+
+.diary-card__title {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.diary-card__meta {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.diary-card__preview {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.diary-read__title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 6px 0 4px;
+}
+
+.diary-read__meta {
+  font-size: 12.5px;
+  margin-bottom: 16px;
+}
+
+/* ════════════════════════════════════════
+   留言板（设计 4.4a）
+   ════════════════════════════════════════ */
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.composer textarea:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+
+.composer-send {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+
+.composer-send:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.msg-card {
+  padding: 14px 16px;
+}
+
+.msg-card__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.msg-card__who {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.msg-card--emet .msg-card__who {
+  color: var(--accent);
+}
+
+.msg-card--emet {
+  background: var(--accent-bg);
+  border-color: var(--accent-soft);
+}
+
+.msg-card__time {
+  font-size: 12px;
+}
+
+.msg-card__content {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+/* ════════════════════════════════════════
+   灵感板（设计 4.4b）
+   ════════════════════════════════════════ */
+.idea-add-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.idea-add-btn:active {
+  background: var(--bg-sidebar);
+}
+
+.idea-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.idea-form textarea {
+  border: none;
+  resize: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.idea-form textarea:focus {
+  outline: none;
+}
+
+.idea-form__tags input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.idea-form__tags input:focus {
+  outline: none;
+}
+
+.idea-form__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mini-btn {
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg-sidebar);
+}
+
+.mini-btn--accent {
+  background: var(--accent);
+  color: #fff;
+}
+
+.mini-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.idea-card {
+  position: relative;
+  padding: 14px 16px;
+}
+
+.idea-card__content {
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+  padding-right: 18px;
+}
+
+.idea-card__date {
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.idea-card__del {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px;
+  color: var(--text-faint);
+}
+

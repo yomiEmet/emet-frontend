@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, TreePine, CalendarDays, Plus, X } from 'lucide-react'
+import { Search, CalendarDays, Plus, X } from 'lucide-react'
 import MemoryCard from '../components/MemoryCard.jsx'
 import Galaxy from '../components/Galaxy.jsx'
 import { CATEGORIES } from '../utils/categories.js'
-import { monthLabel } from '../utils/time.js'
-import { memoryAll, countByCategory } from '../api.js'
+import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, weekdayZh } from '../utils/time.js'
+import { DIARY_AUTHORS, diaryAuthorLabel } from '../utils/authors.js'
+import { memoryAll, countByCategory, momentAll, diaryAll, diaryDate } from '../api.js'
 
 const FILTERS = [{ key: 'all', label: '全部' }, ...CATEGORIES]
 const SORTS = [
@@ -41,7 +42,7 @@ export default function Memory() {
 
       {tab === 'memory' && <MemoryManage />}
       {tab === 'galaxy' && <Galaxy />}
-      {tab === 'rings' && <RingsStub />}
+      {tab === 'rings' && <Rings />}
     </div>
   )
 }
@@ -230,12 +231,152 @@ function MemoryManage() {
   )
 }
 
-function RingsStub() {
+// ── 年轮：瞬记时间线 + 日记列表（设计 4.3b）──────────────
+function Rings() {
+  const [view, setView] = useState('moment') // moment | diary
+
   return (
-    <div className="placeholder">
-      <TreePine size={48} strokeWidth={1.4} />
-      <h2>年轮</h2>
-      <p>瞬记时间线 + 日记列表。第一期第 5 步接 moment / diary API。</p>
+    <>
+      <div className="seg-row">
+        <div className="seg">
+          <button
+            className={'seg-btn' + (view === 'moment' ? ' is-active' : '')}
+            onClick={() => setView('moment')}
+          >
+            瞬记
+          </button>
+          <button
+            className={'seg-btn' + (view === 'diary' ? ' is-active' : '')}
+            onClick={() => setView('diary')}
+          >
+            日记
+          </button>
+        </div>
+      </div>
+      {view === 'moment' ? <MomentTimeline /> : <DiaryList />}
+    </>
+  )
+}
+
+function MomentTimeline() {
+  const [list, setList] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    momentAll()
+      .then((l) => alive && setList(l))
+      .catch(() => alive && setList([]))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // 按东八区月份分组（list 已按时间倒序）
+  const groups = useMemo(() => {
+    if (!list) return []
+    const out = []
+    let cur = null
+    list.forEach((m) => {
+      const ym = monthKeyOf(m.created_at)
+      if (!cur || cur.ym !== ym) {
+        cur = { ym, items: [] }
+        out.push(cur)
+      }
+      cur.items.push(m)
+    })
+    return out
+  }, [list])
+
+  if (list === null) return <p className="faint list-hint">加载中…</p>
+  if (list.length === 0) return <p className="faint list-hint">还没有瞬记</p>
+
+  return (
+    <div className="timeline">
+      {groups.map((g) => (
+        <div key={g.ym} className="tl-month">
+          <div className="tl-month__label">{monthLabel(g.ym)}</div>
+          {g.items.map((m) => (
+            <div key={m.id} className="tl-item">
+              <div className="tl-item__head">
+                <span className="tl-item__date">{shortDateZh(m.created_at)}</span>
+                <span className="faint tl-item__tod">{timeOfDayZh(m.created_at)}</span>
+              </div>
+              <p className="tl-item__content">{m.content}</p>
+              {m.tags?.length > 0 && (
+                <div className="mem-card__tags">
+                  {m.tags.map((t) => (
+                    <span key={t} className="mem-hashtag">
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
+  )
+}
+
+function DiaryList() {
+  const navigate = useNavigate()
+  const [list, setList] = useState(null)
+  const [author, setAuthor] = useState('all')
+
+  useEffect(() => {
+    let alive = true
+    diaryAll()
+      .then((l) => alive && setList(l))
+      .catch(() => alive && setList([]))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const counts = useMemo(() => {
+    const c = { all: list?.length || 0 }
+    for (const d of list || []) c[d.author] = (c[d.author] || 0) + 1
+    return c
+  }, [list])
+
+  const filtered = useMemo(() => {
+    if (!list) return []
+    return author === 'all' ? list : list.filter((d) => d.author === author)
+  }, [list, author])
+
+  return (
+    <>
+      <div className="chips">
+        {DIARY_AUTHORS.map((a) => (
+          <button
+            key={a.key}
+            className={'chip' + (author === a.key ? ' is-active' : '')}
+            onClick={() => setAuthor(a.key)}
+          >
+            {a.label}
+            <em className="chip-count">{counts[a.key] || 0}</em>
+          </button>
+        ))}
+      </div>
+
+      <div className="stack">
+        {list === null ? (
+          <p className="faint list-hint">加载中…</p>
+        ) : filtered.length === 0 ? (
+          <p className="faint list-hint">没有日记</p>
+        ) : (
+          filtered.map((d) => (
+            <button key={d.id} className="card diary-card" onClick={() => navigate(`/diary/${d.id}`)}>
+              {d.title && <div className="diary-card__title">{d.title}</div>}
+              <div className="faint diary-card__meta">
+                {diaryAuthorLabel(d.author)} · {formatDateZh(diaryDate(d))} {weekdayZh(diaryDate(d))}
+              </div>
+              <p className="diary-card__preview">{d.content}</p>
+            </button>
+          ))
+        )}
+      </div>
+    </>
   )
 }

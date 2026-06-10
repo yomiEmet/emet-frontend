@@ -97,3 +97,37 @@ export function monthLabel(ym) {
   if (!ym || ym.length < 7) return ym
   return `${ym.slice(0, 4)}年${parseInt(ym.slice(5, 7), 10)}月`
 }
+
+// ── 年轮 / 留言页用（统一东八区，不随设备时区）──────────
+// ISO 时间戳 → "字段值等于东八区时间" 的 Date（同 nowCST 的思路）
+export function toCST(iso) {
+  return new Date(new Date(iso).toLocaleString('en-US', { timeZone: TZ }))
+}
+
+// 短日期 "6.9"；跨年时带年份 "2025.4.6"
+export function shortDateZh(iso, now = nowCST()) {
+  if (!iso) return ''
+  const d = toCST(iso)
+  const md = `${d.getMonth() + 1}.${d.getDate()}`
+  return d.getFullYear() === now.getFullYear() ? md : `${d.getFullYear()}.${md}`
+}
+
+// 时段标签："6.9 深夜" 的后半截
+export function timeOfDayZh(iso) {
+  if (!iso) return ''
+  const h = toCST(iso).getHours()
+  if (h < 5) return '深夜'
+  if (h < 8) return '清晨'
+  if (h < 11) return '上午'
+  if (h < 13) return '午间'
+  if (h < 17) return '下午'
+  if (h < 19) return '傍晚'
+  if (h < 23) return '夜晚'
+  return '深夜'
+}
+
+// ISO → 东八区月份键 "2026-06"，瞬记时间线按月分组用
+export function monthKeyOf(iso) {
+  const d = toCST(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}

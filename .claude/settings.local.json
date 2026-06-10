@@ -22,7 +22,13 @@
       "Bash(node -e \"const d=require\\('./_d.json'\\);const M=d.memories||[];console.log\\('total',M.length\\);console.log\\('with linked:',M.filter\\(m=>m.linked&&m.linked.length\\).length\\);console.log\\('pinned:',M.filter\\(m=>m.pinned\\).length\\);const s=M.find\\(m=>m.linked&&m.linked.length>=2\\);console.log\\('sample linked id:',s?.id,'links:',s?.linked?.length,'rel sample:',s?JSON.stringify\\(Object.values\\(s.link_rel||{}\\)[0]\\):''\\);const months=[...new Set\\(M.map\\(m=>\\(m.created_at||''\\).slice\\(0,7\\)\\)\\)].sort\\(\\).reverse\\(\\);console.log\\('months span:',months.length,months.slice\\(0,3\\).join\\(','\\),'...'\\);\")",
       "Bash(rm -f _d.json)",
       "Bash(node -e \"const d=require\\('./_v.json'\\);console.log\\('keys:',Object.keys\\(d\\)\\);const n=d.nodes||[];console.log\\('node count:',n.length\\);console.log\\('sample node:',JSON.stringify\\(n[0]\\)\\);console.log\\('x range sample:',n.slice\\(0,5\\).map\\(x=>[x.x?.toFixed?.\\(2\\),x.y?.toFixed?.\\(2\\)]\\)\\);\")",
-      "Bash(rm -f _v.json)"
+      "Bash(rm -f _v.json)",
+      "Bash(python -c ' *)",
+      "Bash(node -e ' *)",
+      "Bash(rm _data_sample.json)",
+      "PowerShell(npx vite build 2>&1 | Select-Object -Last 8)",
+      "PowerShell(npx vite build 2>&1 | Select-Object -Last 3)",
+      "Skill(claude-api)"
     ]
   }
 }
