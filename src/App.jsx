@@ -5,6 +5,7 @@ import Chat from './pages/Chat.jsx'
 import Memory from './pages/Memory.jsx'
 import MemoryDetail from './pages/MemoryDetail.jsx'
 import DiaryDetail from './pages/DiaryDetail.jsx'
+import ArchivePage from './pages/ArchivePage.jsx'
 import Messages from './pages/Messages.jsx'
 import Settings from './pages/Settings.jsx'
 
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="/diary/:id" element={<DiaryDetail />} />
         <Route path="/mail" element={<Messages />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/archive" element={<ArchivePage />} />
       </Routes>
       <TabBar />
     </div>

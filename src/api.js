@@ -249,6 +249,19 @@ export function ideaDelete(id) {
   return writeJSON('DELETE', `/api/idea/${id}`)
 }
 
+// ── 设置页（一期第 7 步）─────────────────────────────────
+export function healthCheck() {
+  return getJSON('/health') // { status:'ok', version:'6.8.2', timestamp }
+}
+
+export function statsGet() {
+  return getJSON('/api/stats') // { total_memories, total_moments, ... }
+}
+
+export function backupExport() {
+  return getJSON('/api/backup') // 全量数据 JSON，前端转 Blob 下载
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()
