@@ -8,6 +8,7 @@ const APP_VERSION = '0.1.0'
 
 // 聊天页（三期）用的模型选择，先存 localStorage 占位
 const MODELS = [
+  { id: 'claude-fable-5', label: 'Claude Fable 5' },
   { id: 'claude-opus-4-8', label: 'Claude Opus 4.8' },
   { id: 'claude-opus-4-7', label: 'Claude Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
@@ -27,7 +28,7 @@ export default function Settings() {
   const [adminKey, setAdminKey] = useState(() => localStorage.getItem('emet.adminKey') || '')
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('emet.anthropicKey') || '')
   const [apiKeyInput, setApiKeyInput] = useState('')
-  const [model, setModel] = useState(() => localStorage.getItem('emet.model') || 'claude-opus-4-8')
+  const [model, setModel] = useState(() => localStorage.getItem('emet.model') || 'claude-fable-5')
   const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
