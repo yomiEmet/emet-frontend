@@ -102,6 +102,7 @@ export function normMemory(m) {
     date: (m.created_at || '').slice(0, 10),
     activations: m.activations || 0,
     created_at: m.created_at || '',
+    updated_at: m.updated_at || m.created_at || '',
   }
 }
 
@@ -161,6 +162,16 @@ export function countByCategory(list) {
 // 更新一条记忆（content/category/importance/arousal/valence/pinned/tags/linked）
 export function memoryUpdate(id, patch) {
   return writeJSON('PUT', `/api/memory/${id}`, patch)
+}
+
+// 删除一条记忆（锁定的后端会 423 拒绝）
+export function memoryDelete(id) {
+  return writeJSON('DELETE', `/api/memory/${id}`)
+}
+
+// 类型互转（记忆/瞬记/日记/故事/便条/想法），后端 move_item 搬 KV
+export function memoryMove(id, fromType, toType) {
+  return writeJSON('POST', '/api/move', { id, from_type: fromType, to_type: toType })
 }
 
 // 织藤 / 拆藤（双向，后端 memory_link / memory_unlink 处理两头）

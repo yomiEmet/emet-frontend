@@ -1,24 +1,44 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Star, Lock, X, Plus, Pencil, Link2, Search } from 'lucide-react'
+import {
+  ArrowLeft, Star, Lock, X, Plus, Pencil, Link2, Search,
+  MoreHorizontal, Sparkles, ChevronLeft, Check,
+} from 'lucide-react'
 import { CATEGORIES, categoryOf } from '../utils/categories.js'
-import { formatDateZh, weekdayZh, formatCardTime } from '../utils/time.js'
+import { formatDateZh, weekdayZh, formatCardTime, formatRelative } from '../utils/time.js'
+import { showToast } from '../utils/toast.js'
+import TagSpaceCard from '../components/TagSpaceCard.jsx'
 import {
   memoryAll,
   memoryUpdate,
   memoryCreate,
+  memoryDelete,
+  memoryMove,
   memoryLink,
   memoryUnlink,
 } from '../api.js'
 
-const NEW_DRAFT = {
+const NEW_WORK = {
   content: '',
   category: 'semantic',
   importance: 5,
   arousal: 0.5,
   valence: 0,
   tags: [],
+  date: '',
 }
+
+// 移动到…（旧版六类互转，去掉自己）
+const MOVE_TYPES = [
+  ['moment', '瞬记'],
+  ['diary', '日记'],
+  ['story', '故事'],
+  ['message', '便条'],
+  ['idea', '想法'],
+]
+
+// 保存状态字（旧版 editorSaved 的语义）
+const SAVE_TEXT = { idle: '', new: '新建中', saving: '编辑中…', saved: '已保存', error: '保存失败' }
 
 export default function MemoryDetail() {
   const { id } = useParams()
@@ -29,19 +49,29 @@ export default function MemoryDetail() {
   const [memo, setMemo] = useState(null)
   const [notFound, setNotFound] = useState(false)
   const [editing, setEditing] = useState(isNew)
-  const [draft, setDraft] = useState(isNew ? { ...NEW_DRAFT } : null)
-  const [saving, setSaving] = useState(false)
+  const [work, setWork] = useState(isNew ? { ...NEW_WORK } : null)
+  const [saveState, setSaveState] = useState(isNew ? 'new' : 'idle')
   const [busy, setBusy] = useState(false)
   const [tagInput, setTagInput] = useState('')
   const [picker, setPicker] = useState({ open: false, query: '' })
+  const [menu, setMenu] = useState('') // '' | 'main' | 'move'
+  const [dateOpen, setDateOpen] = useState(false)
+  const [tagSpaceOpen, setTagSpaceOpen] = useState(false)
+
+  // 自动保存管线：workRef 永远指向最新值，防抖 500ms 落库
+  const workRef = useRef(null)
+  const timerRef = useRef(null)
+  const idRef = useRef(isNew ? null : id)
+  const savingRef = useRef(false)
 
   const refresh = async () => {
     const list = await memoryAll()
     setAllMems(list)
-    if (!isNew) {
-      const m = list.find((x) => x.id === id)
-      if (!m) setNotFound(true)
-      else setMemo(m)
+    const realId = idRef.current
+    if (realId) {
+      const m = list.find((x) => x.id === realId)
+      if (!m && !isNew) setNotFound(true)
+      else if (m) setMemo(m)
       return m
     }
     return null
@@ -63,75 +93,203 @@ export default function MemoryDetail() {
     }
   }, [id, isNew])
 
+  const doSave = async () => {
+    const w = workRef.current
+    if (!w || savingRef.current) return
+    savingRef.current = true
+    try {
+      if (!idRef.current) {
+        // 新建：第一次有内容时 POST 拿真实 id（旧版 B2 的流程）
+        if (!w.content.trim()) {
+          setSaveState('new')
+          return
+        }
+        const res = await memoryCreate({
+          content: w.content,
+          category: w.category,
+          importance: w.importance,
+          arousal: w.arousal,
+          valence: w.valence,
+          tags: w.tags,
+        })
+        if (res?.id) idRef.current = res.id
+        setSaveState('saved')
+      } else {
+        const patch = {
+          content: w.content,
+          category: w.category,
+          importance: w.importance,
+          arousal: w.arousal,
+          valence: w.valence,
+          tags: w.tags,
+        }
+        if (w.date) patch.date = w.date
+        await memoryUpdate(idRef.current, patch)
+        setSaveState('saved')
+      }
+    } catch (e) {
+      setSaveState('error')
+    } finally {
+      savingRef.current = false
+    }
+  }
+
+  const queueSave = (next) => {
+    workRef.current = next
+    setSaveState('saving')
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(doSave, 500)
+  }
+
+  // 离开编辑/卸载时把没落库的改动冲掉
+  const flushSave = async () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+      await doSave()
+    }
+  }
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        doSave()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const set = (k, v) =>
+    setWork((w) => {
+      const next = { ...w, [k]: v }
+      queueSave(next)
+      return next
+    })
+
   const startEdit = () => {
-    setDraft({
+    const w = {
       content: memo.content,
       category: memo.category,
       importance: memo.rawImportance,
       arousal: memo.arousal,
       valence: memo.valence,
       tags: [...memo.tags],
-    })
+      date: '',
+    }
+    workRef.current = w
+    setWork(w)
+    setSaveState('saved')
     setEditing(true)
   }
 
-  const cancelEdit = () => {
-    if (isNew) navigate('/memory')
-    else {
-      setEditing(false)
-      setDraft(null)
-      setPicker({ open: false, query: '' })
+  const finishEdit = async () => {
+    await flushSave()
+    setDateOpen(false)
+    setEditing(false)
+    setWork(null)
+    workRef.current = null
+    setSaveState('idle')
+    if (isNew && !idRef.current) {
+      navigate('/memory') // 什么都没写就退出
+      return
     }
+    await refresh()
+    if (isNew) navigate(`/memory/${idRef.current}`, { replace: true })
   }
 
-  const set = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
+  const goBack = async () => {
+    if (editing) {
+      await finishEdit()
+      if (!isNew) return // 编辑态返回 = 退出编辑，留在阅读视图
+    }
+    navigate('/memory')
+  }
 
-  const addTag = () => {
-    const v = tagInput.trim().replace(/^#/, '')
-    if (v && !draft.tags.includes(v)) set('tags', [...draft.tags, v])
+  // ── 标签（编辑模式内联输入）─────────────────────────
+  const addTag = (raw) => {
+    const v = (raw ?? tagInput).trim().replace(/^#/, '')
+    if (v && !work.tags.includes(v)) set('tags', [...work.tags, v])
     setTagInput('')
   }
-
-  const save = async () => {
-    if (!draft.content.trim()) return alert('内容不能为空')
-    setSaving(true)
-    try {
-      if (isNew) {
-        await memoryCreate(draft)
-        navigate('/memory')
-      } else {
-        await memoryUpdate(id, {
-          content: draft.content,
-          category: draft.category,
-          importance: draft.importance,
-          arousal: draft.arousal,
-          valence: draft.valence,
-          tags: draft.tags,
-        })
-        await refresh()
-        setEditing(false)
-        setDraft(null)
-      }
-    } catch (e) {
-      alert(e.message || '保存失败')
-    } finally {
-      setSaving(false)
+  const onTagKey = (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && tagInput.trim()) {
+      e.preventDefault()
+      addTag()
+    } else if (e.key === 'Backspace' && !tagInput && work.tags.length) {
+      // 旧版 B6：空输入框退格删最后一个标签
+      e.preventDefault()
+      set('tags', work.tags.slice(0, -1))
     }
   }
 
+  // 标签空间 card 模式的写入：即时落库（不走编辑态防抖）
+  const applyTags = async (tags) => {
+    if (editing) {
+      set('tags', tags)
+      return
+    }
+    try {
+      await memoryUpdate(memo.id, { tags })
+      await refresh()
+    } catch (e) {
+      showToast(e.message || '保存失败')
+    }
+  }
+
+  // ── 置顶 / 锁定 / 移动 / 删除 ───────────────────────
   const togglePin = async () => {
     if (busy) return
     setBusy(true)
     try {
-      await memoryUpdate(id, { pinned: !memo.pinned })
+      await memoryUpdate(memo.id, { pinned: !memo.pinned })
       await refresh()
+      showToast(memo.pinned ? '已取消置顶' : '已置顶')
     } catch (e) {
-      alert(e.message || '操作失败')
+      showToast(e.message || '操作失败')
     } finally {
       setBusy(false)
     }
   }
 
+  const toggleLock = async () => {
+    setMenu('')
+    try {
+      await memoryUpdate(memo.id, { locked: !memo.locked })
+      await refresh()
+      showToast(memo.locked ? '已解锁' : '已锁定')
+    } catch (e) {
+      showToast(e.message || '操作失败')
+    }
+  }
+
+  const doMove = async (to, label) => {
+    setMenu('')
+    try {
+      await memoryMove(memo.id, 'memory', to)
+      showToast('已移动到 ' + label)
+      navigate('/memory')
+    } catch (e) {
+      showToast(e.message || '移动失败')
+    }
+  }
+
+  const doDelete = async () => {
+    setMenu('')
+    if (memo.locked) {
+      showToast('请先解锁')
+      return
+    }
+    if (!window.confirm('确认删除这条记忆？')) return
+    try {
+      await memoryDelete(memo.id)
+      showToast('已删除')
+      navigate('/memory')
+    } catch (e) {
+      showToast(e.message || '删除失败')
+    }
+  }
+
+  // ── 藤蔓 ───────────────────────────────────────────
   const doLink = async (targetId) => {
     setBusy(true)
     try {
@@ -139,8 +297,9 @@ export default function MemoryDetail() {
       if (r?.error) throw new Error(r.error)
       await refresh()
       setPicker({ open: false, query: '' })
+      showToast('已关联')
     } catch (e) {
-      alert(e.message || '连接失败')
+      showToast(e.message || '连接失败')
     } finally {
       setBusy(false)
     }
@@ -153,7 +312,7 @@ export default function MemoryDetail() {
       if (r?.error) throw new Error(r.error)
       await refresh()
     } catch (e) {
-      alert(e.message || '拆藤失败')
+      showToast(e.message || '拆藤失败')
     } finally {
       setBusy(false)
     }
@@ -175,15 +334,19 @@ export default function MemoryDetail() {
 
   if (notFound)
     return (
-      <div className="page">
-        <Header onBack={() => navigate('/memory')} />
+      <div className="page detail">
+        <header className="detail-header">
+          <button className="detail-back" onClick={() => navigate('/memory')} aria-label="返回">
+            <ArrowLeft size={20} />
+          </button>
+        </header>
         <p className="faint list-hint">这条记忆不存在</p>
       </div>
     )
 
-  // 当前展示用的值（编辑时取 draft，阅读时取 memo）
+  // 展示值：编辑时取 work，阅读时取 memo
   const view = editing
-    ? draft
+    ? work
     : memo && {
         content: memo.content,
         category: memo.category,
@@ -195,51 +358,132 @@ export default function MemoryDetail() {
 
   if (!view)
     return (
-      <div className="page">
-        <Header onBack={() => navigate('/memory')} />
+      <div className="page detail">
+        <header className="detail-header">
+          <button className="detail-back" onClick={() => navigate('/memory')} aria-label="返回">
+            <ArrowLeft size={20} />
+          </button>
+        </header>
         <p className="faint list-hint">加载中…</p>
       </div>
     )
 
   const cat = categoryOf(view.category)
+  const locked = !!memo?.locked
+  const headerTitle = editing ? SAVE_TEXT[saveState] : isNew ? '新记忆' : '记忆'
+  const displayDate = editing && work.date ? work.date : memo?.date
 
   return (
     <div className="page detail">
-      <Header
-        onBack={() => (editing && !isNew ? cancelEdit() : navigate('/memory'))}
-        title={isNew ? '新记忆' : '记忆'}
-        pinned={memo?.pinned}
-        onPin={!isNew ? togglePin : null}
-        locked={memo?.locked}
-        editing={editing}
-        isNew={isNew}
-        onEdit={!isNew && !editing ? startEdit : null}
-        onCancel={editing && !isNew ? cancelEdit : null}
-      />
+      <header className="detail-header">
+        <button className="detail-back" onClick={goBack} aria-label="返回">
+          <ArrowLeft size={20} />
+        </button>
+        <span className={'detail-title' + (editing ? ' detail-title--save' : '')}>{headerTitle}</span>
+        <div className="detail-header__right">
+          {locked && <Lock size={16} className="faint" />}
+          {memo && (
+            <button
+              className={'detail-pin' + (memo.pinned ? ' is-on' : '')}
+              onClick={togglePin}
+              aria-label={memo.pinned ? '取消置顶' : '置顶'}
+            >
+              <Star size={18} fill={memo.pinned ? 'currentColor' : 'none'} />
+            </button>
+          )}
+          {!editing && memo && !locked && (
+            <button className="detail-edit-btn" onClick={startEdit}>
+              <Pencil size={15} /> 编辑
+            </button>
+          )}
+          {editing && (
+            <button className="detail-edit-btn" onClick={finishEdit}>
+              <Check size={15} /> 完成
+            </button>
+          )}
+          {memo && (
+            <button className="detail-more" onClick={() => setMenu(menu ? '' : 'main')} aria-label="更多">
+              <MoreHorizontal size={20} />
+            </button>
+          )}
+        </div>
 
-      {/* 日期 */}
+        {/* ⋯ 菜单（锁定/移动/删除）*/}
+        {menu && (
+          <div className="detail-menu card">
+            {menu === 'main' ? (
+              <>
+                <button className="dm-opt" onClick={toggleLock}>
+                  {locked ? '解锁' : '锁定'}
+                </button>
+                {!locked && (
+                  <button className="dm-opt" onClick={() => setMenu('move')}>
+                    移动到… <span className="faint">›</span>
+                  </button>
+                )}
+                <div className="dm-divider" />
+                <button className={'dm-opt' + (locked ? ' is-disabled' : ' dm-opt--danger')} onClick={doDelete}>
+                  {locked ? '删除（请先解锁）' : '删除'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="dm-opt dm-back" onClick={() => setMenu('main')}>
+                  <ChevronLeft size={14} /> 移动到
+                </button>
+                {MOVE_TYPES.map(([k, label]) => (
+                  <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
+                    {label}
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </header>
+      {menu && <div className="detail-menu-scrim" onClick={() => setMenu('')} />}
+
+      {/* 日期（编辑模式可点改，旧版 B3）*/}
       <div className="detail-date">
-        {isNew ? (
+        {isNew && !memo ? (
           <span className="faint">new entry</span>
         ) : (
           <>
-            <span className="detail-date__big">{formatDateZh(memo?.date)}</span>
+            <span
+              className={'detail-date__big' + (editing ? ' is-editable' : '')}
+              onClick={() => editing && setDateOpen((v) => !v)}
+            >
+              {formatDateZh(displayDate)}
+            </span>
             <span className="faint">
-              {weekdayZh(memo?.date)} · {formatCardTime(memo?.created_at)}
+              {weekdayZh(displayDate)} · {formatCardTime(memo?.created_at)}
+              {memo?.created_at && ` · ${formatRelative(memo.created_at)}`}
               {memo?.activations > 0 && ` · 召回 ${memo.activations} 次`}
             </span>
           </>
         )}
       </div>
+      {editing && dateOpen && (
+        <input
+          type="date"
+          className="detail-date-input"
+          value={work.date || memo?.date || ''}
+          onChange={(e) => {
+            set('date', e.target.value)
+            setDateOpen(false)
+          }}
+        />
+      )}
 
       {/* 正文 */}
       {editing ? (
         <textarea
           className="detail-body"
-          value={draft.content}
+          value={work.content}
           placeholder="写下这条记忆…"
           onChange={(e) => set('content', e.target.value)}
           rows={6}
+          autoFocus={isNew}
         />
       ) : (
         <div className="detail-read-body">{view.content}</div>
@@ -253,7 +497,7 @@ export default function MemoryDetail() {
             {CATEGORIES.map((c) => (
               <button
                 key={c.key}
-                className={'cat-opt' + (draft.category === c.key ? ' is-active' : '')}
+                className={'cat-opt' + (work.category === c.key ? ' is-active' : '')}
                 style={{ '--tag-color': c.color }}
                 onClick={() => set('category', c.key)}
               >
@@ -277,14 +521,22 @@ export default function MemoryDetail() {
 
       {/* 标签 */}
       <div className="detail-row detail-row--col">
-        <span className="detail-label">标签</span>
+        <span className="detail-label detail-label--btn" onClick={() => memo && setTagSpaceOpen(true)}>
+          标签{memo && <em className="label-hint">管理 ›</em>}
+        </span>
         <div className="tag-edit">
           {view.tags.length === 0 && !editing && <span className="faint" style={{ fontSize: 13 }}>无标签</span>}
           {view.tags.map((t) => (
-            <span key={t} className="tag-pill">
+            <span key={t} className="tag-pill tag-pill--link" onClick={() => navigate(`/tags/${encodeURIComponent(t)}`)}>
               #{t}
               {editing && (
-                <button onClick={() => set('tags', draft.tags.filter((x) => x !== t))} aria-label="删除标签">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    set('tags', work.tags.filter((x) => x !== t))
+                  }}
+                  aria-label="删除标签"
+                >
                   <X size={12} />
                 </button>
               )}
@@ -292,8 +544,13 @@ export default function MemoryDetail() {
           ))}
           {editing && (
             <span className="tag-add">
-              <input value={tagInput} placeholder="#添加标签" onChange={(e) => setTagInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())} />
-              <button onClick={addTag} aria-label="添加">
+              <input
+                value={tagInput}
+                placeholder="#添加标签"
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={onTagKey}
+              />
+              <button onClick={() => addTag()} aria-label="添加">
                 <Plus size={14} />
               </button>
             </span>
@@ -301,11 +558,12 @@ export default function MemoryDetail() {
         </div>
       </div>
 
-      {/* 藤蔓关联（新建时无） */}
-      {!isNew && (
+      {/* 藤蔓关联（新建未落库时无）*/}
+      {memo && (
         <div className="detail-row detail-row--col">
-          <span className="detail-label">
+          <span className="detail-label detail-label--btn" onClick={() => navigate(`/memory?tab=galaxy&focus=${memo.id}`)}>
             藤蔓关联{linkedItems.length > 0 && ` · ${linkedItems.length}`}
+            <em className="label-hint"><Sparkles size={12} /> 星图</em>
           </span>
           {linkedItems.length === 0 ? (
             <span className="faint" style={{ fontSize: 13 }}>暂无关联</span>
@@ -328,7 +586,6 @@ export default function MemoryDetail() {
             </div>
           )}
 
-          {/* 连接新藤蔓 —— 始终可见（连/拆是即时写入，不进编辑模式）*/}
           {!picker.open ? (
             <button className="vine-add-btn" onClick={() => setPicker({ open: true, query: '' })}>
               <Link2 size={15} /> 连接新藤蔓
@@ -360,40 +617,17 @@ export default function MemoryDetail() {
         </div>
       )}
 
-      {/* 编辑模式底部保存 */}
-      {editing && (
-        <button className="detail-save" disabled={(isNew ? !draft.content.trim() : false) || saving} onClick={save}>
-          {saving ? '保存中…' : isNew ? '创建记忆' : '保存'}
-        </button>
+      {/* 标签空间 card 模式 */}
+      {tagSpaceOpen && memo && (
+        <TagSpaceCard
+          tags={editing ? work.tags : memo.tags}
+          onChange={applyTags}
+          onClose={() => setTagSpaceOpen(false)}
+          onOpenTag={(t) => navigate(`/tags/${encodeURIComponent(t)}`)}
+          onOpenAll={() => navigate('/tags')}
+        />
       )}
     </div>
-  )
-}
-
-function Header({ onBack, title = '记忆', pinned, onPin, locked, editing, isNew, onEdit, onCancel }) {
-  return (
-    <header className="detail-header">
-      <button className="detail-back" onClick={onBack} aria-label="返回">
-        <ArrowLeft size={20} />
-      </button>
-      <span className="detail-title">{title}</span>
-      <div className="detail-header__right">
-        {locked && <Lock size={16} className="faint" />}
-        {onPin && (
-          <button className={'detail-pin' + (pinned ? ' is-on' : '')} onClick={onPin} aria-label={pinned ? '取消置顶' : '置顶'}>
-            <Star size={18} fill={pinned ? 'currentColor' : 'none'} />
-          </button>
-        )}
-        {onEdit && (
-          <button className="detail-edit-btn" onClick={onEdit}>
-            <Pencil size={15} /> 编辑
-          </button>
-        )}
-        {onCancel && !isNew && (
-          <button className="detail-cancel-btn" onClick={onCancel}>取消</button>
-        )}
-      </div>
-    </header>
   )
 }
 

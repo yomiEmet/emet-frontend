@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ChevronRight, Download } from 'lucide-react'
+import { Archive, ChevronRight, Download, Lock as LockIcon } from 'lucide-react'
+import { showToast } from '../utils/toast.js'
 import { BASE_URL, ensureAdminKey, healthCheck, statsGet, backupExport } from '../api.js'
 import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
 
@@ -48,9 +49,11 @@ export default function Settings() {
     ensureAdminKey()
     setAdminKey(localStorage.getItem('emet.adminKey') || '')
   }
-  const clearAdmin = () => {
+  // A10 改良：主动"锁定"= 清掉本机密码，下次写操作重新验证
+  const lockAdmin = () => {
     localStorage.removeItem('emet.adminKey')
     setAdminKey('')
+    showToast('已锁定')
   }
 
   const saveApiKey = () => {
@@ -119,7 +122,9 @@ export default function Settings() {
             {adminKey ? (
               <span className="set-inline">
                 <span className="set-mono">{mask(adminKey)}</span>
-                <button className="set-btn" onClick={clearAdmin}>清除</button>
+                <button className="set-btn" onClick={lockAdmin}>
+                  <LockIcon size={12} /> 锁定
+                </button>
               </span>
             ) : (
               <span className="set-inline">

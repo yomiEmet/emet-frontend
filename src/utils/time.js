@@ -131,3 +131,14 @@ export function monthKeyOf(iso) {
   const d = toCST(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
+
+// 相对时间："just now" / "3h ago" / "yesterday" / "5 days ago" / 本地日期
+export function formatRelative(iso) {
+  if (!iso) return ''
+  const diff = (Date.now() - new Date(iso).getTime()) / 86400000
+  if (diff < 0.04) return 'just now'
+  if (diff < 1) return Math.floor(diff * 24) + 'h ago'
+  if (diff < 2) return 'yesterday'
+  if (diff < 7) return Math.floor(diff) + ' days ago'
+  return new Date(iso).toLocaleDateString('zh-CN')
+}

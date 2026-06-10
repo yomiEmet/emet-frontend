@@ -21,7 +21,8 @@ function seeded(i) {
   return x - Math.floor(x)
 }
 
-export default function Galaxy() {
+// focusId：从详情页"查看✦"进来时初始选中该记忆（旧版 B12 的聚焦）
+export default function Galaxy({ focusId = null }) {
   const navigate = useNavigate()
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
@@ -60,6 +61,10 @@ export default function Galaxy() {
         })
         S.current.nodes = nodes
         S.current.links = links
+        if (focusId && idx[focusId] != null) {
+          S.current.sel = idx[focusId]
+          setSelNode(nodes[idx[focusId]])
+        }
         setStatus(nodes.length ? 'ready' : 'error')
       })
       .catch(() => alive && setStatus('error'))

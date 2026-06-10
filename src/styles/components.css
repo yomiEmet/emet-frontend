@@ -1843,3 +1843,478 @@
 .set-entry__text .faint {
   font-size: 12px;
 }
+
+/* ════════════════════════════════════════
+   全局 Toast（旧版 showToast）
+   ════════════════════════════════════════ */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-height) + 24px);
+  transform: translateX(-50%) translateY(8px);
+  background: rgba(44, 42, 36, 0.92);
+  color: #fff;
+  font-size: 13px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 600;
+  max-width: 80vw;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ════════════════════════════════════════
+   详情页：保存状态字 / ⋯菜单 / 日期编辑
+   ════════════════════════════════════════ */
+.detail-title--save {
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+.detail-more {
+  padding: 4px;
+  color: var(--text-muted);
+}
+
+.detail-menu {
+  position: absolute;
+  right: 0;
+  top: 42px;
+  min-width: 150px;
+  padding: 6px 0;
+  z-index: 320;
+  box-shadow: 0 4px 24px rgba(44, 42, 36, 0.14);
+}
+
+.detail-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 310;
+}
+
+.dm-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  gap: 8px;
+}
+
+.dm-opt:active {
+  background: var(--bg-sidebar);
+}
+
+.dm-opt--danger {
+  color: var(--red);
+}
+
+.dm-opt.is-disabled {
+  color: var(--text-faint);
+}
+
+.dm-opt.is-checked {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.dm-back {
+  justify-content: flex-start;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.dm-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 5px 0;
+}
+
+.detail-date__big.is-editable {
+  border-bottom: 1.5px dashed var(--accent-soft);
+  cursor: pointer;
+}
+
+.detail-date-input {
+  display: block;
+  margin: 6px 0 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.detail-label--btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.label-hint {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tag-pill--link {
+  cursor: pointer;
+}
+
+/* ════════════════════════════════════════
+   标签空间（C1 card 面板 + C2/C3 列表）
+   ════════════════════════════════════════ */
+.ts-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 42, 36, 0.25);
+  z-index: 400;
+}
+
+.ts-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(100%, var(--content-max));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: 14px 18px calc(16px + env(safe-area-inset-bottom));
+  z-index: 410;
+}
+
+.ts-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ts-title {
+  font-weight: 600;
+  font-size: 15px;
+  flex: 1;
+}
+
+.ts-goall {
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.ts-close {
+  color: var(--text-muted);
+  padding: 4px;
+}
+
+.ts-card-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 60px;
+}
+
+.ts-empty {
+  font-size: 13px;
+  padding: 18px 0;
+  text-align: center;
+}
+
+.tsc-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.tsc-name {
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.tsc-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tsc-edit {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.tsc-del {
+  color: var(--text-faint);
+  padding: 3px;
+}
+
+.tsc-rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.tsc-rename input {
+  flex: 1;
+  border: none;
+  border-bottom: 1.5px solid var(--accent-soft);
+  background: transparent;
+  font-size: 14px;
+  color: var(--text);
+  padding: 2px 0;
+}
+
+.tsc-rename input:focus {
+  outline: none;
+}
+
+.tsc-rename button {
+  color: var(--accent);
+  padding: 3px;
+}
+
+.ts-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ts-add input {
+  flex: 1;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ts-add input:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+
+.ts-add button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+/* C2 全部标签列表 */
+.ts-list {
+  padding: 4px 0;
+}
+
+.ts-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.ts-item + .ts-item {
+  border-top: 1px solid var(--border-soft);
+}
+
+.ts-item__count {
+  font-size: 12px;
+}
+
+/* ════════════════════════════════════════
+   记忆列表：排序菜单 / 月份条 / 时间线抽屉 / 紧凑视图 / 高亮 / 下拉刷新
+   ════════════════════════════════════════ */
+.sort-menu {
+  position: absolute;
+  right: 18px;
+  margin-top: -6px;
+  min-width: 140px;
+  padding: 6px 0;
+  z-index: 320;
+  box-shadow: 0 4px 24px rgba(44, 42, 36, 0.14);
+}
+
+.month-bar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  padding: 8px 2px;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 12px;
+}
+
+.month-bar__label {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.month-bar__btn {
+  color: var(--text-muted);
+  padding: 4px;
+}
+
+[data-month] {
+  scroll-margin-top: 56px;
+}
+
+.tl-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 42, 36, 0.2);
+  z-index: 400;
+}
+
+.tl-scrim--clear {
+  background: transparent;
+  z-index: 310;
+}
+
+.tl-drawer {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 96px;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  z-index: 410;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 16px rgba(44, 42, 36, 0.08);
+  animation: tl-in 0.25s ease;
+}
+
+@keyframes tl-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.tl-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tl-drawer__inner {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0 24px;
+}
+
+.tl-drawer__year {
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 10px 14px 4px;
+}
+
+.tl-drawer__month {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.tl-drawer__month.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* 紧凑列表视图（旧版 A5）*/
+.mem-list--compact > * + * {
+  margin-top: 8px;
+}
+
+.mem-card--compact {
+  padding: 10px 14px;
+}
+
+.mem-card--compact .mem-card__date {
+  margin-bottom: 2px;
+}
+
+.mem-card--compact .day-big {
+  font-size: 13px;
+}
+
+.mem-card--compact .mem-card__content {
+  font-size: 13px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mem-card--compact .mem-card__tags {
+  display: none;
+}
+
+/* 搜索高亮（旧版 A3）*/
+.search-hl {
+  background: rgba(201, 100, 66, 0.22);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.mem-hashtag.is-link {
+  cursor: pointer;
+}
+
+/* 下拉刷新（旧版 A8）*/
+.ptr {
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: height 0.15s ease;
+  font-size: 12.5px;
+  padding-bottom: 0;
+}
+
+.ptr span {
+  padding-bottom: 8px;
+}

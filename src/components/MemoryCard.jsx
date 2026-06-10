@@ -1,6 +1,6 @@
 import { Star, Lock } from 'lucide-react'
 import { categoryOf } from '../utils/categories.js'
-import { formatDateZh, weekdayZh, formatCardTime } from '../utils/time.js'
+import { formatDateZh, weekdayZh, formatCardTime, monthKeyOf } from '../utils/time.js'
 
 // 重要度圆点：●●●○○（设计 6.3）
 function Dots({ n = 0, max = 5 }) {
@@ -13,13 +13,42 @@ function Dots({ n = 0, max = 5 }) {
   )
 }
 
+// 搜索高亮（旧版 search-hl）
+function Hl({ text, q }) {
+  if (!q) return text
+  const lower = text.toLowerCase()
+  const ql = q.toLowerCase()
+  const parts = []
+  let i = 0
+  let idx
+  while ((idx = lower.indexOf(ql, i)) >= 0) {
+    if (idx > i) parts.push(text.slice(i, idx))
+    parts.push(
+      <mark key={idx} className="search-hl">
+        {text.slice(idx, idx + q.length)}
+      </mark>,
+    )
+    i = idx + q.length
+  }
+  parts.push(text.slice(i))
+  return parts
+}
+
 // 记忆卡片（迁移自旧前端 buildCardHtml）
-export default function MemoryCard({ memory, onClick }) {
+// query=搜索词高亮；compact=列表视图；onTagClick=点标签进标签空间
+export default function MemoryCard({ memory, onClick, query = '', compact = false, onTagClick }) {
   const cat = categoryOf(memory.category)
   const linkCount = memory.linked?.length || 0
 
   return (
-    <button className="card mem-card" onClick={onClick}>
+    <div
+      className={'card mem-card' + (compact ? ' mem-card--compact' : '') + (memory.locked ? ' is-locked' : '')}
+      role="button"
+      tabIndex={0}
+      data-month={monthKeyOf(memory.created_at)}
+      onClick={onClick}
+      onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
+    >
       {/* 角标：置顶 / 锁定 */}
       {(memory.pinned || memory.locked) && (
         <span className="mem-card__corner">
@@ -37,7 +66,9 @@ export default function MemoryCard({ memory, onClick }) {
         )}
       </div>
 
-      <p className="mem-card__content">{memory.content}</p>
+      <p className="mem-card__content">
+        <Hl text={memory.content} q={query} />
+      </p>
 
       {/* 底部：分类 + 重要度 + 藤蔓 + 标签 */}
       <div className="mem-card__foot">
@@ -54,12 +85,23 @@ export default function MemoryCard({ memory, onClick }) {
       {memory.tags?.length > 0 && (
         <div className="mem-card__tags">
           {memory.tags.map((t) => (
-            <span key={t} className="mem-hashtag">
-              #{t}
+            <span
+              key={t}
+              className={'mem-hashtag' + (onTagClick ? ' is-link' : '')}
+              onClick={
+                onTagClick
+                  ? (e) => {
+                      e.stopPropagation()
+                      onTagClick(t)
+                    }
+                  : undefined
+              }
+            >
+              #<Hl text={t} q={query} />
             </span>
           ))}
         </div>
       )}
-    </button>
+    </div>
   )
 }
