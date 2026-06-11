@@ -31,7 +31,9 @@
       "Skill(claude-api)",
       "PowerShell(Get-Item *)",
       "PowerShell(Get-ChildItem *)",
-      "PowerShell(Set-Location *)"
+      "PowerShell(Set-Location *)",
+      "Bash(rm _chat.css)",
+      "Bash(npx vite *)"
     ]
   }
 }

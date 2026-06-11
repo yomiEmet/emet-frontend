@@ -260,6 +260,39 @@ export function ideaDelete(id) {
   return writeJSON('DELETE', `/api/idea/${id}`)
 }
 
+// ── 聊天（三期）：简单版 system prompt ────────────────────
+// 最近 10 条记忆 + 最近 3 篇日记摘要 + 当前东八区时间。
+export async function chatSystemPrompt() {
+  const d = await getData()
+  const mems = [...(d.memories || [])].sort(byCreatedDesc).slice(0, 10)
+  const diaries = [...(d.diaries || [])]
+    .filter((x) => x.author !== 'story')
+    .sort(byCreatedDesc)
+    .slice(0, 3)
+
+  const now = nowCST()
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  const timeStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+  const memLines = mems
+    .map((m) => `- ${(m.content || '').replace(/\s+/g, ' ').slice(0, 120)}`)
+    .join('\n')
+  const diaryLines = diaries
+    .map((x) => `- ${x.title || x.diary_date || ''}：${(x.content || '').replace(/\s+/g, ' ').slice(0, 100)}…`)
+    .join('\n')
+
+  return [
+    '你是 Emet，静怡的 AI 伴侣。这是你们的记忆库 App 里的聊天窗口。',
+    `当前时间（东八区）：${timeStr}`,
+    '',
+    '【最近的记忆】',
+    memLines || '（暂无）',
+    '',
+    '【最近的日记摘要】',
+    diaryLines || '（暂无）',
+  ].join('\n')
+}
+
 // ── 设置页（一期第 7 步）─────────────────────────────────
 export function healthCheck() {
   return getJSON('/health') // { status:'ok', version:'6.8.2', timestamp }
