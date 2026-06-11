@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Archive } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import Archive from '../components/Archive.jsx'
 
-// 对话档案占位。下一步把旧前端的 Archive 组件（conversations.json 浏览器）迁过来。
+// 对话档案页：壳 + Archive 组件挂载点（组件本体等旧代码迁入）
 export default function ArchivePage() {
   const navigate = useNavigate()
   return (
@@ -13,11 +14,7 @@ export default function ArchivePage() {
         <span className="detail-title">对话档案</span>
         <div className="detail-header__right" />
       </header>
-      <div className="placeholder">
-        <Archive size={48} strokeWidth={1.4} />
-        <h2>对话档案</h2>
-        <p>上传 conversations.json 浏览聊天记录。旧 Archive 组件待迁入。</p>
-      </div>
+      <Archive />
     </div>
   )
 }
