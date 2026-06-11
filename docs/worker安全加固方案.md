@@ -167,12 +167,12 @@
 
 ## c. 静怡的操作清单
 
-1. **生成长随机密钥**（任选其一）：
+1. **生成长随机密钥**（任选其一，**用 hex 不用 base64**——base64 的 `+` 进了 /play 的 `?key=` 查询参数会被解析成空格，校验莫名失败）：
    ```bash
-   openssl rand -base64 32          # git-bash 里可用
+   openssl rand -hex 32             # git-bash 里可用
    ```
    ```bash
-   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
 2. **设置 Cloudflare Secret**（二选一）：
    - 命令行（在 emet-memory 目录，无 wrangler.toml 所以必须带 --name）：
@@ -207,7 +207,14 @@
 | 9 | claude.ai 的 MCP 连接 | **静怡在 claude.ai 手动验证**：列工具、调一次 breath/current_status 正常 |
 | 10 | worker 根路径旧前端：密码门输入新 key 后能正常读数据 | 列表正常加载（diff ⑥ 的效果） |
 
-## 附：本次未做、需要排期的前端配套
+## 附：前端配套（已拍板，2026-06-11）
 
-- 新前端 api.js 的 `getJSON` 已会自动附带存储的 key，但**首次访问/清空存储后所有读请求会 401**——需要给读路径加「401 时弹密码框重试」（现在只有写路径有这个逻辑）。这是加固部署后前端的第一个配套改动。
-- 本地开发若 5173 被占用 vite 会换 5174，会被 CORS 白名单拒——建议 vite.config.js 加 `server: { strictPort: true }`，或在白名单追加 5174（需要你拍板）。
+- **拍板 1**：读路径「401 弹密码框重试」按计划做，为紧接着的下一个前端任务，**后端部署当天跟上**。
+- **拍板 2**：vite.config.js 加 `server: { strictPort: true }`，并入下一个前端任务；CORS 白名单**不加** 5174。
+
+## 附：worker.new.js（2026-06-11 补充产出）
+
+- 7 块 diff 已应用为 **emet-memory/worker.new.js**（5325 行，原 5287 行），worker.js 本体未动（mtime 2026-06-09 05:47 不变）。
+- 生成方式：emet-memory/apply-hardening.cjs 脚本逐处断言原文后按行号自底向上替换，`node --check` 语法通过。
+- 验证：新文件中 ADMIN_KEY 顶层常量已删，全部 15 处残留引用均在 renderFrontend 模板字符串内（浏览器端同名变量，自有 `let ADMIN_KEY` 声明，与顶层常量无关，不会 ReferenceError）；`env.ADMIN_KEY` 引用 7 处（checkAuth 2 + /api/auth ×2 + /play ×2 含死代码副本 + fail-closed 判断）。
+- 部署时用 `npx wrangler deploy worker.new.js --no-bundle --name emet-memoty-v66`，或自行对比后把 worker.new.js 内容覆盖到 worker.js 再按原命令部署。
