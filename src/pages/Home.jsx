@@ -11,8 +11,8 @@ import { greeting, longDate, daysTogether, sinceLabel, nowCST } from '../utils/t
 import { homeSummary } from '../api.js'
 
 // ── 仍是占位的部分 ──────────────────────────────────────
-// today's whisper：之后做成独立的「每日一句」系统，数据源未定，现在先固定占位
-const WHISPER = '今天的番茄又红了一点。'
+// whisper 数据源：moments 里 #whisper 最新一条；都没有时用这句占位
+const WHISPER_FALLBACK = '今天的番茄又红了一点。'
 const TODAY_MESSAGES = 12 // 占位：今日互动条数，接 chat API 前先写死
 
 const MILESTONES = [
@@ -56,7 +56,7 @@ export default function Home() {
         <div className="home-header__date">{longDate(now)}</div>
         <h1 className="home-header__greet">{greeting('静怡', now)}</h1>
       </header>
-      <WhisperCard text={WHISPER} />
+      <WhisperCard text={summary?.whisper || WHISPER_FALLBACK} />
 
       {/* ── 第二区：Emet Memory（slogan 收小 + 天气）── */}
       <section className="emet-row">
@@ -83,7 +83,12 @@ export default function Home() {
             unit=" 条"
           />
           <TodayCard icon={<Heart size={15} />} label="心率" muted />
-          <TodayCard icon={<Moon size={15} />} label="睡眠" muted />
+          <TodayCard
+            icon={<Moon size={15} />}
+            label="睡眠"
+            value={summary?.sleep}
+            muted={!summary?.sleep}
+          />
         </div>
       </section>
 

@@ -311,13 +311,26 @@ export async function homeSummary() {
   const d = await getData()
   const messages = d.messages || []
   const diaries = d.diaries || []
+  const moments = [...(d.moments || [])].sort(byCreatedDesc)
   const ym = monthKeyCST()
 
   const monthMessages = messages.filter((m) => (m.created_at || '').slice(0, 7) === ym).length
-  const emetMsgs = messages.filter((m) => m.from === 'emet').sort(byCreatedDesc)
+
+  // whisper：moments 里带 #whisper 标签的最新一条；没有则空（前端用占位文案）
+  const whisperM = moments.find((m) => (m.tags || []).includes('whisper'))
+
+  // 睡眠：moments 里带 #睡眠 标签的最新一条，解析"X 小时/h"；解析不出就原文截断
+  const sleepM = moments.find((m) => (m.tags || []).includes('睡眠'))
+  let sleep = null
+  if (sleepM) {
+    const t = sleepM.content || ''
+    const hm = t.match(/(\d+(?:\.\d+)?)\s*(?:个?小时|h)/i)
+    sleep = hm ? `${hm[1]} 小时` : t.replace(/\s+/g, ' ').slice(0, 10)
+  }
 
   return {
-    whisper: emetMsgs[0]?.content || '',
+    whisper: whisperM?.content || '',
+    sleep,
     counts: {
       memory: (d.memories || []).length,
       moment: (d.moments || []).length,
