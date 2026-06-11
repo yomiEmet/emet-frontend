@@ -1,55 +1,32 @@
-// 浏览器直调 Anthropic Messages API（流式 SSE）。
-// Key/模型从设置页存的 localStorage 读；CORS 需要
-// anthropic-dangerous-direct-browser-access 头（Key 只在本机，风险自担）。
+// 聊天请求层：按供应商协议类型构造请求 + 解析流式响应。
+// - Anthropic 原生：POST {base}/v1/messages，x-api-key 头，
+//   SSE 事件 content_block_delta.text_delta
+// - OpenAI 兼容：POST {base}/v1/chat/completions，Authorization Bearer 头，
+//   system 放 messages 第一条，SSE data 行 choices[0].delta.content，[DONE] 结束
+import { getActiveTarget } from './providers.js'
 
-export function getApiKey() {
-  return localStorage.getItem('emet.anthropicKey') || ''
+// baseUrl 归一：去尾斜杠；没带 /v1 的补上
+function endpoint(base, path) {
+  let b = (base || '').trim().replace(/\/+$/, '')
+  if (!/\/v1$/.test(b)) b += '/v1'
+  return b + path
 }
 
-export function getModel() {
-  return localStorage.getItem('emet.model') || 'claude-fable-5'
-}
-
-// 流式对话。onDelta(增量文本, 累计全文) 逐块回调，返回完整回复。
-// 注意：Fable 5 / Opus 4.8 不接受 temperature / budget_tokens，
-// 一律不传采样参数、不传 thinking（按需省略即默认行为）。
+// 流式对话。onDelta(增量, 累计全文)；返回完整回复。
 export async function streamChat({ system, messages, onDelta, signal }) {
-  const apiKey = getApiKey()
-  if (!apiKey) throw new Error('NO_KEY')
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: getModel(),
-      max_tokens: 4096,
-      stream: true,
-      system,
-      messages,
-    }),
-    signal,
-  })
-
-  if (!res.ok) {
-    let msg = `API ${res.status}`
-    try {
-      const j = await res.json()
-      if (j?.error?.message) msg = j.error.message
-    } catch {
-      /* 非 JSON 错误体 */
-    }
-    throw new Error(msg)
+  const target = getActiveTarget()
+  if (!target) throw new Error('NO_PROVIDER')
+  const { provider, model } = target
+  if (provider.protocol === 'openai') {
+    return streamOpenAI({ provider, model, system, messages, onDelta, signal })
   }
+  return streamAnthropic({ provider, model, system, messages, onDelta, signal })
+}
 
+async function readSSE(res, onLine) {
   const reader = res.body.getReader()
   const dec = new TextDecoder()
   let buf = ''
-  let full = ''
   for (;;) {
     const { done, value } = await reader.read()
     if (done) break
@@ -59,20 +36,90 @@ export async function streamChat({ system, messages, onDelta, signal }) {
     for (const line of lines) {
       if (!line.startsWith('data:')) continue
       const payload = line.slice(5).trim()
-      if (!payload) continue
-      let ev
-      try {
-        ev = JSON.parse(payload)
-      } catch {
-        continue
-      }
-      if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
-        full += ev.delta.text
-        onDelta?.(ev.delta.text, full)
-      } else if (ev.type === 'error') {
-        throw new Error(ev.error?.message || '流式响应出错')
-      }
+      if (payload) onLine(payload)
     }
   }
+}
+
+async function throwHttpError(res) {
+  let msg = `API ${res.status}`
+  try {
+    const j = await res.json()
+    msg = j?.error?.message || j?.message || msg
+  } catch {
+    /* 非 JSON 错误体 */
+  }
+  throw new Error(msg)
+}
+
+// ── Anthropic 原生 ───────────────────────────────────────
+// 注意：Fable 5 / Opus 4.8 不接受 temperature / budget_tokens，
+// 一律不传采样参数、不传 thinking。
+async function streamAnthropic({ provider, model, system, messages, onDelta, signal }) {
+  const res = await fetch(endpoint(provider.baseUrl, '/messages'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': provider.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({ model, max_tokens: 4096, stream: true, system, messages }),
+    signal,
+  })
+  if (!res.ok) await throwHttpError(res)
+
+  let full = ''
+  let err = null
+  await readSSE(res, (payload) => {
+    let ev
+    try {
+      ev = JSON.parse(payload)
+    } catch {
+      return
+    }
+    if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
+      full += ev.delta.text
+      onDelta?.(ev.delta.text, full)
+    } else if (ev.type === 'error') {
+      err = new Error(ev.error?.message || '流式响应出错')
+    }
+  })
+  if (err) throw err
+  return full
+}
+
+// ── OpenAI 兼容（中转站常见格式）─────────────────────────
+async function streamOpenAI({ provider, model, system, messages, onDelta, signal }) {
+  const oaiMessages = [
+    ...(system ? [{ role: 'system', content: system }] : []),
+    ...messages.map((m) => ({ role: m.role, content: m.content })),
+  ]
+  const res = await fetch(endpoint(provider.baseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${provider.apiKey}`,
+    },
+    body: JSON.stringify({ model, stream: true, max_tokens: 4096, messages: oaiMessages }),
+    signal,
+  })
+  if (!res.ok) await throwHttpError(res)
+
+  let full = ''
+  await readSSE(res, (payload) => {
+    if (payload === '[DONE]') return
+    let ev
+    try {
+      ev = JSON.parse(payload)
+    } catch {
+      return
+    }
+    const delta = ev.choices?.[0]?.delta?.content
+    if (typeof delta === 'string' && delta) {
+      full += delta
+      onDelta?.(delta, full)
+    }
+  })
   return full
 }

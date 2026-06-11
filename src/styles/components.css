@@ -2591,3 +2591,251 @@
   font-size: 12px;
   flex: none;
 }
+
+/* ════════════════════════════════════════
+   供应商管理（Kelivo 式多供应商）
+   ════════════════════════════════════════ */
+.prov-card {
+  padding: 13px 16px;
+}
+
+.prov-card.is-off {
+  opacity: 0.55;
+}
+
+.prov-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.prov-card__name {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.prov-badge {
+  font-size: 10.5px;
+  font-style: normal;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.prov-card__meta {
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.prov-card__ops {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.prov-del {
+  color: var(--red);
+}
+
+/* 启用开关 */
+.prov-switch {
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--border);
+  position: relative;
+  transition: background 0.15s;
+  flex: none;
+}
+
+.prov-switch i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+  box-shadow: 0 1px 3px rgba(44, 42, 36, 0.2);
+}
+
+.prov-switch.is-on {
+  background: var(--accent);
+}
+
+.prov-switch.is-on i {
+  transform: translateX(16px);
+}
+
+/* 供应商表单（底部抽屉）*/
+.prov-form {
+  max-height: 86vh;
+}
+
+.prov-form__body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 12px;
+}
+
+.prov-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prov-field > span {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prov-field input {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 9px 12px;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.prov-field input:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+
+.prov-fill {
+  font-size: 11.5px;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.prov-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.prov-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.prov-model em {
+  font-style: normal;
+  font-size: 10px;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+.prov-model.is-default {
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+}
+
+.prov-model button {
+  color: var(--text-faint);
+  display: flex;
+}
+
+.prov-tip {
+  font-size: 11.5px;
+  margin-top: 4px;
+}
+
+/* ════════════════════════════════════════
+   聊天页：模型 pill + 切换面板
+   ════════════════════════════════════════ */
+.chat-model {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 3px 8px;
+  position: relative;
+}
+
+.chat-model__prov {
+  font-size: 13.5px;
+  font-weight: 600;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-model__id {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-model > svg {
+  position: absolute;
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faint);
+}
+
+.model-sheet {
+  overflow-y: auto;
+}
+
+.model-sheet__group {
+  margin-bottom: 12px;
+}
+
+.model-sheet__prov {
+  font-size: 12px;
+  padding: 6px 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-sheet__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  padding: 11px 10px;
+  font-size: 13.5px;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  border-radius: var(--radius-sm);
+}
+
+.model-sheet__item:active {
+  background: var(--bg-sidebar);
+}
+
+.model-sheet__item.is-active {
+  color: var(--accent);
+  font-weight: 600;
+}

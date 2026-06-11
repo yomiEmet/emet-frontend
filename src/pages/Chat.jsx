@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, History, X, Square } from 'lucide-react'
+import { Send, Plus, History, X, Square, ChevronDown, Check } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt } from '../api.js'
-import { streamChat, getApiKey } from '../utils/anthropic.js'
+import { streamChat } from '../utils/anthropic.js'
+import { loadProviders, getActiveTarget, setActiveTarget } from '../utils/providers.js'
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
 
@@ -30,8 +31,16 @@ export default function Chat() {
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [target, setTarget] = useState(getActiveTarget)
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
+
+  const pickModel = (providerId, model) => {
+    setActiveTarget(providerId, model)
+    setTarget(getActiveTarget())
+    setModelOpen(false)
+  }
 
   const cur = sessions.find((s) => s.id === curId) || null
   const messages = cur?.messages || []
@@ -68,8 +77,8 @@ export default function Chat() {
   const send = async () => {
     const text = input.trim()
     if (!text || streaming) return
-    if (!getApiKey()) {
-      showToast('请先在设置页填 API Key')
+    if (!target) {
+      showToast('请先在设置页添加供应商')
       return
     }
 
@@ -126,7 +135,7 @@ export default function Chat() {
       if (e.name === 'AbortError') {
         showToast('已停止')
       } else {
-        const msg = e.message === 'NO_KEY' ? '请先在设置页填 API Key' : e.message || '请求失败'
+        const msg = e.message === 'NO_PROVIDER' ? '请先在设置页添加供应商' : e.message || '请求失败'
         showToast(msg)
         // 把空占位换成错误提示，避免留一个空气泡
         update((prev) =>
@@ -154,16 +163,24 @@ export default function Chat() {
     }
   }
 
-  const hasKey = !!getApiKey()
-
   return (
     <div className="chat-page">
-      {/* 顶栏 */}
+      {/* 顶栏：当前供应商 · 模型，点击切换 */}
       <header className="chat-bar">
         <button className="chat-bar__btn" onClick={() => setHistoryOpen(true)} aria-label="历史对话">
           <History size={19} />
         </button>
-        <span className="chat-bar__title">{cur ? cur.title : '消息'}</span>
+        <button className="chat-model" onClick={() => setModelOpen(true)}>
+          {target ? (
+            <>
+              <span className="chat-model__prov">{target.provider.name}</span>
+              <span className="chat-model__id">{target.model}</span>
+            </>
+          ) : (
+            <span className="faint">未配置供应商</span>
+          )}
+          <ChevronDown size={13} />
+        </button>
         <button className="chat-bar__btn" onClick={newSession} aria-label="新对话">
           <Plus size={20} />
         </button>
@@ -171,12 +188,12 @@ export default function Chat() {
 
       {/* 消息区 */}
       <div className="chat-scroll">
-        {!hasKey && (
+        {!target && (
           <div className="card chat-hint">
-            还没有配置 API Key。去 <Link to="/settings">设置页</Link> 填上就能开聊。
+            还没有可用的供应商。去 <Link to="/settings">设置页</Link> 添加一个就能开聊。
           </div>
         )}
-        {messages.length === 0 && hasKey && (
+        {messages.length === 0 && target && (
           <p className="faint chat-empty">说点什么吧。</p>
         )}
         {messages.map((m, i) =>
@@ -220,6 +237,52 @@ export default function Chat() {
           </button>
         )}
       </div>
+
+      {/* 供应商/模型切换面板 */}
+      {modelOpen && (
+        <>
+          <div className="ts-scrim" onClick={() => setModelOpen(false)} />
+          <div className="ts-panel card">
+            <div className="ts-head">
+              <span className="ts-title">选择模型</span>
+              <button className="ts-close" onClick={() => setModelOpen(false)} aria-label="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="model-sheet">
+              {loadProviders().filter((p) => p.enabled && p.apiKey).length === 0 ? (
+                <p className="faint ts-empty">
+                  没有可用供应商，去 <Link to="/settings" onClick={() => setModelOpen(false)}>设置页</Link> 添加。
+                </p>
+              ) : (
+                loadProviders()
+                  .filter((p) => p.enabled && p.apiKey)
+                  .map((p) => (
+                    <div key={p.id} className="model-sheet__group">
+                      <div className="model-sheet__prov faint">
+                        {p.name}
+                        <em className="prov-badge">{p.protocol === 'openai' ? 'OpenAI 兼容' : 'Anthropic'}</em>
+                      </div>
+                      {p.models.map((m) => {
+                        const active = target?.provider.id === p.id && target?.model === m
+                        return (
+                          <button
+                            key={m}
+                            className={'model-sheet__item' + (active ? ' is-active' : '')}
+                            onClick={() => pickModel(p.id, m)}
+                          >
+                            {m}
+                            {active && <Check size={14} />}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 历史对话抽屉 */}
       {historyOpen && (
