@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { Archive, ChevronRight, Download, Lock as LockIcon } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
-import { BASE_URL, ensureAdminKey, healthCheck, statsGet, backupExport } from '../api.js'
+import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
+import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
 
 const APP_VERSION = '0.1.0'
@@ -18,7 +19,8 @@ export default function Settings() {
   const [health, setHealth] = useState(null)
   const [stats, setStats] = useState(null)
 
-  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('emet.adminKey') || '')
+  const [adminKey, setAdminKey] = useState(() => getAdminKey())
+  const [keyInput, setKeyInput] = useState('')
   const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
@@ -34,14 +36,18 @@ export default function Settings() {
     }
   }, [])
 
-  const setAdmin = () => {
-    ensureAdminKey()
-    setAdminKey(localStorage.getItem('emet.adminKey') || '')
+  // 保存输入框里的访问密钥到本机 localStorage（统一键 emet.adminKey）
+  const saveKey = () => {
+    const v = storeAdminKey(keyInput)
+    setAdminKey(v)
+    setKeyInput('')
+    showToast(v ? '访问密钥已保存' : '请输入访问密钥')
   }
-  // A10 改良：主动"锁定"= 清掉本机密码，下次写操作重新验证
+  // A10 改良：主动"锁定"= 清掉本机密钥，下次请求需重新填写
   const lockAdmin = () => {
-    localStorage.removeItem('emet.adminKey')
+    clearAdminKey()
     setAdminKey('')
+    setKeyInput('')
     showToast('已锁定')
   }
 
@@ -90,22 +96,30 @@ export default function Settings() {
               </span>
             )}
           </Row>
-          <Row label="记忆库密码">
-            {adminKey ? (
-              <span className="set-inline">
-                <span className="set-mono">{mask(adminKey)}</span>
+          <Row label="访问密钥">
+            <span className="set-inline" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {adminKey && <span className="set-mono">{mask(adminKey)}</span>}
+              <input
+                className="set-input"
+                type="password"
+                autoComplete="off"
+                placeholder={adminKey ? '输入以更换' : '粘贴访问密钥'}
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && saveKey()}
+              />
+              <button className="set-btn set-btn--accent" onClick={saveKey}>保存</button>
+              {adminKey && (
                 <button className="set-btn" onClick={lockAdmin}>
                   <LockIcon size={12} /> 锁定
                 </button>
-              </span>
-            ) : (
-              <span className="set-inline">
-                <span className="faint">未设置</span>
-                <button className="set-btn" onClick={setAdmin}>设置</button>
-              </span>
-            )}
+              )}
+            </span>
           </Row>
         </div>
+        <p className="set-hint faint" style={{ marginTop: 8 }}>
+          访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。所有数据请求都会带上它，缺失或错误时会提示到此填写。
+        </p>
       </section>
 
       {/* ── 供应商管理（多供应商，聊天页用）────── */}

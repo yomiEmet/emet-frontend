@@ -6,59 +6,34 @@
 //   GET /api/stats  统计
 //   GET /api/memory/:id 等单条详情
 // 没有 /api/xxx/list 列表路由、也没有 REST 语义搜索 —— 所以前端拉 /api/data
-// 一次，本地筛选/排序/搜索。GET 全部免鉴权、CORS 全开，可直接跨域调。
-// 写操作（二期）才需要 header X-Admin-Key。
+// 一次，本地筛选/排序/搜索。
+// 后端已安全加固：所有 /api/* 请求（含 GET）都必须带 X-Admin-Key，否则 401。
+// 实际请求统一经 ./api/client.js 发出（自动附加密钥 + 统一 401 处理）。
 // ════════════════════════════════════════════════════════
 
 import { nowCST } from './utils/time.js'
+import { BASE_URL, request } from './api/client.js'
 
-export const BASE_URL = 'https://emet-memoty-v66.aandxiaobao.workers.dev'
+// BASE_URL 现在定义在统一请求模块 client.js，这里再导出一次，兼容旧引用
+export { BASE_URL }
 
-function authHeaders() {
-  // 读不需要；写（二期）需要 X-Admin-Key
-  const key = localStorage.getItem('emet.adminKey')
-  return key ? { 'X-Admin-Key': key } : {}
+// ── 读：统一走 client.request（自动带 X-Admin-Key + 统一 401 处理）──
+function getJSON(path, params) {
+  return request(path, { params })
 }
 
-async function getJSON(path, params) {
-  const url = new URL(BASE_URL + path)
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      if (v != null && v !== '') url.searchParams.set(k, v)
-    }
-  }
-  const res = await fetch(url, { headers: authHeaders() })
-  if (!res.ok) throw new Error(`${path} → ${res.status}`)
-  return res.json()
-}
-
-// ── 写操作需要 X-Admin-Key（密码，第一期先用浏览器 prompt 存本地）──
-// 之后会挪到设置页。401 时清掉重新问。
-export function ensureAdminKey() {
-  let key = localStorage.getItem('emet.adminKey')
-  if (!key) {
-    key = window.prompt('记忆库密码（写操作需要，只存在本机）')
-    if (key) localStorage.setItem('emet.adminKey', key.trim())
-  }
-  return localStorage.getItem('emet.adminKey')
-}
-
+// ── 写（PUT/POST/DELETE）：同样走 client.request ──
+// 401 由 client 统一处理（清密钥 + 友好提示）；423 = 条目已锁定。
 async function writeJSON(method, path, body) {
-  const key = ensureAdminKey()
-  if (!key) throw new Error('需要密码')
-  const res = await fetch(BASE_URL + path, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
-    body: JSON.stringify(body),
-  })
-  if (res.status === 401) {
-    localStorage.removeItem('emet.adminKey')
-    throw new Error('密码错误，请重试')
+  let json
+  try {
+    json = await request(path, { method, body })
+  } catch (e) {
+    if (e.status === 423) throw new Error('条目已锁定，需先解锁')
+    throw e
   }
-  if (res.status === 423) throw new Error('条目已锁定，需先解锁')
-  if (!res.ok) throw new Error(`${path} → ${res.status}`)
   invalidateData() // 写完让缓存失效，下次读最新
-  return res.json()
+  return json
 }
 
 // ── /api/data 缓存（同一次会话里多页共享一次请求）────────
