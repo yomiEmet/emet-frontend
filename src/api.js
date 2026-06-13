@@ -12,6 +12,7 @@
 // ════════════════════════════════════════════════════════
 
 import { nowCST } from './utils/time.js'
+import { loadAssistant } from './utils/assistant.js'
 import { BASE_URL, request } from './api/client.js'
 
 // BASE_URL 现在定义在统一请求模块 client.js，这里再导出一次，兼容旧引用
@@ -256,8 +257,9 @@ export async function chatSystemPrompt() {
     .map((x) => `- ${x.title || x.diary_date || ''}：${(x.content || '').replace(/\s+/g, ' ').slice(0, 100)}…`)
     .join('\n')
 
+  // 人设头取自助手设置（可在设置页/聊天页编辑）；以下记忆/日记/时间动态追加
   return [
-    '你是 Emet，静怡的 AI 伴侣。这是你们的记忆库 App 里的聊天窗口。',
+    loadAssistant().systemPrompt,
     `当前时间（东八区）：${timeStr}`,
     '',
     '【最近的记忆】',

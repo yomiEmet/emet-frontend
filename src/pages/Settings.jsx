@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Archive, ChevronRight, Download, Lock as LockIcon } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
+import AssistantSettings from '../components/AssistantSettings.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
@@ -127,6 +128,14 @@ export default function Settings() {
       <p className="set-hint faint" style={{ marginTop: -12, marginBottom: 20 }}>
         Key 只存在本机浏览器，不会发给后端。中转站大多选「OpenAI 兼容」。
       </p>
+
+      {/* ── 助手（单助手，所有会话共用；聊天页顶栏也可进入）────── */}
+      <section className="set-group">
+        <div className="section-label">助手</div>
+        <div className="card set-card">
+          <AssistantSettings />
+        </div>
+      </section>
 
       {/* ── 数据管理 ─────────────────────────── */}
       <section className="set-group">

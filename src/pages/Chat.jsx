@@ -5,6 +5,8 @@ import { marked } from 'marked'
 import { chatSystemPrompt } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
 import { loadProviders, getActiveTarget, setActiveTarget } from '../utils/providers.js'
+import { loadAssistant } from '../utils/assistant.js'
+import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
 
@@ -32,6 +34,8 @@ export default function Chat() {
   const [streaming, setStreaming] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [modelOpen, setModelOpen] = useState(false)
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistant, setAssistant] = useState(loadAssistant)
   const [target, setTarget] = useState(getActiveTarget)
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
@@ -101,7 +105,7 @@ export default function Chat() {
     update((prev) =>
       prev.map((s) =>
         s.id === sid
-          ? { ...s, messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '' }] }
+          ? { ...s, messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '', thinking: '' }] }
           : s,
       ),
     )
@@ -110,26 +114,36 @@ export default function Chat() {
     const ctrl = new AbortController()
     abortRef.current = ctrl
     try {
+      const a = loadAssistant()
       const system = await chatSystemPrompt()
-      // API 的 messages：去掉最后那个空占位
-      const history = (loadSessions().find((s) => s.id === sid)?.messages || [])
+      // API 的 messages：去掉最后那个空占位，再按助手设置的上下文条数 N 截断
+      //（只截断发送，界面与存储里的历史消息不动）
+      const full = (loadSessions().find((s) => s.id === sid)?.messages || [])
         .filter((m) => m.content !== '')
         .map((m) => ({ role: m.role, content: m.content }))
+      const history = full.slice(-a.contextCount)
+
+      // 更新最后一条 assistant 占位的某个字段（content / thinking）
+      const patchLast = (field, value) => {
+        update((prev) =>
+          prev.map((s) => {
+            if (s.id !== sid) return s
+            const msgs = [...s.messages]
+            const last = msgs[msgs.length - 1]
+            msgs[msgs.length - 1] = { ...last, role: 'assistant', [field]: value }
+            return { ...s, messages: msgs }
+          }),
+        )
+      }
 
       await streamChat({
         system,
         messages: history,
+        temperature: a.temperature,
+        maxTokens: a.maxTokens,
         signal: ctrl.signal,
-        onDelta: (_d, full) => {
-          update((prev) =>
-            prev.map((s) => {
-              if (s.id !== sid) return s
-              const msgs = [...s.messages]
-              msgs[msgs.length - 1] = { role: 'assistant', content: full }
-              return { ...s, messages: msgs }
-            }),
-          )
-        },
+        onDelta: (_d, fullText) => patchLast('content', fullText),
+        onThinking: (_d, fullThinking) => patchLast('thinking', fullThinking),
       })
     } catch (e) {
       if (e.name === 'AbortError') {
@@ -170,17 +184,24 @@ export default function Chat() {
         <button className="chat-bar__btn" onClick={() => setHistoryOpen(true)} aria-label="历史对话">
           <History size={19} />
         </button>
-        <button className="chat-model" onClick={() => setModelOpen(true)}>
-          {target ? (
-            <>
-              <span className="chat-model__prov">{target.provider.name}</span>
-              <span className="chat-model__id">{target.model}</span>
-            </>
-          ) : (
-            <span className="faint">未配置供应商</span>
-          )}
-          <ChevronDown size={13} />
-        </button>
+        <div className="chat-bar__center">
+          <button className="chat-assistant" onClick={() => setAssistantOpen(true)} aria-label="助手设置">
+            <AssistantAvatar avatar={assistant.avatar} size={20} />
+            <span className="chat-assistant__name">{assistant.name}</span>
+            <ChevronDown size={12} className="faint" />
+          </button>
+          <button className="chat-model" onClick={() => setModelOpen(true)}>
+            {target ? (
+              <>
+                <span className="chat-model__prov">{target.provider.name}</span>
+                <span className="chat-model__id">{target.model}</span>
+              </>
+            ) : (
+              <span className="faint">未配置供应商</span>
+            )}
+            <ChevronDown size={12} />
+          </button>
+        </div>
         <button className="chat-bar__btn" onClick={newSession} aria-label="新对话">
           <Plus size={20} />
         </button>
@@ -203,6 +224,16 @@ export default function Chat() {
             </div>
           ) : (
             <div key={i} className="chat-msg chat-msg--emet">
+              <div className="chat-emet-head">
+                <AssistantAvatar avatar={assistant.avatar} size={18} />
+                <span className="chat-emet-name">{assistant.name}</span>
+              </div>
+              {m.thinking ? (
+                <details className="chat-think">
+                  <summary className="chat-think__summary">思考过程</summary>
+                  <div className="chat-think__body">{m.thinking}</div>
+                </details>
+              ) : null}
               <div
                 className="chat-bubble chat-bubble--emet"
                 // Emet 的输出走 Markdown（自己人，信任渲染）
@@ -324,6 +355,24 @@ export default function Chat() {
                 ))}
               </div>
             )}
+          </div>
+        </>
+      )}
+
+      {/* 助手设置抽屉（与设置页共用 AssistantSettings；改动即时生效） */}
+      {assistantOpen && (
+        <>
+          <div className="ts-scrim" onClick={() => setAssistantOpen(false)} />
+          <div className="ts-panel card asst-panel">
+            <div className="ts-head">
+              <span className="ts-title">助手设置</span>
+              <button className="ts-close" onClick={() => setAssistantOpen(false)} aria-label="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="asst-panel__scroll">
+              <AssistantSettings onChange={setAssistant} />
+            </div>
           </div>
         </>
       )}
