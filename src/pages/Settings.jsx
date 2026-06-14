@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ChevronRight, Download, Lock as LockIcon } from 'lucide-react'
+import { Archive, ChevronRight, Download, Upload, Lock as LockIcon } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
+import { buildExport, importSessions } from '../utils/sessions.js'
 import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
 
 const APP_VERSION = '0.1.0'
@@ -68,6 +69,32 @@ export default function Settings() {
       alert(e.message || '导出失败')
     } finally {
       setExporting(false)
+    }
+  }
+
+  // ── 会话存档：导出全部会话为带版本号的 JSON / 导入合并 ──
+  const fileRef = useRef(null)
+  const exportSessions = () => {
+    const data = buildExport()
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `emet-chat-sessions-${dayKey()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    showToast(`已导出 ${data.sessions.length} 段会话`)
+  }
+  const onImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // 清空，允许重复选同一文件
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text())
+      const { added, updated, total } = importSessions(parsed)
+      showToast(`导入完成：新增 ${added}、更新 ${updated}，共 ${total} 段`)
+    } catch (err) {
+      showToast(err.message || '导入失败')
     }
   }
 
@@ -148,6 +175,33 @@ export default function Settings() {
             </button>
           </Row>
         </div>
+      </section>
+
+      {/* ── 会话存档（聊天记录导出/导入）─────────── */}
+      <section className="set-group">
+        <div className="section-label">会话存档</div>
+        <div className="card set-card">
+          <Row label="导出全部会话">
+            <button className="set-btn set-btn--accent" onClick={exportSessions}>
+              <Download size={14} /> 下载 JSON
+            </button>
+          </Row>
+          <Row label="导入会话">
+            <button className="set-btn" onClick={() => fileRef.current?.click()}>
+              <Upload size={14} /> 选择文件
+            </button>
+          </Row>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={onImportFile}
+        />
+        <p className="set-hint faint" style={{ marginTop: 8 }}>
+          导入会与现有会话合并；相同会话 ID 冲突时保留时间较新的一份。
+        </p>
       </section>
 
       {/* ── 档案 ─────────────────────────────── */}

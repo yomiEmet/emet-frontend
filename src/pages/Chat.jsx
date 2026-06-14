@@ -10,23 +10,10 @@ import { loadAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
+// 会话存储集中在 utils/sessions.js（设置页导出/导入共用同一来源）
+import { loadSessions, saveSessions as persistSessions } from '../utils/sessions.js'
 
 marked.setOptions({ breaks: true, gfm: true })
-
-// 聊天会话存 localStorage（三期第一版，后端持久化以后再说）
-const LS_KEY = 'emet.chatSessions'
-
-function loadSessions() {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY)) || []
-  } catch {
-    return []
-  }
-}
-
-function persistSessions(sessions) {
-  localStorage.setItem(LS_KEY, JSON.stringify(sessions))
-}
 
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
@@ -95,6 +82,7 @@ export default function Chat() {
         id: sid,
         title: text.replace(/\s+/g, ' ').slice(0, 14),
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         messages: [],
       }
       update((prev) => [session, ...prev])
@@ -106,7 +94,7 @@ export default function Chat() {
     update((prev) =>
       prev.map((s) =>
         s.id === sid
-          ? { ...s, messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '', thinking: '', tools: [] }] }
+          ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '', thinking: '', tools: [] }] }
           : s,
       ),
     )

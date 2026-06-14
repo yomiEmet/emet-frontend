@@ -11,8 +11,16 @@ import { BASE_URL, getAdminKey } from '../api/client.js'
 
 const MCP_URL = BASE_URL + '/mcp'
 
-// v1 工具白名单：读 + 增量写，排除删除/搬移。
-export const ENABLED_TOOLS = ['memory_search', 'memory_save', 'moment_save', 'diary_write', 'breath']
+// 工具白名单：读 + 增量写，排除删除/搬移/覆盖/织藤等危险操作。
+// 仍不开：memory_delete / moment_delete / idea_delete / game_delete / move_item /
+//        memory_update / memory_link / memory_unlink。
+export const ENABLED_TOOLS = [
+  // 第一批（写 + 检索）
+  'memory_search', 'memory_save', 'moment_save', 'diary_write', 'breath',
+  // 第二批（只读浏览 + 织藤候选 + 统计）
+  'memory_list', 'memory_get', 'moment_list', 'diary_list', 'diary_get',
+  'weave_candidates', 'current_status', 'stats',
+]
 
 let _rpcId = 0
 
