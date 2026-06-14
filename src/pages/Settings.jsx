@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ChevronRight, Download, Upload, Lock as LockIcon } from 'lucide-react'
+import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
+import { syncAll, getLastSync } from '../utils/sync.js'
 import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
 
 const APP_VERSION = '0.1.0'
@@ -97,6 +98,24 @@ export default function Settings() {
       showToast(err.message || '导入失败')
     }
   }
+
+  // 云同步：全量对账
+  const [syncing, setSyncing] = useState(false)
+  const [lastSync, setLastSync] = useState(getLastSync)
+  const doSync = async () => {
+    if (syncing) return
+    setSyncing(true)
+    try {
+      const total = await syncAll()
+      setLastSync(getLastSync())
+      showToast(`已同步，共 ${total} 段会话`)
+    } catch (e) {
+      showToast(e?.message || '同步失败')
+    } finally {
+      setSyncing(false)
+    }
+  }
+  const lastSyncLabel = lastSync ? lastSync.slice(5, 16).replace('T', ' ') : '从未'
 
   return (
     <div className="page">
@@ -190,6 +209,15 @@ export default function Settings() {
             <button className="set-btn" onClick={() => fileRef.current?.click()}>
               <Upload size={14} /> 选择文件
             </button>
+          </Row>
+          <Row label="云同步">
+            <span className="set-inline">
+              <span className="faint" style={{ fontSize: 12 }}>上次 {lastSyncLabel}</span>
+              <button className="set-btn set-btn--accent" disabled={syncing} onClick={doSync}>
+                <RefreshCw size={14} />
+                {syncing ? '同步中…' : '立即同步'}
+              </button>
+            </span>
           </Row>
         </div>
         <input

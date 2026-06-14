@@ -11,7 +11,8 @@ import AssistantSettings, { AssistantAvatar } from '../components/AssistantSetti
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
 // 会话存储集中在 utils/sessions.js（设置页导出/导入共用同一来源）
-import { loadSessions, saveSessions as persistSessions } from '../utils/sessions.js'
+import { loadSessions, saveSessions as persistSessions, newMessage } from '../utils/sessions.js'
+import { pull, schedulePush, deleteRemote } from '../utils/sync.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -26,7 +27,7 @@ const DISTILL_PROMPT =
 
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
-  const [curId, setCurId] = useState(() => loadSessions()[0]?.id || null)
+  const [curId, setCurId] = useState(() => loadSessions().find((s) => !s.deleted)?.id || null)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -44,13 +45,25 @@ export default function Chat() {
     setModelOpen(false)
   }
 
-  const cur = sessions.find((s) => s.id === curId) || null
+  const cur = sessions.find((s) => s.id === curId && !s.deleted) || null
   const messages = cur?.messages || []
+  const visibleSessions = sessions.filter((s) => !s.deleted) // 墓碑不进列表
 
   // 流式期间持续滚到底
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages, streaming])
+
+  // 挂载时从云端拉增量并入本地（多设备同步）；失败（离线/无密钥）静默
+  useEffect(() => {
+    let alive = true
+    pull()
+      .then(() => alive && setSessions(loadSessions()))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const update = (fn) => {
     setSessions((prev) => {
@@ -68,8 +81,10 @@ export default function Chat() {
 
   const deleteSession = (id) => {
     if (!window.confirm('删除这段对话？')) return
-    update((prev) => prev.filter((s) => s.id !== id))
+    // 墓碑删除：标 deleted 而非真删，让删除能同步到其他设备
+    update((prev) => prev.map((s) => (s.id === id ? { ...s, deleted: true, updated_at: new Date().toISOString() } : s)))
     if (curId === id) setCurId(null)
+    deleteRemote(id).catch(() => {})
   }
 
   const stop = () => {
@@ -159,7 +174,7 @@ export default function Chat() {
     update((prev) =>
       prev.map((s) =>
         s.id === sid
-          ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '', thinking: '', tools: [] }] }
+          ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, newMessage('user', { content: text }), newMessage('assistant', { content: '', thinking: '', tools: [] })] }
           : s,
       ),
     )
@@ -188,6 +203,7 @@ export default function Chat() {
       }
 
       await streamAssistant({ sid, system, messages: history, tools, temperature: a.temperature, maxTokens: a.maxTokens, signal: ctrl.signal })
+      schedulePush(sid) // 防抖推送到云端
     } catch (e) {
       if (e.name === 'AbortError') {
         showToast('已停止')
@@ -230,7 +246,7 @@ export default function Chat() {
     update((prev) =>
       prev.map((s) =>
         s.id === id
-          ? { ...s, messages: [...s.messages, { role: 'assistant', content: '', thinking: '', tools: [], distill: true }] }
+          ? { ...s, messages: [...s.messages, newMessage('assistant', { content: '', thinking: '', tools: [], distill: true })] }
           : s,
       ),
     )
@@ -259,6 +275,7 @@ export default function Chat() {
       await streamAssistant({ sid: id, system: DISTILL_SYSTEM, messages, tools, maxTokens: a.maxTokens, signal: ctrl.signal })
       // 打沉淀标记
       update((prev) => prev.map((s) => (s.id === id ? { ...s, distilled: true, updated_at: new Date().toISOString() } : s)))
+      schedulePush(id) // 推送到云端
     } catch (e) {
       if (e.name === 'AbortError') showToast('已停止')
       else {
@@ -462,11 +479,11 @@ export default function Chat() {
                 <X size={16} />
               </button>
             </div>
-            {sessions.length === 0 ? (
+            {visibleSessions.length === 0 ? (
               <p className="faint ts-empty">还没有对话</p>
             ) : (
               <div className="chat-history__list">
-                {sessions.map((s) => (
+                {visibleSessions.map((s) => (
                   <div
                     key={s.id}
                     className={'chat-history__item' + (s.id === curId ? ' is-active' : '')}
