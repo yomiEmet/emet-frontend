@@ -3000,6 +3000,60 @@
   overflow-y: auto;
 }
 
+/* ── 对话沉淀 ───────────────────────── */
+/* 历史抽屉里的沉淀按钮 */
+.chat-history__act {
+  color: var(--text-muted);
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.chat-history__act.is-done {
+  color: var(--accent);
+}
+
+/* assistant 消息上的「对话沉淀」小标签 */
+.chat-distill-tag {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* 长对话沉淀提示条（输入框上方） */
+.chat-distill-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.chat-distill-hint__txt {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.chat-distill-hint__do {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12.5px;
+}
+
+.chat-distill-hint__x {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  padding: 2px;
+}
+
 /* ── 助手设置表单（设置页卡片 + 聊天抽屉共用）──────── */
 .asst-panel__scroll {
   max-height: 70vh;

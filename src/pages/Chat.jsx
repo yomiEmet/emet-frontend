@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, History, X, Square, ChevronDown, Check, Wrench } from 'lucide-react'
+import { Send, Plus, History, X, Square, ChevronDown, Check, Wrench, Sparkles } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -15,6 +15,15 @@ import { loadSessions, saveSessions as persistSessions } from '../utils/sessions
 
 marked.setOptions({ breaks: true, gfm: true })
 
+// ── 对话沉淀：独立一次请求，让模型把对话里值得长期保存的内容用工具存进记忆库 ──
+const DISTILL_SYSTEM =
+  '你是 Emet 的记忆沉淀助手。任务：回顾一段对话，把其中值得长期保存的内容用工具存进记忆库。' +
+  '只保存对话里真实出现的内容，不要编造；保存动作一律通过工具完成，最后用一两句话简短汇报。'
+const DISTILL_PROMPT =
+  '请回顾上面这段对话，提炼 1–3 条值得长期保存的内容，用 memory_save 工具逐条保存' +
+  '（每条的分类 category、重要度 importance、标签 tags 由你判断）；如果其中有适合记成「当下状态」的，' +
+  '可以再用 moment_save 另存一条瞬记。全部保存完成后，用一两句话向静怡汇报你存了什么。'
+
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
   const [curId, setCurId] = useState(() => loadSessions()[0]?.id || null)
@@ -25,6 +34,7 @@ export default function Chat() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistant, setAssistant] = useState(loadAssistant)
   const [target, setTarget] = useState(getActiveTarget)
+  const [hintDismissed, setHintDismissed] = useState({}) // 按会话 id 记住"长对话沉淀提示"是否被关
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
 
@@ -66,6 +76,61 @@ export default function Chat() {
     abortRef.current?.abort()
   }
 
+  // 把会话最后一条空 assistant 占位换成括号错误提示，避免留空气泡
+  const replaceEmptyWithError = (sid, msg) =>
+    update((prev) =>
+      prev.map((s) => {
+        if (s.id !== sid) return s
+        const msgs = [...s.messages]
+        const last = msgs[msgs.length - 1]
+        if (last?.role === 'assistant' && !last.content) {
+          msgs[msgs.length - 1] = { ...last, role: 'assistant', content: '（' + msg + '）' }
+        }
+        return { ...s, messages: msgs }
+      }),
+    )
+
+  // 跑一轮 agentic 流（占位由调用方先建好）：把增量写进该会话最后一条 assistant 消息。
+  // send 与 distill 共用。
+  const streamAssistant = ({ sid, system, messages, tools, temperature, maxTokens, signal }) => {
+    const mutateLast = (mutator) =>
+      update((prev) =>
+        prev.map((s) => {
+          if (s.id !== sid) return s
+          const msgs = [...s.messages]
+          msgs[msgs.length - 1] = mutator({ ...msgs[msgs.length - 1] })
+          return { ...s, messages: msgs }
+        }),
+      )
+    const onToolUse = (ev) =>
+      mutateLast((m) => {
+        const t = [...(m.tools || [])]
+        const i = t.findIndex((x) => x.id === ev.id)
+        const entry = {
+          id: ev.id,
+          name: ev.name,
+          input: ev.input,
+          result: ev.phase === 'result' ? ev.result : i >= 0 ? t[i].result : undefined,
+          status: ev.phase === 'result' ? 'done' : 'running',
+        }
+        if (i >= 0) t[i] = entry
+        else t.push(entry)
+        return { ...m, role: 'assistant', tools: t }
+      })
+    return streamChat({
+      system,
+      messages,
+      temperature,
+      maxTokens,
+      tools,
+      runTool: (name, input) => callTool(name, input),
+      signal,
+      onDelta: (_d, ft) => mutateLast((m) => ({ ...m, role: 'assistant', content: ft })),
+      onThinking: (_d, ft) => mutateLast((m) => ({ ...m, role: 'assistant', thinking: ft })),
+      onToolUse,
+    })
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || streaming) return
@@ -105,41 +170,12 @@ export default function Chat() {
     try {
       const a = loadAssistant()
       const system = await chatSystemPrompt()
-      // API 的 messages：去掉最后那个空占位，再按助手设置的上下文条数 N 截断
+      // API 的 messages：去掉空占位与沉淀汇报，再按上下文条数 N 截断
       //（只截断发送，界面与存储里的历史消息不动）
       const full = (loadSessions().find((s) => s.id === sid)?.messages || [])
-        .filter((m) => m.content !== '')
+        .filter((m) => m.content !== '' && !m.distill)
         .map((m) => ({ role: m.role, content: m.content }))
       const history = full.slice(-a.contextCount)
-
-      // 改最后一条 assistant 占位（mutator 收到当前 last，返回新 last）
-      const mutateLast = (mutator) => {
-        update((prev) =>
-          prev.map((s) => {
-            if (s.id !== sid) return s
-            const msgs = [...s.messages]
-            msgs[msgs.length - 1] = mutator({ ...msgs[msgs.length - 1] })
-            return { ...s, messages: msgs }
-          }),
-        )
-      }
-
-      // 工具调用回调：在 assistant 消息的 tools 数组里登记/更新（按 id 合并）
-      const onToolUse = (ev) =>
-        mutateLast((m) => {
-          const tools = [...(m.tools || [])]
-          const idx = tools.findIndex((t) => t.id === ev.id)
-          const entry = {
-            id: ev.id,
-            name: ev.name,
-            input: ev.input,
-            result: ev.phase === 'result' ? ev.result : idx >= 0 ? tools[idx].result : undefined,
-            status: ev.phase === 'result' ? 'done' : 'running',
-          }
-          if (idx >= 0) tools[idx] = entry
-          else tools.push(entry)
-          return { ...m, role: 'assistant', tools }
-        })
 
       // 工具仅 Anthropic 原生协议启用（拍板①A）；拉取失败则降级为无工具纯聊天
       let tools = null
@@ -151,36 +187,83 @@ export default function Chat() {
         }
       }
 
-      await streamChat({
-        system,
-        messages: history,
-        temperature: a.temperature,
-        maxTokens: a.maxTokens,
-        tools,
-        runTool: (name, input) => callTool(name, input),
-        signal: ctrl.signal,
-        onDelta: (_d, fullText) => mutateLast((m) => ({ ...m, role: 'assistant', content: fullText })),
-        onThinking: (_d, fullThinking) => mutateLast((m) => ({ ...m, role: 'assistant', thinking: fullThinking })),
-        onToolUse,
-      })
+      await streamAssistant({ sid, system, messages: history, tools, temperature: a.temperature, maxTokens: a.maxTokens, signal: ctrl.signal })
     } catch (e) {
       if (e.name === 'AbortError') {
         showToast('已停止')
       } else {
         const msg = e.message === 'NO_PROVIDER' ? '请先在设置页添加供应商' : e.message || '请求失败'
         showToast(msg)
-        // 把空占位换成错误提示，避免留一个空气泡
-        update((prev) =>
-          prev.map((s) => {
-            if (s.id !== sid) return s
-            const msgs = [...s.messages]
-            const last = msgs[msgs.length - 1]
-            if (last?.role === 'assistant' && !last.content) {
-              msgs[msgs.length - 1] = { role: 'assistant', content: '（' + msg + '）' }
-            }
-            return { ...s, messages: msgs }
-          }),
-        )
+        replaceEmptyWithError(sid, msg)
+      }
+    } finally {
+      setStreaming(false)
+      abortRef.current = null
+    }
+  }
+
+  // 对话沉淀：独立一次请求，让模型把对话里值得长期保存的内容用工具存进记忆库
+  const distill = async (id) => {
+    if (streaming) return
+    const session = sessions.find((s) => s.id === id)
+    if (!session) return
+    if (!target) {
+      showToast('请先在设置页添加供应商')
+      return
+    }
+    // 需要工具调用 → 必须 Anthropic 原生协议（拍板⑥）
+    if (target.provider?.protocol === 'openai') {
+      showToast('对话沉淀需要工具调用，请在顶栏切换到 Anthropic 原生供应商')
+      return
+    }
+    const conv = session.messages.filter((m) => m.content !== '' && !m.distill)
+    if (!conv.length) {
+      showToast('这段对话还没有内容可沉淀')
+      return
+    }
+    // 防重复：沉淀过的再点要二次确认
+    if (session.distilled && !window.confirm('这段对话已经沉淀过，确定要再来一次吗？')) return
+
+    setCurId(id)
+    setHistoryOpen(false)
+    // 沉淀汇报作为一条独立 assistant 消息（distill 标记：不进后续聊天上下文）
+    update((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? { ...s, messages: [...s.messages, { role: 'assistant', content: '', thinking: '', tools: [], distill: true }] }
+          : s,
+      ),
+    )
+
+    setStreaming(true)
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    try {
+      const a = loadAssistant()
+      let tools
+      try {
+        tools = await listAnthropicTools()
+      } catch (e) {
+        throw new Error(e?.message || '工具加载失败，无法沉淀')
+      }
+      if (!tools || !tools.length) throw new Error('没有可用工具，无法沉淀')
+
+      // 把对话整理成一段文字（最近 40 条），作为独立请求的单条 user 消息，规避角色交替问题
+      const aName = assistant.name || 'Emet'
+      const transcript = conv
+        .slice(-40)
+        .map((m) => `${m.role === 'user' ? '静怡' : aName}：${(m.content || '').trim()}`)
+        .join('\n\n')
+      const messages = [{ role: 'user', content: `下面是一段对话记录，请你回顾：\n\n${transcript}\n\n---\n\n${DISTILL_PROMPT}` }]
+
+      await streamAssistant({ sid: id, system: DISTILL_SYSTEM, messages, tools, maxTokens: a.maxTokens, signal: ctrl.signal })
+      // 打沉淀标记
+      update((prev) => prev.map((s) => (s.id === id ? { ...s, distilled: true, updated_at: new Date().toISOString() } : s)))
+    } catch (e) {
+      if (e.name === 'AbortError') showToast('已停止')
+      else {
+        showToast(e.message || '沉淀失败')
+        replaceEmptyWithError(id, e.message || '沉淀失败')
       }
     } finally {
       setStreaming(false)
@@ -245,6 +328,7 @@ export default function Chat() {
               <div className="chat-emet-head">
                 <AssistantAvatar avatar={assistant.avatar} size={18} />
                 <span className="chat-emet-name">{assistant.name}</span>
+                {m.distill && <span className="chat-distill-tag">对话沉淀</span>}
               </div>
               {m.thinking ? (
                 <details className="chat-think">
@@ -285,6 +369,21 @@ export default function Chat() {
         )}
         <div ref={bottomRef} />
       </div>
+
+      {/* 长对话沉淀提示（可关）：消息超 60 条且未沉淀过 */}
+      {cur && messages.length > 60 && !cur.distilled && !hintDismissed[curId] && !streaming && (
+        <div className="chat-distill-hint">
+          <span className="chat-distill-hint__txt">这段对话很长了，要不要沉淀一下？</span>
+          <button className="chat-distill-hint__do" onClick={() => distill(curId)}>沉淀</button>
+          <button
+            className="chat-distill-hint__x"
+            onClick={() => setHintDismissed((d) => ({ ...d, [curId]: true }))}
+            aria-label="关闭"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
 
       {/* 输入区 */}
       <div className="chat-input">
@@ -378,6 +477,17 @@ export default function Chat() {
                   >
                     <span className="chat-history__title">{s.title}</span>
                     <span className="faint chat-history__time">{formatCardTime(s.created_at)}</span>
+                    <button
+                      className={'chat-history__act' + (s.distilled ? ' is-done' : '')}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        distill(s.id)
+                      }}
+                      aria-label="沉淀此对话"
+                      title={s.distilled ? '已沉淀过，点击可再沉淀' : '沉淀此对话'}
+                    >
+                      <Sparkles size={14} />
+                    </button>
                     <button
                       className="faint"
                       onClick={(e) => {
