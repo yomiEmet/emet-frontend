@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, History, X, Square, ChevronDown, Check } from 'lucide-react'
+import { Send, Plus, History, X, Square, ChevronDown, Check, Wrench } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
+import { listAnthropicTools, callTool } from '../utils/mcp.js'
 import { loadProviders, getActiveTarget, setActiveTarget } from '../utils/providers.js'
 import { loadAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
@@ -105,7 +106,7 @@ export default function Chat() {
     update((prev) =>
       prev.map((s) =>
         s.id === sid
-          ? { ...s, messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '', thinking: '' }] }
+          ? { ...s, messages: [...s.messages, { role: 'user', content: text }, { role: 'assistant', content: '', thinking: '', tools: [] }] }
           : s,
       ),
     )
@@ -123,17 +124,43 @@ export default function Chat() {
         .map((m) => ({ role: m.role, content: m.content }))
       const history = full.slice(-a.contextCount)
 
-      // 更新最后一条 assistant 占位的某个字段（content / thinking）
-      const patchLast = (field, value) => {
+      // 改最后一条 assistant 占位（mutator 收到当前 last，返回新 last）
+      const mutateLast = (mutator) => {
         update((prev) =>
           prev.map((s) => {
             if (s.id !== sid) return s
             const msgs = [...s.messages]
-            const last = msgs[msgs.length - 1]
-            msgs[msgs.length - 1] = { ...last, role: 'assistant', [field]: value }
+            msgs[msgs.length - 1] = mutator({ ...msgs[msgs.length - 1] })
             return { ...s, messages: msgs }
           }),
         )
+      }
+
+      // 工具调用回调：在 assistant 消息的 tools 数组里登记/更新（按 id 合并）
+      const onToolUse = (ev) =>
+        mutateLast((m) => {
+          const tools = [...(m.tools || [])]
+          const idx = tools.findIndex((t) => t.id === ev.id)
+          const entry = {
+            id: ev.id,
+            name: ev.name,
+            input: ev.input,
+            result: ev.phase === 'result' ? ev.result : idx >= 0 ? tools[idx].result : undefined,
+            status: ev.phase === 'result' ? 'done' : 'running',
+          }
+          if (idx >= 0) tools[idx] = entry
+          else tools.push(entry)
+          return { ...m, role: 'assistant', tools }
+        })
+
+      // 工具仅 Anthropic 原生协议启用（拍板①A）；拉取失败则降级为无工具纯聊天
+      let tools = null
+      if (target?.provider?.protocol !== 'openai') {
+        try {
+          tools = await listAnthropicTools()
+        } catch {
+          tools = null
+        }
       }
 
       await streamChat({
@@ -141,9 +168,12 @@ export default function Chat() {
         messages: history,
         temperature: a.temperature,
         maxTokens: a.maxTokens,
+        tools,
+        runTool: (name, input) => callTool(name, input),
         signal: ctrl.signal,
-        onDelta: (_d, fullText) => patchLast('content', fullText),
-        onThinking: (_d, fullThinking) => patchLast('thinking', fullThinking),
+        onDelta: (_d, fullText) => mutateLast((m) => ({ ...m, role: 'assistant', content: fullText })),
+        onThinking: (_d, fullThinking) => mutateLast((m) => ({ ...m, role: 'assistant', thinking: fullThinking })),
+        onToolUse,
       })
     } catch (e) {
       if (e.name === 'AbortError') {
@@ -234,6 +264,25 @@ export default function Chat() {
                   <div className="chat-think__body">{m.thinking}</div>
                 </details>
               ) : null}
+              {(m.tools || []).map((t) => (
+                <details key={t.id} className="chat-tool">
+                  <summary className="chat-tool__summary">
+                    <Wrench size={12} />
+                    <span className="chat-tool__name">{t.name}</span>
+                    {t.status === 'running' && <span className="chat-tool__spin">调用中…</span>}
+                  </summary>
+                  <div className="chat-tool__body">
+                    <div className="chat-tool__label">参数</div>
+                    <pre className="chat-tool__pre">{JSON.stringify(t.input || {}, null, 2)}</pre>
+                    {t.result != null && (
+                      <>
+                        <div className="chat-tool__label">结果</div>
+                        <pre className="chat-tool__pre">{t.result}</pre>
+                      </>
+                    )}
+                  </div>
+                </details>
+              ))}
               <div
                 className="chat-bubble chat-bubble--emet"
                 // Emet 的输出走 Markdown（自己人，信任渲染）
