@@ -11,11 +11,15 @@
 //          由 Archive 组件在 handleFiles 里调用 mergeConversations，
 //          合并后整包推送，worker 端纯覆盖。
 //
-// 鉴权：复用全局 X-Admin-Key（client.js）。无密钥时云端操作静默跳过，
-//       Archive 退化为纯本地上传，不打扰用户。
+// 鉴权：复用全局 X-Admin-Key（client.js）。无密钥时云端操作跳过并出声提示，
+//       Archive 退化为纯本地（刷新即丢，因 data 不进 localStorage）。
+//
+// 诊断：pull/push 全程 console 打点（前缀 [archiveSync]），失败不再静默吞掉——
+//       推送失败会 toast，便于定位"上传后云端没存上"这类问题。
 // ═══════════════════════════════════════════════════════════
 
 import { request, getAdminKey } from '../api/client.js'
+import { showToast } from './toast.js'
 
 const LS_VERSION = 'archive:version' // { importedAt, convCount }
 
@@ -58,9 +62,24 @@ export function mergeConversations(oldList = [], newList = []) {
 
 // ── 拉取云端档案 blob：{ data, version, maps, updated_at } 或 null ──
 export async function pullArchive() {
-  if (!getAdminKey()) return null // 无密钥：纯本地模式，不打扰
-  const res = await request('/api/archive', {})
-  return res?.archive || null
+  if (!getAdminKey()) {
+    console.warn('[archiveSync] pullArchive 跳过：未设置访问密钥（X-Admin-Key），档案为纯本地模式')
+    return null
+  }
+  console.log('[archiveSync] pullArchive 调用中…')
+  try {
+    const res = await request('/api/archive', {})
+    const blob = res?.archive || null
+    console.log(
+      '[archiveSync] pullArchive 返回：',
+      blob ? `命中（${blob.data?.conversations?.length ?? 0} 条对话）` : '云端暂无档案（archive:data 不存在）',
+    )
+    return blob
+  } catch (e) {
+    // 401 已由 client.js 统一 toast，这里只记日志，避免重复打扰
+    console.error('[archiveSync] pullArchive 失败：', e)
+    return null
+  }
 }
 
 // ── 推送（防抖）：data / maps / version 变化后调用 ──
@@ -72,12 +91,36 @@ export function schedulePushArchive(blob, delay = 1200) {
   _timer = setTimeout(() => {
     const b = _pending
     _pending = null
-    pushArchive(b).catch(() => {})
+    pushArchive(b).catch(() => {}) // 错误已在 pushArchive 内 toast + log
   }, delay)
 }
 
 export async function pushArchive(blob) {
-  if (!getAdminKey()) return // 无密钥：跳过
+  if (!getAdminKey()) {
+    console.warn('[archiveSync] pushArchive 跳过：未设置访问密钥，无法保存到云端（刷新后本地数据会丢失）')
+    showToast('未设置访问密钥，档案没存到云端')
+    return
+  }
   const body = { ...blob, updated_at: new Date().toISOString() }
-  await request('/api/archive', { method: 'PUT', body })
+  const convCount = body.data?.conversations?.length ?? 0
+  // 体积自检：KV 单值上限 25MB，超了 PUT 必失败，提前给出可读提示
+  let sizeMB = 0
+  try {
+    sizeMB = new Blob([JSON.stringify(body)]).size / (1024 * 1024)
+  } catch {
+    /* 忽略 */
+  }
+  console.log(`[archiveSync] pushArchive 调用中…（${convCount} 条对话，约 ${sizeMB.toFixed(2)}MB）`)
+  if (sizeMB > 24) {
+    console.error('[archiveSync] pushArchive 取消：体积超过 KV 25MB 上限')
+    showToast(`档案过大（${sizeMB.toFixed(1)}MB），超出云端上限，未保存`)
+    return
+  }
+  try {
+    await request('/api/archive', { method: 'PUT', body })
+    console.log('[archiveSync] pushArchive 成功，已保存到云端')
+  } catch (e) {
+    console.error('[archiveSync] pushArchive 失败：', e)
+    showToast('档案云端保存失败：' + (e?.message || e))
+  }
 }

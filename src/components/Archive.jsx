@@ -645,6 +645,7 @@ export default function Archive() {
 
   // 进页面:本地内存无 data 时,自动从云端加载已保存的档案
   useEffect(() => {
+    console.log('[archiveSync] Archive 挂载，data =', data ? '已有(跳过拉取)' : 'null(将拉取云端)');
     if (data) { hydratedRef.current = true; setBooting(false); return; }
     pullArchive()
       .then((blob) => {
