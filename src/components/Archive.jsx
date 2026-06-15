@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { MessageSquare, Search, X, FileJson, Menu, ChevronRight, ChevronLeft, Wrench, Copy, Upload, Play, ThumbsUp, ThumbsDown, RotateCcw, Pencil, Folder, FileText, User, Sparkles, BookOpen, ArrowLeft, Plus, Star, Trash2 } from 'lucide-react';
+import { pullArchive, schedulePushArchive, mergeConversations, loadVersion, saveVersion, formatVersionDate } from '../utils/archiveSync.js';
 
 // ============================================================
 // localStorage hook
@@ -635,6 +636,57 @@ export default function Archive() {
   // 本地隐藏:{ convUuid: true },localStorage 持久化
   const [hiddenMap, setHiddenMap] = useLocalStorage('archive:hiddenMap', {});
 
+  // ── 云端持久化 + 版本管理（逻辑在 utils/archiveSync.js，此处只接缝）──
+  // 版本信息 { importedAt, convCount }:先用本地缓存即时显示,云端拉到后更新
+  const [version, setVersion] = useState(() => loadVersion());
+  const [booting, setBooting] = useState(true);   // 首次从云端加载中
+  const hydratedRef = useRef(false);              // 首次水合完成前不回推
+  const prevDataRef = useRef(null);               // 判定 data 是否因新上传而变化
+
+  // 进页面:本地内存无 data 时,自动从云端加载已保存的档案
+  useEffect(() => {
+    if (data) { hydratedRef.current = true; setBooting(false); return; }
+    pullArchive()
+      .then((blob) => {
+        if (blob && blob.data) {
+          setData(blob.data);
+          if (blob.version) { setVersion(blob.version); saveVersion(blob.version); }
+          if (blob.maps) {
+            setManualMap(blob.maps.manualProjectMap || {});
+            setStarredMap(blob.maps.starredMap || {});
+            setRenamedMap(blob.maps.renamedMap || {});
+            setHiddenMap(blob.maps.hiddenMap || {});
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        setBooting(false);
+        // 延后置位:让本次注入触发的推送 effect 先因 hydratedRef=false 跳过
+        setTimeout(() => { hydratedRef.current = true; }, 0);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // data / maps 变化 → 防抖整包推送云端;data 引用变化(=新上传)时刷新导入时间
+  useEffect(() => {
+    if (!hydratedRef.current) { prevDataRef.current = data; return; }
+    if (!data) return;
+    let ver = version;
+    if (data !== prevDataRef.current) {
+      ver = { importedAt: new Date().toISOString(), convCount: (data.conversations || []).length };
+      setVersion(ver);
+      saveVersion(ver);
+    }
+    prevDataRef.current = data;
+    schedulePushArchive({
+      data,
+      version: ver,
+      maps: { manualProjectMap: manualMap, starredMap, renamedMap, hiddenMap },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, manualMap, starredMap, renamedMap, hiddenMap]);
+
   // 归类操作
   const assignConvToProject = useCallback((convUuid, projectUuid) => {
     setManualMap(m => ({ ...m, [convUuid]: projectUuid }));
@@ -706,7 +758,10 @@ export default function Archive() {
           .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
         return {
-          conversations: result.conversations || prev?.conversations || null,
+          // 按 uuid 增量合并:新对话覆盖同 uuid 旧对话,旧的独有对话保留(版本管理)
+          conversations: result.conversations
+            ? mergeConversations(prev?.conversations, result.conversations)
+            : (prev?.conversations || null),
           memories: result.memories || prev?.memories || null,
           user: result.user || prev?.user || null,
           projects,
@@ -782,6 +837,7 @@ export default function Archive() {
             <div className="empty-mark">ARCHIVE</div>
             <h1 className="empty-title">Claude 对话档案</h1>
             <p className="empty-sub">把 Anthropic 给你的导出 zip 直接拖进来——一步搞定。或者解压后的文件夹/json 也行,前端本地解析,文件不会离开你的设备。</p>
+            {booting && <div className="drop-hint" style={{ marginBottom: 12 }}>正在从云端加载已保存的档案…</div>}
             <label
               className={`drop-zone ${dragOver ? 'drag-over' : ''} ${loading ? 'loading' : ''}`}
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -866,6 +922,12 @@ export default function Archive() {
               {data?.detectedHits > 0 && (
                 <><span className="sb-sep">·</span><span>已归类 {data.detectedHits}</span></>
               )}
+            </div>
+          )}
+
+          {version?.importedAt && (
+            <div style={{ margin: '0 16px 8px', fontSize: 11, lineHeight: 1.5, color: 'var(--text-faint)' }}>
+              当前版本：{formatVersionDate(version.importedAt)} 导入 · {version.convCount ?? conversations.length} 条对话
             </div>
           )}
 
