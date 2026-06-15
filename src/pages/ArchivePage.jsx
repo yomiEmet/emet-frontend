@@ -1,20 +1,8 @@
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
 import Archive from '../components/Archive.jsx'
 
-// 对话档案页：壳 + Archive 组件挂载点（组件本体等旧代码迁入）
+// 对话档案页：整屏渲染 Archive 组件。
+// Archive 自带 100vh 独立布局与内部导航，无需外层返回栏；
+// 全局 TabBar 在 /archive 路由由 App 隐藏（见 App.jsx）。
 export default function ArchivePage() {
-  const navigate = useNavigate()
-  return (
-    <div className="page">
-      <header className="detail-header">
-        <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
-          <ArrowLeft size={20} />
-        </button>
-        <span className="detail-title">对话档案</span>
-        <div className="detail-header__right" />
-      </header>
-      <Archive />
-    </div>
-  )
+  return <Archive />
 }

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import { getAdminKey } from './api/client.js'
 import { pullSettings } from './utils/settingsSync.js'
 import TabBar from './components/TabBar.jsx'
@@ -15,6 +15,10 @@ import Messages from './pages/Messages.jsx'
 import Settings from './pages/Settings.jsx'
 
 export default function App() {
+  // 档案页是整屏独立布局，隐藏全局底部 TabBar。
+  const location = useLocation()
+  const hideTabBar = location.pathname === '/archive'
+
   // 启动时从云端拉设置（仅有密钥时）；若云端有更新则刷新一次让各组件重读。
   // 刷新后本地已是最新，再拉不会更新 → 不会循环。
   useEffect(() => {
@@ -40,7 +44,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />
       </Routes>
-      <TabBar />
+      {!hideTabBar && <TabBar />}
     </div>
   )
 }

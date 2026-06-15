@@ -20,6 +20,7 @@ const SORT_KEYS = [
 ]
 
 export default function Memory() {
+  const navigate = useNavigate()
   // ?tab=galaxy&focus=<id> 支持从详情页"查看✦"跳星图聚焦（旧版 B12）
   const [params] = useSearchParams()
   const paramTab = params.get('tab')
@@ -48,6 +49,9 @@ export default function Memory() {
           onClick={() => setTab('rings')}
         >
           年轮
+        </button>
+        <button className="subtab" onClick={() => navigate('/archive')}>
+          档案
         </button>
       </div>
 
