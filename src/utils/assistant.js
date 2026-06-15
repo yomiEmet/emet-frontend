@@ -9,6 +9,8 @@
 //   maxTokens    max_tokens
 // ═══════════════════════════════════════════════════════════
 
+import { schedulePushSettings } from './settingsSync.js'
+
 const LS = 'emet.assistant'
 
 // 内置预设头像（复用现成的 PWA 海獭图标，零美术成本）
@@ -56,5 +58,6 @@ export function loadAssistant() {
 export function saveAssistant(patch) {
   const next = { ...loadAssistant(), ...patch }
   localStorage.setItem(LS, JSON.stringify(next))
+  schedulePushSettings() // 变更防抖推到云端
   return next
 }

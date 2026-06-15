@@ -8,6 +8,8 @@
 // emet.chatTarget = { providerId, model }  当前聊天用哪个
 // ═══════════════════════════════════════════════════════════
 
+import { schedulePushSettings } from './settingsSync.js'
+
 const LS = 'emet.providers'
 const LS_TARGET = 'emet.chatTarget'
 
@@ -54,6 +56,7 @@ export function loadProviders() {
 
 export function saveProviders(arr) {
   localStorage.setItem(LS, JSON.stringify(arr))
+  schedulePushSettings() // 变更防抖推到云端
 }
 
 // 当前聊天目标：{ provider, model }；没有可用供应商返回 null

@@ -1,4 +1,7 @@
+import { useEffect } from 'react'
 import { Routes, Route } from 'react-router-dom'
+import { getAdminKey } from './api/client.js'
+import { pullSettings } from './utils/settingsSync.js'
 import TabBar from './components/TabBar.jsx'
 import Home from './pages/Home.jsx'
 import Chat from './pages/Chat.jsx'
@@ -12,6 +15,17 @@ import Messages from './pages/Messages.jsx'
 import Settings from './pages/Settings.jsx'
 
 export default function App() {
+  // 启动时从云端拉设置（仅有密钥时）；若云端有更新则刷新一次让各组件重读。
+  // 刷新后本地已是最新，再拉不会更新 → 不会循环。
+  useEffect(() => {
+    if (!getAdminKey()) return
+    pullSettings()
+      .then((applied) => {
+        if (applied) window.location.reload()
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <div className="app-shell">
       <Routes>

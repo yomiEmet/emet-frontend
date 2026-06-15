@@ -8,6 +8,7 @@ import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
 import { syncAll, getLastSync } from '../utils/sync.js'
+import { pullSettings, pushSettings, getSyncState } from '../utils/settingsSync.js'
 import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
 
 const APP_VERSION = '0.1.0'
@@ -39,12 +40,34 @@ export default function Settings() {
     }
   }, [])
 
-  // 保存输入框里的访问密钥到本机 localStorage（统一键 emet.adminKey）
-  const saveKey = () => {
+  // 设置同步状态（settingsSync 派发 'emet:settings-sync'）
+  const [settingsSyncState, setSettingsSyncState] = useState(getSyncState)
+  useEffect(() => {
+    const h = (e) => setSettingsSyncState(e.detail)
+    window.addEventListener('emet:settings-sync', h)
+    return () => window.removeEventListener('emet:settings-sync', h)
+  }, [])
+
+  // 保存访问密钥到本机；随后立刻从云端拉取设置覆盖本地（"一个密钥全同步"）
+  const saveKey = async () => {
     const v = storeAdminKey(keyInput)
     setAdminKey(v)
     setKeyInput('')
     showToast(v ? '访问密钥已保存' : '请输入访问密钥')
+    if (!v) return
+    try {
+      const applied = await pullSettings({ force: true })
+      if (applied) {
+        showToast('已从云端同步设置，正在刷新…')
+        setTimeout(() => window.location.reload(), 600)
+      } else {
+        // 云端尚无设置 → 用本地播种云端
+        await pushSettings()
+        showToast('已将本地设置上传到云端')
+      }
+    } catch {
+      /* 离线/失败：忽略，下次再同步 */
+    }
   }
   // A10 改良：主动"锁定"= 清掉本机密钥，下次请求需重新填写
   const lockAdmin = () => {
@@ -163,9 +186,22 @@ export default function Settings() {
               )}
             </span>
           </Row>
+          <Row label="设置同步">
+            <span className="set-status">
+              {settingsSyncState === 'synced' && <i className="status-dot status-dot--ok" />}
+              {settingsSyncState === 'error' && <i className="status-dot status-dot--bad" />}
+              {settingsSyncState === 'syncing'
+                ? '同步中…'
+                : settingsSyncState === 'synced'
+                  ? '设置已同步'
+                  : settingsSyncState === 'error'
+                    ? '同步失败'
+                    : '未同步'}
+            </span>
+          </Row>
         </div>
         <p className="set-hint faint" style={{ marginTop: 8 }}>
-          访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。所有数据请求都会带上它，缺失或错误时会提示到此填写。
+          访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。助手/供应商/待办/心情会随密钥自动云同步。
         </p>
       </section>
 
