@@ -8,7 +8,7 @@ import TodoList from '../components/TodoList.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
 import { greeting, longDate, daysTogether, sinceLabel, nowCST } from '../utils/time.js'
-import { homeSummary } from '../api.js'
+import { homeSummary, healthLatest } from '../api.js'
 
 // ── 仍是占位的部分 ──────────────────────────────────────
 // whisper 数据源：moments 里 #whisper 最新一条；都没有时用这句占位
@@ -36,18 +36,26 @@ function Num({ value }) {
 export default function Home() {
   const now = nowCST()
   const [summary, setSummary] = useState(null)
+  const [health, setHealth] = useState(null) // Apple Watch 数据，无则 null
 
   useEffect(() => {
     let alive = true
     homeSummary()
       .then((s) => alive && setSummary(s))
       .catch(() => alive && setSummary(null))
+    healthLatest().then((h) => alive && setHealth(h))
     return () => {
       alive = false
     }
   }, [])
 
   const counts = summary?.counts || {}
+
+  // 睡眠：Apple Watch 数据优先；没数据时兜底用 moments #睡眠 标签解析（旧路径）
+  const sleepFromHealth = health?.sleep_duration_min
+    ? `${(health.sleep_duration_min / 60).toFixed(1)} 小时`
+    : null
+  const sleepDisplay = sleepFromHealth || summary?.sleep
 
   return (
     <div className="page stack">
@@ -82,12 +90,18 @@ export default function Home() {
             value={TODAY_MESSAGES}
             unit=" 条"
           />
-          <TodayCard icon={<Heart size={15} />} label="心率" muted />
+          <TodayCard
+            icon={<Heart size={15} />}
+            label="心率"
+            value={health?.heart_rate}
+            unit=" bpm"
+            muted={!health?.heart_rate}
+          />
           <TodayCard
             icon={<Moon size={15} />}
             label="睡眠"
-            value={summary?.sleep}
-            muted={!summary?.sleep}
+            value={sleepDisplay}
+            muted={!sleepDisplay}
           />
         </div>
       </section>

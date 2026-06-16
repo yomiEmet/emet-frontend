@@ -239,7 +239,8 @@ export function ideaDelete(id) {
 // ── 聊天（三期）：简单版 system prompt ────────────────────
 // 最近 10 条记忆 + 最近 3 篇日记摘要 + 当前东八区时间。
 export async function chatSystemPrompt() {
-  const d = await getData()
+  // /api/data 与 /api/health/context 并行，省一个串行 RTT
+  const [d, healthLine] = await Promise.all([getData(), healthContext()])
   const mems = [...(d.memories || [])].sort(byCreatedDesc).slice(0, 10)
   const diaries = [...(d.diaries || [])]
     .filter((x) => x.author !== 'story')
@@ -257,7 +258,7 @@ export async function chatSystemPrompt() {
     .map((x) => `- ${x.title || x.diary_date || ''}：${(x.content || '').replace(/\s+/g, ' ').slice(0, 100)}…`)
     .join('\n')
 
-  // 人设头取自助手设置（可在设置页/聊天页编辑）；以下记忆/日记/时间动态追加
+  // 人设头取自助手设置（可在设置页/聊天页编辑）；以下记忆/日记/时间/身体状态动态追加
   return [
     loadAssistant().systemPrompt,
     `当前时间（东八区）：${timeStr}`,
@@ -267,7 +268,24 @@ export async function chatSystemPrompt() {
     '',
     '【最近的日记摘要】',
     diaryLines || '（暂无）',
+    ...(healthLine ? ['', '【身体状态】', healthLine] : []),
   ].join('\n')
+}
+
+// ── 健康数据（Apple Watch via iOS 快捷指令上报）─────────
+// 路由失败一律静默，不影响主页/聊天
+export async function healthLatest() {
+  try {
+    const r = await getJSON('/api/health/latest')
+    return r?.record || null
+  } catch { return null }
+}
+
+export async function healthContext() {
+  try {
+    const r = await getJSON('/api/health/context')
+    return r?.context || ''
+  } catch { return '' }
 }
 
 // ── 设置页（一期第 7 步）─────────────────────────────────
