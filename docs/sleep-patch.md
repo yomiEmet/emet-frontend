@@ -79,11 +79,11 @@ const SLEEP_LABELS = {
  *   2. 解析 ISO 8601 时间，归一化 Value 标签，过滤异常 Duration
  *   3. 用 "昨天 12:00 → 今天 12:00"（+08:00 锚定）窗口筛选样本
  *   4. 总时长 = 窗口内最早 sample 起 → 最晚 sample 终（含 Awake）
- *   5. 按阶段累加 Deep / REM 时长
+ *   5. 按阶段累加 Core / Deep / REM / Awake，加上 sleep_start / sleep_end，共 7 字段
  *
  * @param {Array<{Start: string, Duration: number, Value: string}>} samples
  * @param {string} dateStr - "YYYY-MM-DD"
- * @returns {null | {sleep_duration_min: number, sleep_deep_min: number, sleep_rem_min: number}}
+ * @returns {null | {sleep_start: string, sleep_end: string, sleep_duration_min: number, sleep_core_min: number, sleep_deep_min: number, sleep_rem_min: number, sleep_awake_min: number}}
  */
 function parseSleepSamples(samples, dateStr) {
   if (!Array.isArray(samples) || samples.length === 0) return null;
@@ -135,16 +135,23 @@ function parseSleepSamples(samples, dateStr) {
   const sleepEnd = new Date(last.dt.getTime() + last.dur * 60_000);
   const totalMin = Math.max(0, Math.round((sleepEnd - sleepStart) / 60000));
 
-  // 5. 按阶段累加（只关心 Deep / REM；Core / Awake 计入总时长但不单独输出）
+  // 5. 按阶段累加（4 个标签全部出字段：与 worker.js HEALTH_FIELDS 的 7 个 sleep_* 一一对应）
   const stages = { Core: 0, Deep: 0, REM: 0, Awake: 0 };
   for (const s of night) {
     stages[s.val] += s.dur;
   }
 
+  // HH:MM 用东八区表示（worker 默认 UTC，+8h 后取 ISO 的 HH:mm 段）
+  const fmt = (d) => new Date(d.getTime() + 8 * 3600 * 1000).toISOString().slice(11, 16);
+
   return {
+    sleep_start: fmt(sleepStart),
+    sleep_end: fmt(sleepEnd),
     sleep_duration_min: totalMin,
+    sleep_core_min: stages.Core,
     sleep_deep_min: stages.Deep,
     sleep_rem_min: stages.REM,
+    sleep_awake_min: stages.Awake,
   };
 }
 ```
@@ -198,16 +205,14 @@ if (path === '/api/health' && method === 'POST') {
 ### 4.2 注入代码（贴入"④"位置）
 
 ```javascript
-// 若客户端传了原始 sleep_samples，则用它计算覆盖三个 sleep 字段。
-// 直传的 sleep_duration_min/sleep_deep_min/sleep_rem_min 仍生效（向后兼容）；
+// 若客户端传了原始 sleep_samples，则用它计算覆盖 7 个 sleep 字段。
+// 直传的 sleep_*（任意子集）仍生效（向后兼容）；
 // 两者并存时以 sleep_samples 计算结果为准。
+// Object.assign 一次性把 parseSleepSamples 返回的 7 字段全部塞进 body，
+// 下面的 COALESCE 循环按 HEALTH_FIELDS 自动捡走，免去重复写 7 行赋值。
 if (Array.isArray(body.sleep_samples)) {
   const parsed = parseSleepSamples(body.sleep_samples, date);
-  if (parsed) {
-    body.sleep_duration_min = parsed.sleep_duration_min;
-    body.sleep_deep_min     = parsed.sleep_deep_min;
-    body.sleep_rem_min      = parsed.sleep_rem_min;
-  }
+  if (parsed) Object.assign(body, parsed);
   // 不写库，只用一次；防止误入未来新增的列
   delete body.sleep_samples;
 }
@@ -223,14 +228,10 @@ if (path === '/api/health' && method === 'POST') {
   const date = body.date;
   if (!date) return new Response('missing date', { status: 400 });
 
-  // ▼▼▼ 新增：sleep_samples → sleep_* ▼▼▼
+  // ▼▼▼ 新增：sleep_samples → 7 个 sleep_* ▼▼▼
   if (Array.isArray(body.sleep_samples)) {
     const parsed = parseSleepSamples(body.sleep_samples, date);
-    if (parsed) {
-      body.sleep_duration_min = parsed.sleep_duration_min;
-      body.sleep_deep_min     = parsed.sleep_deep_min;
-      body.sleep_rem_min      = parsed.sleep_rem_min;
-    }
+    if (parsed) Object.assign(body, parsed);
     delete body.sleep_samples;
   }
   // ▲▲▲ 新增结束 ▲▲▲
