@@ -301,6 +301,23 @@ export function backupExport() {
   return getJSON('/api/backup') // 全量数据 JSON，前端转 Blob 下载
 }
 
+// ── Web Push（阶段 0 / 见 docs/阶段0-web-push.md）─────────
+export function pushVapidKey() {
+  return getJSON('/api/push/vapid-public-key') // { publicKey }
+}
+export function pushSubscribe(sub) {
+  return writeJSON('POST', '/api/push/subscribe', sub) // body=PushSubscription JSON
+}
+export function pushUnsubscribe() {
+  return writeJSON('DELETE', '/api/push/subscribe')
+}
+export function pushSend(payload) {
+  return writeJSON('POST', '/api/push/send', payload) // { title, body, url?, source? }
+}
+export function pushLatest() {
+  return getJSON('/api/push/latest') // { notification }；SW 主要用，前端可调试
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()

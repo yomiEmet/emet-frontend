@@ -4,6 +4,7 @@ import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon } 
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
+import PushToggle from '../components/PushToggle.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
@@ -203,6 +204,12 @@ export default function Settings() {
         <p className="set-hint faint" style={{ marginTop: 8 }}>
           访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。助手/供应商/待办/心情会随密钥自动云同步。
         </p>
+      </section>
+
+      {/* ── 通知（Web Push 推送开关）────────────── */}
+      <section className="set-group">
+        <div className="section-label">通知</div>
+        <PushToggle />
       </section>
 
       {/* ── 供应商管理（多供应商，聊天页用）────── */}
