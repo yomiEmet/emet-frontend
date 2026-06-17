@@ -8,6 +8,7 @@ import Chat from './pages/Chat.jsx'
 import Memory from './pages/Memory.jsx'
 import MemoryDetail from './pages/MemoryDetail.jsx'
 import DiaryDetail from './pages/DiaryDetail.jsx'
+import MomentDetail from './pages/MomentDetail.jsx'
 import ArchivePage from './pages/ArchivePage.jsx'
 import Tags from './pages/Tags.jsx'
 import TagDetail from './pages/TagDetail.jsx'
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/memory" element={<Memory />} />
         <Route path="/memory/:id" element={<MemoryDetail />} />
         <Route path="/diary/:id" element={<DiaryDetail />} />
+        <Route path="/moment/:id" element={<MomentDetail />} />
         <Route path="/tags" element={<Tags />} />
         <Route path="/tags/:tag" element={<TagDetail />} />
         <Route path="/mail" element={<Messages />} />

@@ -190,7 +190,7 @@ export default function MemoryDetail() {
     workRef.current = null
     setSaveState('idle')
     if (isNew && !idRef.current) {
-      navigate('/memory') // 什么都没写就退出
+      navigate(-1) // 什么都没写就退出
       return
     }
     await refresh()
@@ -202,7 +202,7 @@ export default function MemoryDetail() {
       await finishEdit()
       if (!isNew) return // 编辑态返回 = 退出编辑，留在阅读视图
     }
-    navigate('/memory')
+    navigate(-1)
   }
 
   // ── 标签（编辑模式内联输入）─────────────────────────
@@ -267,7 +267,7 @@ export default function MemoryDetail() {
     try {
       await memoryMove(memo.id, 'memory', to)
       showToast('已移动到 ' + label)
-      navigate('/memory')
+      navigate(-1)
     } catch (e) {
       showToast(e.message || '移动失败')
     }
@@ -283,7 +283,7 @@ export default function MemoryDetail() {
     try {
       await memoryDelete(memo.id)
       showToast('已删除')
-      navigate('/memory')
+      navigate(-1)
     } catch (e) {
       showToast(e.message || '删除失败')
     }
@@ -336,7 +336,7 @@ export default function MemoryDetail() {
     return (
       <div className="page detail">
         <header className="detail-header">
-          <button className="detail-back" onClick={() => navigate('/memory')} aria-label="返回">
+          <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
             <ArrowLeft size={20} />
           </button>
         </header>
@@ -360,7 +360,7 @@ export default function MemoryDetail() {
     return (
       <div className="page detail">
         <header className="detail-header">
-          <button className="detail-back" onClick={() => navigate('/memory')} aria-label="返回">
+          <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
             <ArrowLeft size={20} />
           </button>
         </header>

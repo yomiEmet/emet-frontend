@@ -22,12 +22,15 @@ const SORT_KEYS = [
 export default function Memory() {
   const navigate = useNavigate()
   // ?tab=galaxy&focus=<id> 支持从详情页"查看✦"跳星图聚焦（旧版 B12）
-  const [params] = useSearchParams()
-  const paramTab = params.get('tab')
-  const [tab, setTab] = useState(
-    paramTab === 'galaxy' || paramTab === 'rings' ? paramTab : 'memory',
-  ) // memory | galaxy | rings
-  const focusId = params.get('focus') || null
+  // sub-tab 同步 URL：详情页返回时能保留当前 sub-tab，不被 useState 默认值重置
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = ['galaxy', 'rings'].includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'memory'
+  const setTab = (next) => {
+    setSearchParams({ tab: next }, { replace: true })
+  }
+  const focusId = searchParams.get('focus') || null
 
   return (
     <div className="page">
@@ -442,7 +445,9 @@ function PeriodReviewList({ author, emptyHint }) {
 }
 
 function MomentTimeline() {
+  const navigate = useNavigate()
   const [list, setList] = useState(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -470,35 +475,133 @@ function MomentTimeline() {
     return out
   }, [list])
 
+  // 时间线抽屉的"年→月"分组
+  const monthsByYear = useMemo(() => {
+    const yearMap = new Map()
+    groups.forEach((g) => {
+      const y = g.ym.slice(0, 4)
+      if (!yearMap.has(y)) yearMap.set(y, [])
+      yearMap.get(y).push(g.ym)
+    })
+    return [...yearMap.entries()].map(([year, items]) => ({ year, items }))
+  }, [groups])
+
+  const jumpToMonth = (ym) => {
+    setDrawerOpen(false)
+    const target = document.querySelector('[data-moment-month="' + ym + '"]')
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   if (list === null) return <p className="faint list-hint">加载中…</p>
-  if (list.length === 0) return <p className="faint list-hint">还没有瞬记</p>
+  if (list.length === 0) {
+    return (
+      <>
+        <p className="faint list-hint">还没有瞬记</p>
+        <button
+          className="fab"
+          onClick={() => navigate('/moment/new')}
+          aria-label="新增瞬记"
+        >
+          <Plus size={24} />
+        </button>
+      </>
+    )
+  }
 
   return (
-    <div className="timeline">
-      {groups.map((g) => (
-        <div key={g.ym} className="tl-month">
-          <div className="tl-month__label">{monthLabel(g.ym)}</div>
-          {g.items.map((m) => (
-            <div key={m.id} className="tl-item">
-              <div className="tl-item__head">
-                <span className="tl-item__date">{shortDateZh(m.created_at)}</span>
-                <span className="faint tl-item__tod">{timeOfDayZh(m.created_at)}</span>
-              </div>
-              <p className="tl-item__content">{m.content}</p>
-              {m.tags?.length > 0 && (
-                <div className="mem-card__tags">
-                  {m.tags.map((t) => (
-                    <span key={t} className="mem-hashtag">
-                      #{t}
-                    </span>
+    <>
+      {/* sticky 月份跳转按钮 */}
+      {groups.length > 1 && (
+        <div className="month-bar">
+          <span className="month-bar__label faint">{groups.length} 个月</span>
+          <button
+            className="month-bar__btn"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="时间线"
+          >
+            <CalendarDays size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* 时间线抽屉 */}
+      {drawerOpen && (
+        <>
+          <div className="tl-scrim" onClick={() => setDrawerOpen(false)} />
+          <aside className="tl-drawer">
+            <div className="tl-drawer__head">
+              <span>时间线</span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="关闭">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="tl-drawer__inner">
+              {monthsByYear.map((g) => (
+                <div key={g.year}>
+                  <div className="tl-drawer__year">{g.year}年</div>
+                  {g.items.map((ym) => (
+                    <button
+                      key={ym}
+                      className="tl-drawer__month"
+                      onClick={() => jumpToMonth(ym)}
+                    >
+                      {parseInt(ym.slice(5, 7), 10)}月
+                    </button>
                   ))}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
-      ))}
-    </div>
+          </aside>
+        </>
+      )}
+
+      <div className="timeline">
+        {groups.map((g) => (
+          <div key={g.ym} className="tl-month" data-moment-month={g.ym}>
+            <div className="tl-month__label">{monthLabel(g.ym)}</div>
+            {g.items.map((m) => (
+              <div
+                key={m.id}
+                className="tl-item"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/moment/${m.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    navigate(`/moment/${m.id}`)
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <div className="tl-item__head">
+                  <span className="tl-item__date">{shortDateZh(m.created_at)}</span>
+                  <span className="faint tl-item__tod">{timeOfDayZh(m.created_at)}</span>
+                </div>
+                <p className="tl-item__content">{m.content}</p>
+                {m.tags?.length > 0 && (
+                  <div className="mem-card__tags">
+                    {m.tags.map((t) => (
+                      <span key={t} className="mem-hashtag">
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <button
+        className="fab"
+        onClick={() => navigate('/moment/new')}
+        aria-label="新增瞬记"
+      >
+        <Plus size={24} />
+      </button>
+    </>
   )
 }
 
@@ -508,6 +611,7 @@ function DiaryList() {
   const [author, setAuthor] = useState('all')
   // 同日多篇时哪些日期处于展开态
   const [expandedDates, setExpandedDates] = useState(() => new Set())
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -563,6 +667,30 @@ function DiaryList() {
     })
   }
 
+  // 时间线抽屉：从 grouped 的日期 key 抽出唯一月份，按年分组
+  const monthsByYear = useMemo(() => {
+    const set = new Set()
+    grouped.forEach(([date]) => set.add(date.slice(0, 7)))
+    const months = [...set].sort().reverse()
+    const groups = []
+    let cur = null
+    months.forEach((ym) => {
+      const y = ym.slice(0, 4)
+      if (!cur || cur.year !== y) {
+        cur = { year: y, items: [] }
+        groups.push(cur)
+      }
+      cur.items.push(ym)
+    })
+    return groups
+  }, [grouped])
+
+  const jumpToMonth = (ym) => {
+    setDrawerOpen(false)
+    const target = document.querySelector('[data-diary-month="' + ym + '"]')
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
     <>
       <div className="chips">
@@ -578,37 +706,85 @@ function DiaryList() {
         ))}
       </div>
 
+      {monthsByYear.length > 0 && (
+        <div className="month-bar">
+          <span className="month-bar__label faint">
+            {monthsByYear.reduce((n, g) => n + g.items.length, 0)} 个月
+          </span>
+          <button
+            className="month-bar__btn"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="时间线"
+          >
+            <CalendarDays size={18} />
+          </button>
+        </div>
+      )}
+
+      {drawerOpen && (
+        <>
+          <div className="tl-scrim" onClick={() => setDrawerOpen(false)} />
+          <aside className="tl-drawer">
+            <div className="tl-drawer__head">
+              <span>时间线</span>
+              <button onClick={() => setDrawerOpen(false)} aria-label="关闭">
+                <X size={15} />
+              </button>
+            </div>
+            <div className="tl-drawer__inner">
+              {monthsByYear.map((g) => (
+                <div key={g.year}>
+                  <div className="tl-drawer__year">{g.year}年</div>
+                  {g.items.map((ym) => (
+                    <button
+                      key={ym}
+                      className="tl-drawer__month"
+                      onClick={() => jumpToMonth(ym)}
+                    >
+                      {parseInt(ym.slice(5, 7), 10)}月
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </aside>
+        </>
+      )}
+
       <div className="stack">
         {list === null ? (
           <p className="faint list-hint">加载中…</p>
         ) : grouped.length === 0 ? (
           <p className="faint list-hint">没有日记</p>
         ) : (
-          grouped.map(([date, items]) =>
-            items.length === 1 ? (
-              <button
-                key={items[0].id}
-                className="card diary-card"
-                onClick={() => navigate(`/diary/${items[0].id}`)}
-              >
-                {items[0].title && <div className="diary-card__title">{items[0].title}</div>}
-                <div className="faint diary-card__meta">
-                  {diaryAuthorLabel(items[0].author)} · {formatDateZh(diaryDate(items[0]))}{' '}
-                  {weekdayZh(diaryDate(items[0]))}
-                </div>
-                <p className="diary-card__preview">{items[0].content}</p>
-              </button>
-            ) : (
-              <DiaryDayCard
-                key={date}
-                date={date}
-                items={items}
-                expanded={expandedDates.has(date)}
-                onToggle={() => toggleDate(date)}
-                onItemClick={(id) => navigate(`/diary/${id}`)}
-              />
-            ),
-          )
+          grouped.map(([date, items]) => {
+            const ym = date.slice(0, 7)
+            return (
+              <div key={date} data-diary-month={ym}>
+                {items.length === 1 ? (
+                  <button
+                    className="card diary-card"
+                    onClick={() => navigate(`/diary/${items[0].id}`)}
+                  >
+                    {items[0].title && <div className="diary-card__title">{items[0].title}</div>}
+                    <div className="faint diary-card__meta">
+                      {diaryAuthorLabel(items[0].author)} · {formatDateZh(diaryDate(items[0]))}{' '}
+                      {weekdayZh(diaryDate(items[0]))}
+                    </div>
+                    <p className="diary-card__preview">{items[0].content}</p>
+                  </button>
+                ) : (
+                  <DiaryDayCard
+                    date={date}
+                    items={items}
+                    expanded={expandedDates.has(date)}
+                    onToggle={() => toggleDate(date)}
+                    onItemClick={(id) => navigate(`/diary/${id}`)}
+                  />
+                )}
+              </div>
+            )
+          })
         )}
       </div>
     </>

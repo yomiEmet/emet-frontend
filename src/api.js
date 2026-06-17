@@ -183,6 +183,28 @@ export function memoryCreate({ content, category, importance, arousal, valence, 
   })
 }
 
+// ── 日记 CRUD（与 memory 同套模式）─────────────────────────
+export function diaryCreate(payload) {
+  return writeJSON('POST', '/api/diary', payload)
+}
+export function diaryUpdate(id, patch) {
+  return writeJSON('PUT', `/api/diary/${id}`, patch)
+}
+export function diaryDelete(id) {
+  return writeJSON('DELETE', `/api/diary/${id}`)
+}
+
+// ── 瞬记 CRUD ──────────────────────────────────────────────
+export function momentCreate(payload) {
+  return writeJSON('POST', '/api/moment', payload)
+}
+export function momentUpdate(id, patch) {
+  return writeJSON('PUT', `/api/moment/${id}`, patch)
+}
+export function momentDelete(id) {
+  return writeJSON('DELETE', `/api/moment/${id}`)
+}
+
 // ── 年轮：瞬记 / 日记（一期第 5 步）──────────────────────
 export async function momentAll() {
   const data = await getData()
