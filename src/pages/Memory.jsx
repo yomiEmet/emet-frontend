@@ -22,13 +22,21 @@ const SORT_KEYS = [
 export default function Memory() {
   const navigate = useNavigate()
   // ?tab=galaxy&focus=<id> 支持从详情页"查看✦"跳星图聚焦（旧版 B12）
-  // sub-tab 同步 URL：详情页返回时能保留当前 sub-tab，不被 useState 默认值重置
+  // sub-tab 同步 URL：详情页返回能保留 sub-tab，不被 useState 默认值重置
+  // 用 prev URLSearchParams 保留其它参数（例如 Rings 内部的 view=diary）
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = ['galaxy', 'rings'].includes(searchParams.get('tab'))
     ? searchParams.get('tab')
     : 'memory'
   const setTab = (next) => {
-    setSearchParams({ tab: next }, { replace: true })
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        p.set('tab', next)
+        return p
+      },
+      { replace: true },
+    )
   }
   const focusId = searchParams.get('focus') || null
 
@@ -368,7 +376,21 @@ function MemoryManage() {
 
 // ── 年轮：瞬记时间线 + 日记列表（设计 4.3b）──────────────
 function Rings() {
-  const [view, setView] = useState('moment') // moment | diary | weekly | monthly
+  // view 也同步进 URL（?tab=rings&view=diary）：详情页返回能保留 view
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = ['diary', 'weekly', 'monthly'].includes(searchParams.get('view'))
+    ? searchParams.get('view')
+    : 'moment'
+  const setView = (next) => {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        p.set('view', next)
+        return p
+      },
+      { replace: true },
+    )
+  }
 
   return (
     <>
