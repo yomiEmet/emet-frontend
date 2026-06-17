@@ -651,16 +651,22 @@ function DiaryList() {
     setExpandedDates(new Set())
   }
 
+  // 日记 tab 不该出现 weekly / monthly（它们有专属 sub-tab）；先剔除再算 counts/filtered
+  const diaryOnly = useMemo(
+    () => (list || []).filter((d) => d.author !== 'weekly' && d.author !== 'monthly'),
+    [list],
+  )
+
   const counts = useMemo(() => {
-    const c = { all: list?.length || 0 }
-    for (const d of list || []) c[d.author] = (c[d.author] || 0) + 1
+    const c = { all: diaryOnly.length }
+    for (const d of diaryOnly) c[d.author] = (c[d.author] || 0) + 1
     return c
-  }, [list])
+  }, [diaryOnly])
 
   const filtered = useMemo(() => {
     if (!list) return []
-    return author === 'all' ? list : list.filter((d) => d.author === author)
-  }, [list, author])
+    return author === 'all' ? diaryOnly : diaryOnly.filter((d) => d.author === author)
+  }, [list, diaryOnly, author])
 
   // 按 diary_date 聚合；同日内 created_at asc（早→晚）；外层日期 desc
   const grouped = useMemo(() => {
