@@ -73,7 +73,14 @@
       "PowerShell(\"========== 1\\) .claude/settings.local.json ==========\")",
       "PowerShell(\"\")",
       "PowerShell(\"========== 2\\) DESIGN.md ==========\")",
-      "PowerShell(\"========== 3\\) docs/worker��ȫ�ӹ̷���.md ==========\")"
+      "PowerShell(\"========== 3\\) docs/worker��ȫ�ӹ̷���.md ==========\")",
+      "PowerShell(git -C $repo status --short)",
+      "PowerShell(git -C $repo log --oneline -3)",
+      "PowerShell(git -C $repo push origin main 2>&1)",
+      "PowerShell($repo = \"C:\\\\Users\\\\Administrator\\\\Desktop\\\\emet-memory\")",
+      "PowerShell(git -C $front status --short)",
+      "PowerShell(git -C $front diff --stat)",
+      "PowerShell(\"===\")"
     ]
   }
 }

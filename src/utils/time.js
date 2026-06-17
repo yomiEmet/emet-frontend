@@ -72,6 +72,26 @@ export function formatDateZh(iso) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+// 友好日期标签：今天 / 昨天 / 6月17日 / 2025年6月17日
+// iso 接 "YYYY-MM-DD" 或完整 ISO；按东八区比较
+export function formatDateFriendly(iso, now = nowCST()) {
+  if (!iso) return ''
+  const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso)
+  const dy = d.getFullYear()
+  const dm = d.getMonth()
+  const dd = d.getDate()
+  const ny = now.getFullYear()
+  const nm = now.getMonth()
+  const nd = now.getDate()
+  const dayMs = Date.UTC(dy, dm, dd)
+  const nowMs = Date.UTC(ny, nm, nd)
+  const diff = Math.round((nowMs - dayMs) / 86400000)
+  if (diff === 0) return '今天'
+  if (diff === 1) return '昨天'
+  if (dy === ny) return `${dm + 1}月${dd}日`
+  return `${dy}年${dm + 1}月${dd}日`
+}
+
 // "周五"
 export function weekdayZh(iso) {
   if (!iso) return ''

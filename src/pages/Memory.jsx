@@ -4,7 +4,7 @@ import { Search, CalendarDays, Plus, X, List, LayoutGrid, ArrowUpDown, Check } f
 import MemoryCard from '../components/MemoryCard.jsx'
 import Galaxy from '../components/Galaxy.jsx'
 import { CATEGORIES } from '../utils/categories.js'
-import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, weekdayZh } from '../utils/time.js'
+import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, formatDateFriendly, weekdayZh } from '../utils/time.js'
 import { DIARY_AUTHORS, diaryAuthorLabel } from '../utils/authors.js'
 import { showToast } from '../utils/toast.js'
 import { memoryAll, countByCategory, momentAll, diaryAll, diaryDate, getData } from '../api.js'
@@ -455,6 +455,8 @@ function DiaryList() {
   const navigate = useNavigate()
   const [list, setList] = useState(null)
   const [author, setAuthor] = useState('all')
+  // 同日多篇时哪些日期处于展开态
+  const [expandedDates, setExpandedDates] = useState(() => new Set())
 
   useEffect(() => {
     let alive = true
@@ -465,6 +467,12 @@ function DiaryList() {
       alive = false
     }
   }, [])
+
+  // 切 chip 时清空展开状态（避免上次筛选下展开的日期残留）
+  const switchAuthor = (next) => {
+    setAuthor(next)
+    setExpandedDates(new Set())
+  }
 
   const counts = useMemo(() => {
     const c = { all: list?.length || 0 }
@@ -477,6 +485,33 @@ function DiaryList() {
     return author === 'all' ? list : list.filter((d) => d.author === author)
   }, [list, author])
 
+  // 按 diary_date 聚合；同日内 created_at asc（早→晚）；外层日期 desc
+  const grouped = useMemo(() => {
+    const map = new Map()
+    for (const d of filtered) {
+      const dk = diaryDate(d)
+      if (!map.has(dk)) map.set(dk, [])
+      map.get(dk).push(d)
+    }
+    for (const items of map.values()) {
+      items.sort((a, b) => {
+        const ta = a.created_at || ''
+        const tb = b.created_at || ''
+        return ta < tb ? -1 : ta > tb ? 1 : 0
+      })
+    }
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1))
+  }, [filtered])
+
+  const toggleDate = (date) => {
+    setExpandedDates((prev) => {
+      const next = new Set(prev)
+      if (next.has(date)) next.delete(date)
+      else next.add(date)
+      return next
+    })
+  }
+
   return (
     <>
       <div className="chips">
@@ -484,7 +519,7 @@ function DiaryList() {
           <button
             key={a.key}
             className={'chip' + (author === a.key ? ' is-active' : '')}
-            onClick={() => setAuthor(a.key)}
+            onClick={() => switchAuthor(a.key)}
           >
             {a.label}
             <em className="chip-count">{counts[a.key] || 0}</em>
@@ -495,20 +530,91 @@ function DiaryList() {
       <div className="stack">
         {list === null ? (
           <p className="faint list-hint">加载中…</p>
-        ) : filtered.length === 0 ? (
+        ) : grouped.length === 0 ? (
           <p className="faint list-hint">没有日记</p>
         ) : (
-          filtered.map((d) => (
-            <button key={d.id} className="card diary-card" onClick={() => navigate(`/diary/${d.id}`)}>
-              {d.title && <div className="diary-card__title">{d.title}</div>}
-              <div className="faint diary-card__meta">
-                {diaryAuthorLabel(d.author)} · {formatDateZh(diaryDate(d))} {weekdayZh(diaryDate(d))}
-              </div>
-              <p className="diary-card__preview">{d.content}</p>
-            </button>
-          ))
+          grouped.map(([date, items]) =>
+            items.length === 1 ? (
+              <button
+                key={items[0].id}
+                className="card diary-card"
+                onClick={() => navigate(`/diary/${items[0].id}`)}
+              >
+                {items[0].title && <div className="diary-card__title">{items[0].title}</div>}
+                <div className="faint diary-card__meta">
+                  {diaryAuthorLabel(items[0].author)} · {formatDateZh(diaryDate(items[0]))}{' '}
+                  {weekdayZh(diaryDate(items[0]))}
+                </div>
+                <p className="diary-card__preview">{items[0].content}</p>
+              </button>
+            ) : (
+              <DiaryDayCard
+                key={date}
+                date={date}
+                items={items}
+                expanded={expandedDates.has(date)}
+                onToggle={() => toggleDate(date)}
+                onItemClick={(id) => navigate(`/diary/${id}`)}
+              />
+            ),
+          )
         )}
       </div>
     </>
+  )
+}
+
+// 同日多篇日记的聚合卡：标题"6月17日 · 3篇" + author 角标，点击切换展开
+// 子项仅显示 标题（无标题则 80 字 preview）+ HH:MM，点击进单篇详情
+function DiaryDayCard({ date, items, expanded, onToggle, onItemClick }) {
+  const authorCounts = items.reduce((acc, d) => {
+    acc[d.author] = (acc[d.author] || 0) + 1
+    return acc
+  }, {})
+  const timeHHMM = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  }
+  return (
+    <div className={'card diary-day-card' + (expanded ? ' is-open' : '')}>
+      <button type="button" className="diary-day-card__header" onClick={onToggle}>
+        <div className="diary-day-card__head-text">
+          <span className="diary-day-card__title">
+            {formatDateFriendly(date)} · {items.length}篇
+          </span>
+          <span className="faint diary-day-card__meta">
+            {Object.entries(authorCounts)
+              .map(([k, n]) => `${diaryAuthorLabel(k)} ×${n}`)
+              .join('  ')}
+          </span>
+        </div>
+        <span className="diary-day-card__chevron">{expanded ? '▾' : '▸'}</span>
+      </button>
+      {expanded && (
+        <div className="diary-day-card__children">
+          {items.map((d) => {
+            const fallback =
+              (d.content || '').slice(0, 80) +
+              ((d.content || '').length > 80 ? '…' : '')
+            return (
+              <button
+                key={d.id}
+                type="button"
+                className="diary-day-card__child"
+                onClick={() => onItemClick(d.id)}
+              >
+                <span className="diary-day-card__child-time faint">
+                  {timeHHMM(d.created_at)}
+                </span>
+                <span className="diary-day-card__child-title">
+                  {d.title || fallback}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
