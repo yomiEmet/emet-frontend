@@ -80,7 +80,8 @@
       "PowerShell($repo = \"C:\\\\Users\\\\Administrator\\\\Desktop\\\\emet-memory\")",
       "PowerShell(git -C $front status --short)",
       "PowerShell(git -C $front diff --stat)",
-      "PowerShell(\"===\")"
+      "PowerShell(\"===\")",
+      "PowerShell(node \"C:\\\\Users\\\\Administrator\\\\AppData\\\\Local\\\\Temp\\\\render-prompts.mjs\")"
     ]
   }
 }
