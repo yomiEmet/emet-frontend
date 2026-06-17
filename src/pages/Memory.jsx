@@ -365,7 +365,7 @@ function MemoryManage() {
 
 // ── 年轮：瞬记时间线 + 日记列表（设计 4.3b）──────────────
 function Rings() {
-  const [view, setView] = useState('moment') // moment | diary
+  const [view, setView] = useState('moment') // moment | diary | weekly | monthly
 
   return (
     <>
@@ -383,10 +383,61 @@ function Rings() {
           >
             日记
           </button>
+          <button
+            className={'seg-btn' + (view === 'weekly' ? ' is-active' : '')}
+            onClick={() => setView('weekly')}
+          >
+            周记
+          </button>
+          <button
+            className={'seg-btn' + (view === 'monthly' ? ' is-active' : '')}
+            onClick={() => setView('monthly')}
+          >
+            月记
+          </button>
         </div>
       </div>
-      {view === 'moment' ? <MomentTimeline /> : <DiaryList />}
+      {view === 'moment' && <MomentTimeline />}
+      {view === 'diary' && <DiaryList />}
+      {view === 'weekly' && <PeriodReviewList author="weekly" emptyHint="还没有周记。等周日 23:00 cron 自动写一篇，或者用 admin 路由手动触发。" />}
+      {view === 'monthly' && <PeriodReviewList author="monthly" emptyHint="还没有月记。等月底 23:30 cron 自动写一篇，或者用 admin 路由手动触发。" />}
     </>
+  )
+}
+
+// 周记/月记列表：按 author 单一过滤，不带 chip；卡片视觉跟 diary-card 同款
+function PeriodReviewList({ author, emptyHint }) {
+  const navigate = useNavigate()
+  const [list, setList] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    diaryAll()
+      .then((l) => alive && setList(l.filter((d) => d.author === author)))
+      .catch(() => alive && setList([]))
+    return () => {
+      alive = false
+    }
+  }, [author])
+
+  return (
+    <div className="stack">
+      {list === null ? (
+        <p className="faint list-hint">加载中…</p>
+      ) : list.length === 0 ? (
+        <p className="faint list-hint">{emptyHint || '没有内容'}</p>
+      ) : (
+        list.map((d) => (
+          <button key={d.id} className="card diary-card" onClick={() => navigate(`/diary/${d.id}`)}>
+            {d.title && <div className="diary-card__title">{d.title}</div>}
+            <div className="faint diary-card__meta">
+              {formatDateZh(diaryDate(d))} {weekdayZh(diaryDate(d))}
+            </div>
+            <p className="diary-card__preview">{d.content}</p>
+          </button>
+        ))
+      )}
+    </div>
   )
 }
 

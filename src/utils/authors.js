@@ -4,8 +4,6 @@ export const DIARY_AUTHORS = [
   { key: 'emet', label: 'Emet' },
   { key: 'yomi', label: '静怡' },
   { key: 'story', label: '故事' },
-  { key: 'weekly', label: '周记' },
-  { key: 'monthly', label: '月记' },
 ]
 
 export function diaryAuthorLabel(author) {
