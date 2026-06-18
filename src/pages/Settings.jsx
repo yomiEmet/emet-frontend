@@ -5,6 +5,7 @@ import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
 import PushToggle from '../components/PushToggle.jsx'
+import HeartbeatToggle from '../components/HeartbeatToggle.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
@@ -206,10 +207,11 @@ export default function Settings() {
         </p>
       </section>
 
-      {/* ── 通知（Web Push 推送开关）────────────── */}
+      {/* ── 通知（Web Push 推送开关 + 心跳系统主动消息）────────────── */}
       <section className="set-group">
         <div className="section-label">通知</div>
         <PushToggle />
+        <HeartbeatToggle />
       </section>
 
       {/* ── 供应商管理（多供应商，聊天页用）────── */}

@@ -340,6 +340,15 @@ export function pushLatest() {
   return getJSON('/api/push/latest') // { notification }；SW 主要用，前端可调试
 }
 
+// ── 心跳系统（阶段 4 / 见 docs/阶段4-心跳系统.md）─────────
+// 默认 enabled=false，前端开关显式开启
+export function heartbeatConfigGet() {
+  return getJSON('/api/config/heartbeat') // { config: { enabled, cooldown_min } }
+}
+export function heartbeatConfigSet(cfg) {
+  return writeJSON('POST', '/api/config/heartbeat', cfg)
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()
