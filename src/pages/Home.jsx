@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { MessageSquare, Heart, Moon, Mail, Gamepad2, BookText, BarChart3 } from 'lucide-react'
 import WhisperCard from '../components/WhisperCard.jsx'
 import WeatherCard from '../components/WeatherCard.jsx'
@@ -22,10 +23,11 @@ const MILESTONES = [
 ]
 
 // 作品入口（图标/名字静态，数量从 /api/data 实时拉）
+// 信件点击跳 /mail?tab=letter；游戏/故事还没接路由先留 null
 const WORKS = [
-  { key: 'letter', icon: <Mail size={20} />, name: '信件', countKey: 'letter' },
-  { key: 'game', icon: <Gamepad2 size={20} />, name: '游戏', countKey: 'game' },
-  { key: 'story', icon: <BookText size={20} />, name: '故事', countKey: 'story' },
+  { key: 'letter', icon: <Mail size={20} />, name: '信件', countKey: 'letter', to: '/mail?tab=letter' },
+  { key: 'game', icon: <Gamepad2 size={20} />, name: '游戏', countKey: 'game', to: null },
+  { key: 'story', icon: <BookText size={20} />, name: '故事', countKey: 'story', to: null },
 ]
 
 // 数字展示：加载中显示占位短横
@@ -34,6 +36,7 @@ function Num({ value }) {
 }
 
 export default function Home() {
+  const navigate = useNavigate()
   const now = nowCST()
   const [summary, setSummary] = useState(null)
   const [health, setHealth] = useState(null) // Apple Watch 数据，无则 null
@@ -121,7 +124,12 @@ export default function Home() {
       {/* ── 第七区：作品入口 ─────────────────────── */}
       <section className="works-row">
         {WORKS.map((w) => (
-          <button className="card work-card" key={w.key}>
+          <button
+            className="card work-card"
+            key={w.key}
+            disabled={!w.to}
+            onClick={() => w.to && navigate(w.to)}
+          >
             <span className="work-card__icon">{w.icon}</span>
             <span className="work-card__count">
               {counts[w.countKey] == null ? '—' : counts[w.countKey]}

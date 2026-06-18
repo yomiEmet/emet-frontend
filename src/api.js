@@ -246,6 +246,24 @@ export async function ideaAll() {
   return [...(data.ideas || [])].sort(byCreatedDesc)
 }
 
+// ── 信件：交接信 / 日常信，共用 handoffs 表 用 kind 区分 ──
+// 字段: id / title / content / kind ('handoff'|'daily') / created_at / locked / window_from
+// 旧版若没存 kind，按 'handoff' 兜底（迁移前的数据都是交接信）。
+export async function letterAll() {
+  const data = await getData()
+  return [...(data.handoffs || [])]
+    .map((h) => ({
+      id: h.id,
+      title: h.title || (h.window_from ? `交接信 · ${h.window_from}` : '交接信'),
+      content: h.content || '',
+      kind: h.kind || 'handoff',
+      created_at: h.created_at || '',
+      locked: !!h.locked,
+      window_from: h.window_from || '',
+    }))
+    .sort(byCreatedDesc)
+}
+
 // 后端 idea_save：tags 传逗号分隔字符串（同 memory_save）
 export function ideaCreate({ content, tags }) {
   return writeJSON('POST', '/api/idea', {

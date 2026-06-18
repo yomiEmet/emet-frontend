@@ -1,15 +1,43 @@
-import { useState, useEffect } from 'react'
-import { Send, Plus, X } from 'lucide-react'
-import { messageAll, messageLeave, ideaAll, ideaCreate, ideaDelete } from '../api.js'
-import { shortDateZh, timeOfDayZh } from '../utils/time.js'
+import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Send, Plus, X, Lock } from 'lucide-react'
+import {
+  messageAll,
+  messageLeave,
+  ideaAll,
+  ideaCreate,
+  ideaDelete,
+  letterAll,
+} from '../api.js'
+import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 
-// 留言页（设计 4.4）：留言板（朋友圈式）+ 灵感板
+// 留言页（设计 4.4）：信件 + 留言板 + 灵感板
+// 信件迁回（旧版 v6.8.2 顶部 tab）：交接信 / 日常信，共用 handoffs 表，kind 区分
 export default function Messages() {
-  const [tab, setTab] = useState('board') // board | idea
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = ['letter', 'board', 'idea'].includes(searchParams.get('tab'))
+    ? searchParams.get('tab')
+    : 'letter'
+  const setTab = (next) => {
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        p.set('tab', next)
+        return p
+      },
+      { replace: true },
+    )
+  }
 
   return (
     <div className="page">
       <div className="subtabs">
+        <button
+          className={'subtab' + (tab === 'letter' ? ' is-active' : '')}
+          onClick={() => setTab('letter')}
+        >
+          信件
+        </button>
         <button
           className={'subtab' + (tab === 'board' ? ' is-active' : '')}
           onClick={() => setTab('board')}
@@ -24,13 +52,147 @@ export default function Messages() {
         </button>
       </div>
 
-      {tab === 'board' ? <MessageBoard /> : <IdeaBoard />}
+      {tab === 'letter' && <LetterBoard />}
+      {tab === 'board' && <MessageBoard />}
+      {tab === 'idea' && <IdeaBoard />}
     </div>
   )
 }
 
 const SENDER_LABEL = { emet: 'Emet', yomi: '静怡' }
 
+// ════════════════ 信件 ════════════════
+// 旧版 v6.8.2 美学：衬线标题 + 赤陶分隔线 + 信封气质卡片
+const LETTER_FILTERS = [
+  { key: 'all', label: '全部' },
+  { key: 'handoff', label: '交接信' },
+  { key: 'daily', label: '日常信' },
+]
+
+function LetterBoard() {
+  const [list, setList] = useState(null)
+  const [kind, setKind] = useState('all')
+  const [openId, setOpenId] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    letterAll()
+      .then((l) => alive && setList(l))
+      .catch(() => alive && setList([]))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const counts = useMemo(() => {
+    if (!list) return { all: 0, handoff: 0, daily: 0 }
+    const c = { all: list.length, handoff: 0, daily: 0 }
+    for (const l of list) c[l.kind] = (c[l.kind] || 0) + 1
+    return c
+  }, [list])
+
+  const filtered = useMemo(() => {
+    if (!list) return []
+    return kind === 'all' ? list : list.filter((l) => l.kind === kind)
+  }, [list, kind])
+
+  if (list === null) return <p className="faint list-hint">加载中…</p>
+
+  return (
+    <div className="letter-wrap">
+      {/* 信件筛选条（衬线 chip）*/}
+      <div className="letter-filter">
+        {LETTER_FILTERS.map((f) => (
+          <button
+            key={f.key}
+            className={'letter-chip' + (kind === f.key ? ' is-active' : '')}
+            onClick={() => setKind(f.key)}
+          >
+            <span className="letter-chip__label">{f.label}</span>
+            <em className="letter-chip__count">{counts[f.key] || 0}</em>
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="letter-empty">
+          <div className="letter-empty__line" />
+          <p className="letter-empty__text">还没有信</p>
+          <div className="letter-empty__line" />
+        </div>
+      ) : (
+        <div className="letter-list">
+          {filtered.map((l) => (
+            <LetterCard
+              key={l.id}
+              letter={l}
+              open={openId === l.id}
+              onToggle={() => setOpenId(openId === l.id ? null : l.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LetterCard({ letter, open, onToggle }) {
+  const kindLabel = letter.kind === 'handoff' ? '交接信' : '日常信'
+  const dateStr = formatDateZh(letter.created_at)
+  const preview = (letter.content || '').slice(0, 200)
+  return (
+    <article
+      className={
+        'letter-card letter-card--' + letter.kind + (open ? ' is-open' : '')
+      }
+      onClick={onToggle}
+    >
+      {/* 角标：锁 */}
+      {letter.locked && (
+        <span className="letter-card__lock" aria-label="已锁定">
+          <Lock size={12} />
+        </span>
+      )}
+
+      {/* 信封顶饰线 */}
+      <div className="letter-card__crest">
+        <span className="letter-card__crest-line" />
+        <span className="letter-card__crest-kind">{kindLabel}</span>
+        <span className="letter-card__crest-line" />
+      </div>
+
+      {/* 日期 */}
+      <div className="letter-card__date">{dateStr}</div>
+
+      {/* 标题（衬线大字）*/}
+      {letter.title && (
+        <h3 className="letter-card__title">{letter.title}</h3>
+      )}
+
+      {/* 正文（折叠/展开）*/}
+      <div className="letter-card__body">
+        {open ? (
+          <p className="letter-card__full">{letter.content}</p>
+        ) : (
+          <p className="letter-card__preview">
+            {preview}
+            {letter.content.length > 200 && '…'}
+          </p>
+        )}
+      </div>
+
+      {/* 底部签名 */}
+      <div className="letter-card__foot">
+        <span className="letter-card__sig">— Emet</span>
+        <span className="letter-card__expand">
+          {open ? '收起' : '展开全文'}
+        </span>
+      </div>
+    </article>
+  )
+}
+
+// ════════════════ 留言板 ════════════════
 function MessageBoard() {
   const [list, setList] = useState(null)
   const [text, setText] = useState('')
@@ -108,6 +270,7 @@ function MessageBoard() {
   )
 }
 
+// ════════════════ 灵感板 ════════════════
 function IdeaBoard() {
   const [list, setList] = useState(null)
   const [formOpen, setFormOpen] = useState(false)

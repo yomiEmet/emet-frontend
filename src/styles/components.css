@@ -1755,6 +1755,268 @@
 }
 
 /* ════════════════════════════════════════
+   信件（迁回 v6.8.2 顶部信件 tab 美学）
+   赤陶衬线 + 信封气质，区分交接信/日常信
+   ════════════════════════════════════════ */
+.letter-wrap {
+  padding-top: 4px;
+}
+
+/* ── 信件筛选条（衬线 chip）── */
+.letter-filter {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0 22px;
+  padding: 0 4px;
+}
+
+.letter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.22s ease;
+}
+
+.letter-chip:hover {
+  border-color: var(--accent-soft);
+  color: var(--text);
+}
+
+.letter-chip.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(201, 100, 66, 0.22);
+}
+
+.letter-chip__label {
+  font-family: var(--font-serif);
+}
+
+.letter-chip__count {
+  font-style: italic;
+  font-family: 'Cormorant Garamond', var(--font-serif);
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.letter-chip.is-active .letter-chip__count {
+  opacity: 0.9;
+}
+
+/* ── 空状态：上下赤陶细线包夹一行斜体英文感 ── */
+.letter-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 60px 20px;
+}
+
+.letter-empty__line {
+  width: 40px;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.45;
+}
+
+.letter-empty__text {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+}
+
+/* ── 信件列表 ── */
+.letter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ── 信件卡片：信封气质 ── */
+.letter-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px; /* 比常规卡更挺括，像一封信 */
+  padding: 28px 26px 22px;
+  cursor: pointer;
+  transition: box-shadow 0.28s ease, transform 0.22s ease,
+    border-color 0.22s ease;
+  box-shadow: 0 1px 2px rgba(44, 42, 36, 0.04),
+    0 8px 26px rgba(44, 42, 36, 0.05);
+  overflow: hidden;
+}
+
+.letter-card:hover {
+  border-color: var(--accent-soft);
+  box-shadow: 0 2px 4px rgba(44, 42, 36, 0.06),
+    0 14px 38px rgba(44, 42, 36, 0.08);
+  transform: translateY(-1px);
+}
+
+.letter-card.is-open {
+  border-color: var(--accent-soft);
+  background: var(--accent-bg);
+}
+
+/* 信封左侧赤陶细带，是交接信和日常信的视觉区分 */
+.letter-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0.55;
+}
+
+.letter-card--daily::before {
+  background: var(--cat-semantic);
+  opacity: 0.55;
+}
+
+/* 锁角标 */
+.letter-card__lock {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  color: var(--text-faint);
+}
+
+/* 顶饰线：—— 交接信 —— */
+.letter-card__crest {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.letter-card__crest-line {
+  flex: 0 0 28px;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.4;
+}
+
+.letter-card--daily .letter-card__crest-line {
+  background: var(--cat-semantic);
+}
+
+.letter-card__crest-kind {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding-left: 0.32em;
+}
+
+.letter-card--daily .letter-card__crest-kind {
+  color: var(--cat-semantic);
+}
+
+/* 日期 */
+.letter-card__date {
+  text-align: center;
+  font-family: 'Cormorant Garamond', var(--font-serif);
+  font-style: italic;
+  font-size: 13px;
+  color: var(--text-faint);
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+}
+
+/* 标题 */
+.letter-card__title {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+  text-align: center;
+  margin: 0 0 18px;
+  letter-spacing: 0.02em;
+}
+
+/* 正文 */
+.letter-card__body {
+  position: relative;
+  padding: 0 4px;
+}
+
+.letter-card__preview {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.92;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  text-indent: 2em;
+  margin: 0;
+  /* 三行裁剪，与 200 字截断协调 */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.letter-card__full {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 2;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  text-indent: 2em;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* 底部签名 + 展开提示 */
+.letter-card__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border-soft);
+}
+
+.letter-card__sig {
+  font-family: 'Cormorant Garamond', var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--accent);
+  letter-spacing: 0.06em;
+}
+
+.letter-card--daily .letter-card__sig {
+  color: var(--cat-semantic);
+}
+
+.letter-card__expand {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  color: var(--text-faint);
+  letter-spacing: 0.12em;
+}
+
+/* ════════════════════════════════════════
    设置页（分组卡片）
    ════════════════════════════════════════ */
 .settings-title {
