@@ -50,12 +50,6 @@ export default function Memory() {
           记忆
         </button>
         <button
-          className={'subtab' + (tab === 'galaxy' ? ' is-active' : '')}
-          onClick={() => setTab('galaxy')}
-        >
-          星图
-        </button>
-        <button
           className={'subtab' + (tab === 'rings' ? ' is-active' : '')}
           onClick={() => setTab('rings')}
         >
