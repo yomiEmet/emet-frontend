@@ -35,7 +35,6 @@ export default function Chat() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistant, setAssistant] = useState(loadAssistant)
   const [target, setTarget] = useState(getActiveTarget)
-  const [hintDismissed, setHintDismissed] = useState({}) // 按会话 id 记住"长对话沉淀提示"是否被关
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
 
@@ -386,21 +385,6 @@ export default function Chat() {
         )}
         <div ref={bottomRef} />
       </div>
-
-      {/* 长对话沉淀提示（可关）：消息超 60 条且未沉淀过 */}
-      {cur && messages.length > 60 && !cur.distilled && !hintDismissed[curId] && !streaming && (
-        <div className="chat-distill-hint">
-          <span className="chat-distill-hint__txt">这段对话很长了，要不要沉淀一下？</span>
-          <button className="chat-distill-hint__do" onClick={() => distill(curId)}>沉淀</button>
-          <button
-            className="chat-distill-hint__x"
-            onClick={() => setHintDismissed((d) => ({ ...d, [curId]: true }))}
-            aria-label="关闭"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
 
       {/* 输入区 */}
       <div className="chat-input">
