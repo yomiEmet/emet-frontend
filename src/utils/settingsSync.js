@@ -11,7 +11,7 @@
 
 import { request } from '../api/client.js'
 
-export const SYNCED_KEYS = ['emet.assistant', 'emet.providers', 'emet.todos', 'emet.moods']
+export const SYNCED_KEYS = ['emet.assistant', 'emet.providers', 'emet.chatTarget', 'emet.todos', 'emet.moods']
 const AT_KEY = 'emet.settingsAt' // 本地设置最后修改时间（last-write-wins 依据）
 
 // ── 同步状态（设置页订阅 'emet:settings-sync' 事件显示）──
@@ -54,6 +54,7 @@ function buildBlob(updatedAt) {
     updated_at: updatedAt,
     assistant: readKey('emet.assistant'),
     providers: readKey('emet.providers'),
+    chatTarget: readKey('emet.chatTarget'),
     todos: readKey('emet.todos'),
     moods: readKey('emet.moods'),
   }

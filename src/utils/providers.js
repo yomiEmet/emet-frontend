@@ -8,7 +8,7 @@
 // emet.chatTarget = { providerId, model }  当前聊天用哪个
 // ═══════════════════════════════════════════════════════════
 
-import { schedulePushSettings } from './settingsSync.js'
+import { schedulePushSettings, notifyKeyChanged } from './settingsSync.js'
 
 const LS = 'emet.providers'
 const LS_TARGET = 'emet.chatTarget'
@@ -80,4 +80,5 @@ export function getActiveTarget() {
 
 export function setActiveTarget(providerId, model) {
   localStorage.setItem(LS_TARGET, JSON.stringify({ providerId, model }))
+  notifyKeyChanged(LS_TARGET)
 }
