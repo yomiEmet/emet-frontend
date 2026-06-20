@@ -367,6 +367,14 @@ export function heartbeatConfigSet(cfg) {
   return writeJSON('POST', '/api/config/heartbeat', cfg)
 }
 
+// ── 自动笔记（每天 22:30 cron 兜底写一篇当日观察）──
+export function dailyConfigGet() {
+  return getJSON('/api/config/daily') // { config: { enabled } }
+}
+export function dailyConfigSet(cfg) {
+  return writeJSON('POST', '/api/config/daily', cfg)
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()
