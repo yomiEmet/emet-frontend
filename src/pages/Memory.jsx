@@ -115,7 +115,9 @@ function MemoryManage({ mode = 'memory' }) {
   const list = useMemo(() => {
     if (!all) return []
     let arr = all
+    // 日志和记忆互斥：log tag 的归日志 tab，其它归记忆 tab
     if (isLog) arr = arr.filter((m) => m.tags?.includes('log'))
+    else arr = arr.filter((m) => !m.tags?.includes('log'))
     if (category !== 'all') arr = arr.filter((m) => m.category === category)
     const q = query.trim()
     if (q) {
