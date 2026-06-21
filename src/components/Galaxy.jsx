@@ -34,9 +34,8 @@ export default function Galaxy({ focusId = null }) {
     var GX_CATS = ['core','scene','emotion','semantic','image','procedure'];
     var GX_CAT_ZH = { core:'核心', scene:'情景', emotion:'情绪', semantic:'语义', image:'形象', procedure:'程序' };
 
-    // root 限定查找：组件内的 id 都通过 rootRef 找，避免污染全局 document
-    var ROOT = rootRef.current;
-    function $id(id){ return ROOT.querySelector('#' + id); }
+    // 跟 v66 原版一致：用 document.getElementById（主 App 同时只有一个 Galaxy 实例，id 唯一）
+    function $id(id){ return document.getElementById(id); }
 
     function gxKey(a,b){ return [a,b].sort().join('|'); }
     function gxFloatStyle(i){ var dur=6+(i%7)*0.5; var dly=-((i*1.37)%dur); return 'animation-delay:'+dly.toFixed(2)+'s;animation-duration:'+dur.toFixed(2)+'s;'; }
@@ -361,7 +360,7 @@ export default function Galaxy({ focusId = null }) {
   // ─── JSX 模板：照搬 public/legacy/index.html line 1315-1333 ───
   // class → className，自闭合标签，移除 .active（由 openGalaxy 加）
   return (
-    <div className="galaxy-overlay" id="galaxyOverlay" ref={rootRef}>
+    <div className="galaxy-overlay active" id="galaxyOverlay" ref={rootRef}>
       <div className="galaxy-header">
         <button className="galaxy-btn" id="galaxyCloseBtn" style={{ padding: '7px 13px' }} onClick={() => navigate(-1)}>✕</button>
         <div className="galaxy-seg">
