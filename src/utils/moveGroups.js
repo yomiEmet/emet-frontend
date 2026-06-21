@@ -4,6 +4,7 @@
 
 export const MOVE_GROUPS = [
   { key: 'memory', label: '记忆', leaf: 'memory' }, // 直接跳，无子菜单
+  { key: 'log', label: '日志', leaf: 'log' }, // 特殊：memory 类型 + log tag
   {
     key: 'rings',
     label: '年轮',

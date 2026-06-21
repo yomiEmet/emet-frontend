@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Lock, Trash2, MoreHorizontal, X, ChevronLeft } from 'lucide-react'
-import { momentAll, momentCreate, momentUpdate, momentDelete, memoryMove } from '../api.js'
+import { momentAll, momentCreate, momentUpdate, momentDelete, memoryMove, memoryUpdate } from '../api.js'
 import { shortDateZh, timeOfDayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
@@ -203,6 +203,18 @@ export default function MomentDetail() {
       return
     }
     try {
+      if (to === 'log') {
+        // 日志 = 先 move 到 memory，再加 log tag
+        const r = await memoryMove(moment.id, 'moment', 'memory')
+        const newId = r?.new_id || r?.id
+        if (newId) {
+          const tags = [...(moment.tags || []).filter((t) => t !== 'log'), 'log']
+          await memoryUpdate(newId, { tags })
+        }
+        showToast('已加进日志')
+        navigate(-1)
+        return
+      }
       await memoryMove(moment.id, 'moment', to)
       showToast('已移动到 ' + label)
       navigate(-1)

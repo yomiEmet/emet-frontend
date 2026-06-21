@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Lock, Trash2, MoreHorizontal, ChevronLeft } from 'lucide-react'
-import { diaryGet, diaryDate, diaryUpdate, diaryDelete, memoryMove } from '../api.js'
+import { diaryGet, diaryDate, diaryUpdate, diaryDelete, memoryMove, memoryUpdate } from '../api.js'
 import { dayKey, formatDateZh, weekdayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
@@ -157,6 +157,16 @@ export default function DiaryDetail() {
       return
     }
     try {
+      if (to === 'log') {
+        const r = await memoryMove(diary.id, curType, 'memory')
+        const newId = r?.new_id || r?.id
+        if (newId) {
+          await memoryUpdate(newId, { tags: ['log'] })
+        }
+        showToast('已加进日志')
+        navigate(-1)
+        return
+      }
       await memoryMove(diary.id, curType, to)
       showToast('已移动到 ' + label)
       navigate(-1)

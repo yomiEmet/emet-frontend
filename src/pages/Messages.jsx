@@ -9,6 +9,7 @@ import {
   ideaDelete,
   letterAll,
   memoryMove,
+  memoryUpdate,
 } from '../api.js'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
@@ -24,6 +25,16 @@ function MoveButton({ id, fromType, onMoved }) {
   const doMove = async (to, label) => {
     close()
     try {
+      if (to === 'log') {
+        const r = await memoryMove(id, fromType, 'memory')
+        const newId = r?.new_id || r?.id
+        if (newId) {
+          await memoryUpdate(newId, { tags: ['log'] })
+        }
+        showToast('已加进日志')
+        onMoved?.()
+        return
+      }
       await memoryMove(id, fromType, to)
       showToast('已移动到 ' + label)
       onMoved?.()

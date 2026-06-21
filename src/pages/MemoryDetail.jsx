@@ -246,6 +246,14 @@ export default function MemoryDetail() {
   const doMove = async (to, label) => {
     setMenu('')
     try {
+      if (to === 'log') {
+        // 日志 = memory + 'log' tag；当前已经是 memory，加个 tag 就行
+        const newTags = memo.tags.includes('log') ? memo.tags : [...memo.tags, 'log']
+        await memoryUpdate(memo.id, { tags: newTags })
+        showToast('已加进日志')
+        await refresh()
+        return
+      }
       await memoryMove(memo.id, 'memory', to)
       showToast('已移动到 ' + label)
       navigate(-1)
