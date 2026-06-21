@@ -13,6 +13,7 @@
 
 import { nowCST } from './utils/time.js'
 import { loadAssistant } from './utils/assistant.js'
+import { smartSearch } from './utils/search.js'
 import { BASE_URL, request } from './api/client.js'
 
 // BASE_URL 现在定义在统一请求模块 client.js，这里再导出一次，兼容旧引用
@@ -101,19 +102,15 @@ export async function memoryList({ category = 'all', sort = 'recent', limit = 30
   return { items: sortMemories(list, sort).slice(0, limit) }
 }
 
-export async function memorySearch({ query, category = 'all' } = {}) {
+// 走 smartSearch（关键词分词+三维加权）。withLinked=true 时把命中条目的藤蔓另一头也带出（弱分排在直接命中之后）。
+// 空查询沿用旧逻辑（按 recent 排），保持浏览态行为不变。
+export async function memorySearch({ query, category = 'all', withLinked = false } = {}) {
   const data = await getData()
   let list = (data.memories || []).map(normMemory)
   if (category && category !== 'all') list = list.filter((m) => m.category === category)
-  const q = (query || '').trim().toLowerCase()
-  if (q) {
-    list = list.filter(
-      (m) =>
-        m.content.toLowerCase().includes(q) ||
-        m.tags.some((t) => t.toLowerCase().includes(q)),
-    )
-  }
-  return { items: sortMemories(list, 'recent') }
+  const q = (query || '').trim()
+  if (!q) return { items: sortMemories(list, 'recent') }
+  return { items: smartSearch(list, q, { withLinked }) }
 }
 
 // 全部记忆（归一化），记忆页一次拉取后本地筛选/排序/统计/按月。
