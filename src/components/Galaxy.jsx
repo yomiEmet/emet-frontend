@@ -352,8 +352,10 @@ export default function Galaxy({ focusId = null }) {
       // 双指→单指：重置 drag 起点 + skipNext 跳过下一帧的 dx/dy 计算（防止 pinch 残留位移被当成 jump）
       const remaining = [...st.pointers.values()][0]
       st.drag = { lastX: remaining.x, lastY: remaining.y, moved: 0, skipNext: true }
+      if (st.pinch) st.lastPinchEnd = Date.now()
       st.pinch = null
     } else if (st.pointers.size === 0) {
+      if (st.pinch) st.lastPinchEnd = Date.now()
       st.drag = null
       st.pinch = null
     }
@@ -393,10 +395,12 @@ export default function Galaxy({ focusId = null }) {
     }
   }, [status, resize, draw, clampCam])
 
-  // 双击复位视角；pinch 期间禁用（防手机上两指快速按下被识别为 dblclick 误触复位）
+  // 双击复位视角；pinch 期间或刚结束 300ms 内禁用（防手机上 pinch 的余波被识别为 dblclick）
+  // verify 指出：dblclick 触发时 pointers 已为空，单靠 pointers.size 守不住，要加时间戳兜底
   const onDoubleClick = () => {
     const st = S.current
     if (st.pointers.size > 0) return
+    if (st.lastPinchEnd && Date.now() - st.lastPinchEnd < 300) return
     st.cam.tx = 0
     st.cam.ty = 0
     st.cam.scale = 1
