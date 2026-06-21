@@ -1132,6 +1132,25 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  cursor: pointer;
+  padding: 8px 6px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.link-item:active {
+  background: var(--rose);
+}
+.link-item:hover {
+  background: var(--bg);
+}
+.link-item .link-text {
+  flex: 1;
+  color: var(--ink);
+}
+.link-item .link-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 .link-cat {
   font-size: 11px;
@@ -1225,6 +1244,10 @@
   padding: 16px;
   margin-bottom: 16px;
   box-shadow: none;
+  cursor: default;
+}
+.meta-card:active {
+  transform: none;
 }
 .meta-row {
   display: flex;
@@ -1235,6 +1258,35 @@
 }
 .meta-row:last-child {
   margin-bottom: 0;
+}
+.meta-row--head {
+  margin-bottom: 10px;
+  justify-content: space-between;
+}
+
+/* v66 风格 select：bg 浅底 + line 边框 + 6 圆角 + 5/8 padding + ink 文字 */
+.meta-select {
+  flex: 1;
+  font-family: var(--sans-zh);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 10px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A8A39B' stroke-width='2'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+.meta-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .meta-row + .meta-row {
   border-top: 1px solid var(--border-soft);

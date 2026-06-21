@@ -455,35 +455,35 @@ export default function MemoryDetail() {
         readOnly={locked}
       />
 
-      {/* 分类 */}
-      <div className="detail-row">
-        <span className="detail-label">分类</span>
-        <div className="cat-select">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c.key}
-              className={'cat-opt' + (view.category === c.key ? ' is-active' : '')}
-              style={{ '--tag-color': c.color }}
-              onClick={() => set('category', c.key)}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 三维度卡片 */}
+      {/* 分类 + 三维度 一张卡（v66 editor-meta-section） */}
       <div className="card meta-card">
+        <div className="meta-row">
+          <span className="detail-label">分类</span>
+          <select
+            className="meta-select"
+            value={view.category}
+            onChange={(e) => set('category', e.target.value)}
+            disabled={locked}
+          >
+            {CATEGORIES.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
         <Slider label="重要度" min={1} max={10} step={1} value={view.importance} display={view.importance} disabled={locked} onChange={(v) => set('importance', v)} />
         <Slider label="唤醒度" min={0} max={1} step={0.05} value={view.arousal} display={view.arousal.toFixed(2)} disabled={locked} onChange={(v) => set('arousal', v)} />
         <Slider label="效价" min={-1} max={1} step={0.05} value={view.valence} display={view.valence.toFixed(2)} disabled={locked} onChange={(v) => set('valence', v)} />
       </div>
 
-      {/* 标签 */}
-      <div className="detail-row detail-row--col">
-        <span className="detail-label detail-label--btn" onClick={() => memo && setTagSpaceOpen(true)}>
-          标签{memo && <em className="label-hint">管理 ›</em>}
-        </span>
+      {/* 标签 一张卡 */}
+      <div className="card meta-card">
+        <div className="meta-row meta-row--head">
+          <span className="detail-label detail-label--btn" onClick={() => memo && setTagSpaceOpen(true)}>
+            标签{memo && <em className="label-hint">查看 ›</em>}
+          </span>
+        </div>
         <div className="tag-edit">
           {view.tags.map((t) => (
             <span key={t} className="tag-pill tag-pill--link" onClick={() => navigate(`/tags/${encodeURIComponent(t)}`)}>
@@ -517,13 +517,15 @@ export default function MemoryDetail() {
         </div>
       </div>
 
-      {/* 藤蔓关联（新建未落库时无）*/}
+      {/* 藤蔓关联 一张卡（新建未落库时无）*/}
       {memo && (
-        <div className="detail-row detail-row--col">
-          <span className="detail-label detail-label--btn" onClick={() => navigate(`/memory?tab=galaxy&focus=${memo.id}`)}>
-            藤蔓关联{linkedItems.length > 0 && ` · ${linkedItems.length}`}
-            <em className="label-hint"><Sparkles size={12} /> 星图</em>
-          </span>
+        <div className="card meta-card">
+          <div className="meta-row meta-row--head">
+            <span className="detail-label detail-label--btn" onClick={() => navigate(`/memory?tab=galaxy&focus=${memo.id}`)}>
+              藤蔓关联{linkedItems.length > 0 && ` · ${linkedItems.length}`}
+              <em className="label-hint"><Sparkles size={12} /> 星图</em>
+            </span>
+          </div>
           {linkedItems.length === 0 ? (
             <span className="faint" style={{ fontSize: 13 }}>暂无关联</span>
           ) : (
@@ -532,10 +534,24 @@ export default function MemoryDetail() {
                 const lc = categoryOf(m.category)
                 const rel = memo?.linkRel?.[m.id]
                 return (
-                  <div key={m.id} className="link-item">
+                  <div
+                    key={m.id}
+                    className="link-item"
+                    onClick={() => navigate(`/memory/${m.id}`)}
+                    role="button"
+                    tabIndex={0}
+                  >
                     <span className="link-cat" style={{ '--tag-color': lc.color }}>{lc.label}</span>
-                    <span className="link-text" onClick={() => navigate(`/memory/${m.id}`)}>{m.content.slice(0, 60)}</span>
-                    <button className="link-remove faint" onClick={() => doUnlink(m.id)} disabled={busy} aria-label="拆藤">
+                    <span className="link-text">{m.content.slice(0, 60)}</span>
+                    <button
+                      className="link-remove faint"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        doUnlink(m.id)
+                      }}
+                      disabled={busy}
+                      aria-label="拆藤"
+                    >
                       <X size={13} />
                     </button>
                     {rel && <span className="link-rel faint">{rel}</span>}
@@ -550,7 +566,7 @@ export default function MemoryDetail() {
               <Link2 size={15} /> 连接新藤蔓
             </button>
           ) : (
-            <div className="vine-picker card">
+            <div className="vine-picker">
               <div className="search-box">
                 <Search size={15} className="search-box__icon" />
                 <input className="search-box__input" placeholder="搜索要连接的记忆…" autoFocus value={picker.query} onChange={(e) => setPicker((p) => ({ ...p, query: e.target.value }))} />
