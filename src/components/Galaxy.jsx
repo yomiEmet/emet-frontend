@@ -22,7 +22,8 @@ const MAX_SCALE = 4
 const LOD_LABEL = 0.65
 const LOD_LINKS = 0.45
 // 拖动判定阈值：累计移动 < 此值算 click，否则算 drag
-const CLICK_SLOP = 6
+// 触屏手指抖动可达 8~12px，桌面鼠标精度高用 6；按设备类型动态选
+const CLICK_SLOP = typeof window !== 'undefined' && 'ontouchstart' in window ? 12 : 6
 
 function seeded(i) {
   const x = Math.sin(i * 127.1 + 0.5) * 43758.5453
@@ -318,6 +319,13 @@ export default function Galaxy({ focusId = null }) {
       st.cam.ty = cy - (newScale / startScale) * (cy - startTy)
       clampCam()
     } else if (st.drag) {
+      // 双指→单指过渡的第一帧只更新起点，不累计位移（防 jump）
+      if (st.drag.skipNext) {
+        st.drag.skipNext = false
+        st.drag.lastX = x
+        st.drag.lastY = y
+        return
+      }
       const dx = x - st.drag.lastX
       const dy = y - st.drag.lastY
       st.cam.tx += dx
@@ -341,9 +349,9 @@ export default function Galaxy({ focusId = null }) {
     }
 
     if (st.pointers.size === 1) {
-      // 双指→单指：重置 drag 起点，不要把 pinch 残留当成 jump
+      // 双指→单指：重置 drag 起点 + skipNext 跳过下一帧的 dx/dy 计算（防止 pinch 残留位移被当成 jump）
       const remaining = [...st.pointers.values()][0]
-      st.drag = { lastX: remaining.x, lastY: remaining.y, moved: 0 }
+      st.drag = { lastX: remaining.x, lastY: remaining.y, moved: 0, skipNext: true }
       st.pinch = null
     } else if (st.pointers.size === 0) {
       st.drag = null
@@ -385,9 +393,10 @@ export default function Galaxy({ focusId = null }) {
     }
   }, [status, resize, draw, clampCam])
 
-  // 双击复位视角
+  // 双击复位视角；pinch 期间禁用（防手机上两指快速按下被识别为 dblclick 误触复位）
   const onDoubleClick = () => {
     const st = S.current
+    if (st.pointers.size > 0) return
     st.cam.tx = 0
     st.cam.ty = 0
     st.cam.scale = 1
