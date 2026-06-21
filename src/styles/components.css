@@ -1383,6 +1383,79 @@
   white-space: nowrap;
 }
 
+/* ════════════════════════════════════════
+   星图 Miró v2 预览 · 浮卡靠右下小卡片，不再占满底部
+   ════════════════════════════════════════ */
+.galaxy-canvas-wrap--miro {
+  background: #F5F0E8;
+}
+.gx-title--miro {
+  color: #1A1A1A;
+  opacity: 0.45;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.gx-legend2--miro {
+  color: #1A1A1A;
+  opacity: 0.55;
+}
+.gx-hint--miro {
+  color: #1A1A1A;
+  opacity: 0.35;
+}
+.gx-preview-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #C1462B;
+  color: #FDFBF7;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Miró 浮卡：右下角小卡片，最多 280px 宽，不再盖住底部 */
+.gx-card--miro {
+  position: absolute;
+  left: auto;
+  right: 16px;
+  bottom: 16px;
+  width: min(280px, calc(100vw - 32px));
+  background: #FDFBF7;
+  border: 1px solid #D8D0C4;
+  border-radius: 4px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  animation: gx-card-up 0.25s ease;
+}
+.gx-card--miro .gx-card__text {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 6px;
+  /* 限制最多 4 行避免占太大 */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gx-card--miro .gx-card__cat {
+  font-style: normal;
+  font-weight: 600;
+}
+.gx-card--miro .gx-card__open {
+  color: #C1462B;
+  font-size: 11px;
+  margin-top: 6px;
+}
+
 .gx-title {
   position: absolute;
   top: 12px;

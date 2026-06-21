@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, CalendarDays, Plus, X, List, LayoutGrid, ArrowUpDown, Check } from 'lucide-react'
 import MemoryCard from '../components/MemoryCard.jsx'
 import Galaxy from '../components/Galaxy.jsx'
+import GalaxyMiro from '../components/GalaxyMiro.jsx'
 import { CATEGORIES } from '../utils/categories.js'
 import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, formatDateFriendly, weekdayZh } from '../utils/time.js'
 import { DIARY_AUTHORS, diaryAuthorLabel } from '../utils/authors.js'
@@ -40,6 +41,8 @@ export default function Memory() {
     )
   }
   const focusId = searchParams.get('focus') || null
+  // 星图视觉版本：默认 1（当前 Dear Data 风格），?gv=2 切到 Miró 预览
+  const galaxyVariant = searchParams.get('gv') === '2' ? '2' : '1'
 
   return (
     <div className="page">
@@ -68,7 +71,7 @@ export default function Memory() {
       </div>
 
       {tab === 'memory' && <MemoryManage />}
-      {tab === 'galaxy' && <Galaxy focusId={focusId} />}
+      {tab === 'galaxy' && (galaxyVariant === '2' ? <GalaxyMiro focusId={focusId} /> : <Galaxy focusId={focusId} />)}
       {tab === 'rings' && <Rings />}
       {tab === 'log' && <MemoryManage mode="log" />}
     </div>
