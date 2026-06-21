@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  ArrowLeft, Star, Lock, X, Plus, Pencil, Link2, Search,
-  MoreHorizontal, Sparkles, ChevronLeft, Check,
+  ArrowLeft, Star, Lock, X, Plus, Link2, Search,
+  MoreHorizontal, Sparkles, ChevronLeft,
 } from 'lucide-react'
 import { CATEGORIES, categoryOf } from '../utils/categories.js'
 import { formatDateZh, weekdayZh, formatCardTime, formatRelative } from '../utils/time.js'
@@ -51,7 +51,7 @@ export default function MemoryDetail() {
   const [allMems, setAllMems] = useState([])
   const [memo, setMemo] = useState(null)
   const [notFound, setNotFound] = useState(false)
-  const [editing, setEditing] = useState(isNew)
+  // v66 风格：work 永远存在，没有 editing 双模式
   const [work, setWork] = useState(
     isNew ? { ...NEW_WORK, tags: presetTag ? [presetTag] : [] } : null,
   )
@@ -62,6 +62,7 @@ export default function MemoryDetail() {
   const [menu, setMenu] = useState('') // '' | 'main' | 'move'
   const [dateOpen, setDateOpen] = useState(false)
   const [tagSpaceOpen, setTagSpaceOpen] = useState(false)
+  const bodyRef = useRef(null)
 
   // 自动保存管线：workRef 永远指向最新值，防抖 500ms 落库
   const workRef = useRef(null)
@@ -97,6 +98,24 @@ export default function MemoryDetail() {
       alive = false
     }
   }, [id, isNew])
+
+  // memo 加载到了 → 初始化 work（一次性，避免后续 memo 变化打断打字）
+  useEffect(() => {
+    if (memo && !work) {
+      const w = {
+        content: memo.content,
+        category: memo.category,
+        importance: memo.rawImportance,
+        arousal: memo.arousal,
+        valence: memo.valence,
+        tags: [...memo.tags],
+        date: '',
+      }
+      workRef.current = w
+      setWork(w)
+      setSaveState('idle')
+    }
+  }, [memo, work])
 
   const doSave = async () => {
     const w = workRef.current
@@ -164,49 +183,22 @@ export default function MemoryDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const set = (k, v) =>
+  const set = (k, v) => {
+    if (memo?.locked) {
+      setSaveState('error')
+      showToast('请先解锁')
+      return
+    }
     setWork((w) => {
       const next = { ...w, [k]: v }
       queueSave(next)
       return next
     })
-
-  const startEdit = () => {
-    const w = {
-      content: memo.content,
-      category: memo.category,
-      importance: memo.rawImportance,
-      arousal: memo.arousal,
-      valence: memo.valence,
-      tags: [...memo.tags],
-      date: '',
-    }
-    workRef.current = w
-    setWork(w)
-    setSaveState('saved')
-    setEditing(true)
   }
 
-  const finishEdit = async () => {
-    await flushSave()
-    setDateOpen(false)
-    setEditing(false)
-    setWork(null)
-    workRef.current = null
-    setSaveState('idle')
-    if (isNew && !idRef.current) {
-      navigate(-1) // 什么都没写就退出
-      return
-    }
-    await refresh()
-    if (isNew) navigate(`/memory/${idRef.current}`, { replace: true })
-  }
-
+  // v66 风格：返回 = 一次点击直接退，flushSave 兜底
   const goBack = async () => {
-    if (editing) {
-      await finishEdit()
-      if (!isNew) return // 编辑态返回 = 退出编辑，留在阅读视图
-    }
+    await flushSave()
     navigate(-1)
   }
 
@@ -227,19 +219,8 @@ export default function MemoryDetail() {
     }
   }
 
-  // 标签空间 card 模式的写入：即时落库（不走编辑态防抖）
-  const applyTags = async (tags) => {
-    if (editing) {
-      set('tags', tags)
-      return
-    }
-    try {
-      await memoryUpdate(memo.id, { tags })
-      await refresh()
-    } catch (e) {
-      showToast(e.message || '保存失败')
-    }
-  }
+  // 标签空间 card 模式：直接走 set（永远是编辑态）
+  const applyTags = (tags) => set('tags', tags)
 
   // ── 置顶 / 锁定 / 移动 / 删除 ───────────────────────
   const togglePin = async () => {
@@ -349,17 +330,8 @@ export default function MemoryDetail() {
       </div>
     )
 
-  // 展示值：编辑时取 work，阅读时取 memo
-  const view = editing
-    ? work
-    : memo && {
-        content: memo.content,
-        category: memo.category,
-        importance: memo.rawImportance,
-        arousal: memo.arousal,
-        valence: memo.valence,
-        tags: memo.tags,
-      }
+  // v66 风格：view 永远 = work
+  const view = work
 
   if (!view)
     return (
@@ -375,8 +347,9 @@ export default function MemoryDetail() {
 
   const cat = categoryOf(view.category)
   const locked = !!memo?.locked
-  const headerTitle = editing ? SAVE_TEXT[saveState] : isNew ? '新记忆' : '记忆'
-  const displayDate = editing && work.date ? work.date : memo?.date
+  // 永远显示保存状态；idle 时显示类型名
+  const headerTitle = SAVE_TEXT[saveState] || (isNew ? '新记忆' : '记忆')
+  const displayDate = work.date || memo?.date
 
   return (
     <div className="page detail">
@@ -384,7 +357,7 @@ export default function MemoryDetail() {
         <button className="detail-back" onClick={goBack} aria-label="返回">
           <ArrowLeft size={20} />
         </button>
-        <span className={'detail-title' + (editing ? ' detail-title--save' : '')}>{headerTitle}</span>
+        <span className={'detail-title' + (saveState && saveState !== 'idle' ? ' detail-title--save' : '')}>{headerTitle}</span>
         <div className="detail-header__right">
           {locked && <Lock size={16} className="faint" />}
           {memo && (
@@ -394,16 +367,6 @@ export default function MemoryDetail() {
               aria-label={memo.pinned ? '取消置顶' : '置顶'}
             >
               <Star size={18} fill={memo.pinned ? 'currentColor' : 'none'} />
-            </button>
-          )}
-          {!editing && memo && !locked && (
-            <button className="detail-edit-btn" onClick={startEdit}>
-              <Pencil size={15} /> 编辑
-            </button>
-          )}
-          {editing && (
-            <button className="detail-edit-btn" onClick={finishEdit}>
-              <Check size={15} /> 完成
             </button>
           )}
           {memo && (
@@ -455,8 +418,8 @@ export default function MemoryDetail() {
         ) : (
           <>
             <span
-              className={'detail-date__big' + (editing ? ' is-editable' : '')}
-              onClick={() => editing && setDateOpen((v) => !v)}
+              className={'detail-date__big' + (locked ? '' : ' is-editable')}
+              onClick={() => !locked && setDateOpen((v) => !v)}
             >
               {formatDateZh(displayDate)}
             </span>
@@ -468,7 +431,7 @@ export default function MemoryDetail() {
           </>
         )}
       </div>
-      {editing && dateOpen && (
+      {!locked && dateOpen && (
         <input
           type="date"
           className="detail-date-input"
@@ -480,48 +443,40 @@ export default function MemoryDetail() {
         />
       )}
 
-      {/* 正文 */}
-      {editing ? (
-        <textarea
-          className="detail-body"
-          value={work.content}
-          placeholder="写下这条记忆…"
-          onChange={(e) => set('content', e.target.value)}
-          rows={6}
-          autoFocus={isNew}
-        />
-      ) : (
-        <div className="detail-read-body">{view.content}</div>
-      )}
+      {/* 正文：v66 seamless 永远可写 */}
+      <textarea
+        ref={bodyRef}
+        className="detail-body detail-body--seamless"
+        value={work.content}
+        placeholder="写下这条记忆…"
+        onChange={(e) => set('content', e.target.value)}
+        rows={6}
+        autoFocus={isNew}
+        readOnly={locked}
+      />
 
       {/* 分类 */}
       <div className="detail-row">
         <span className="detail-label">分类</span>
-        {editing ? (
-          <div className="cat-select">
-            {CATEGORIES.map((c) => (
-              <button
-                key={c.key}
-                className={'cat-opt' + (work.category === c.key ? ' is-active' : '')}
-                style={{ '--tag-color': c.color }}
-                onClick={() => set('category', c.key)}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <span className="cat-text" style={{ '--tag-color': cat.color }}>
-            {cat.label}
-          </span>
-        )}
+        <div className="cat-select">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.key}
+              className={'cat-opt' + (view.category === c.key ? ' is-active' : '')}
+              style={{ '--tag-color': c.color }}
+              onClick={() => set('category', c.key)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 三维度卡片 */}
       <div className="card meta-card">
-        <Slider label="重要度" min={1} max={10} step={1} value={view.importance} display={view.importance} disabled={!editing} onChange={(v) => set('importance', v)} />
-        <Slider label="唤醒度" min={0} max={1} step={0.05} value={view.arousal} display={view.arousal.toFixed(2)} disabled={!editing} onChange={(v) => set('arousal', v)} />
-        <Slider label="效价" min={-1} max={1} step={0.05} value={view.valence} display={view.valence.toFixed(2)} disabled={!editing} onChange={(v) => set('valence', v)} />
+        <Slider label="重要度" min={1} max={10} step={1} value={view.importance} display={view.importance} disabled={locked} onChange={(v) => set('importance', v)} />
+        <Slider label="唤醒度" min={0} max={1} step={0.05} value={view.arousal} display={view.arousal.toFixed(2)} disabled={locked} onChange={(v) => set('arousal', v)} />
+        <Slider label="效价" min={-1} max={1} step={0.05} value={view.valence} display={view.valence.toFixed(2)} disabled={locked} onChange={(v) => set('valence', v)} />
       </div>
 
       {/* 标签 */}
@@ -530,11 +485,10 @@ export default function MemoryDetail() {
           标签{memo && <em className="label-hint">管理 ›</em>}
         </span>
         <div className="tag-edit">
-          {view.tags.length === 0 && !editing && <span className="faint" style={{ fontSize: 13 }}>无标签</span>}
           {view.tags.map((t) => (
             <span key={t} className="tag-pill tag-pill--link" onClick={() => navigate(`/tags/${encodeURIComponent(t)}`)}>
               #{t}
-              {editing && (
+              {!locked && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -547,7 +501,7 @@ export default function MemoryDetail() {
               )}
             </span>
           ))}
-          {editing && (
+          {!locked && (
             <span className="tag-add">
               <input
                 value={tagInput}
@@ -625,7 +579,7 @@ export default function MemoryDetail() {
       {/* 标签空间 card 模式 */}
       {tagSpaceOpen && memo && (
         <TagSpaceCard
-          tags={editing ? work.tags : memo.tags}
+          tags={view.tags}
           onChange={applyTags}
           onClose={() => setTagSpaceOpen(false)}
           onOpenTag={(t) => navigate(`/tags/${encodeURIComponent(t)}`)}
