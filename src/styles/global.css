@@ -18,9 +18,15 @@ body {
   color: var(--text);
   background: var(--bg);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif-zh);
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 button {

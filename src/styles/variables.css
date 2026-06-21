@@ -3,6 +3,7 @@
   --accent: #C96442;        /* 赤陶橙——按钮、强调、Emet 的颜色 */
   --accent-soft: #E8B89F;   /* 浅赤陶——hover、边框 */
   --accent-bg: #FDF5F0;     /* 极淡赤陶——卡片高亮底色 */
+  --rose: #F2DAD4;          /* v66 粉橙底——tag/重点入口卡 */
 
   /* ── 背景层次 ───────────────────────── */
   --bg: #F8F8F6;            /* 页面底色：暖白 */
@@ -33,7 +34,13 @@
   --cat-procedure: #8A8477; /* 程序 */
 
   /* ── 字体 ───────────────────────────── */
-  --font-serif: 'Source Serif 4', 'Songti SC', 'Noto Serif SC', Georgia, serif;
+  /* v66 思路：英文像诗 / 中文像信 / 数字像表 */
+  --font-serif-en: 'Cormorant Garamond', 'Source Serif 4', Georgia, serif;
+  --font-serif-zh: 'Noto Serif SC', 'Source Serif 4', 'Songti SC', Georgia, serif;
+  --font-sans-en: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* 保留旧别名，避免老组件大面积破坏 */
+  --font-serif: var(--font-serif-zh);
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
