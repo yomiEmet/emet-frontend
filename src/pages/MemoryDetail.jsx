@@ -5,6 +5,7 @@ import {
   MoreHorizontal, Sparkles, ChevronLeft,
 } from 'lucide-react'
 import { CATEGORIES, categoryOf } from '../utils/categories.js'
+import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
 import { formatDateZh, weekdayZh, formatCardTime, formatRelative } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 import TagSpaceCard from '../components/TagSpaceCard.jsx'
@@ -28,14 +29,8 @@ const NEW_WORK = {
   date: '',
 }
 
-// 移动到…（旧版六类互转，去掉自己）
-const MOVE_TYPES = [
-  ['moment', '瞬记'],
-  ['diary', '日记'],
-  ['story', '故事'],
-  ['message', '便条'],
-  ['idea', '想法'],
-]
+// 当前类型（用于排除"移动到自己"）
+const CUR_TYPE = 'memory'
 
 // 保存状态字（旧版 editorSaved 的语义）
 const SAVE_TEXT = { idle: '', new: '新建中', saving: '编辑中…', saved: '已保存', error: '保存失败' }
@@ -59,7 +54,7 @@ export default function MemoryDetail() {
   const [busy, setBusy] = useState(false)
   const [tagInput, setTagInput] = useState('')
   const [picker, setPicker] = useState({ open: false, query: '' })
-  const [menu, setMenu] = useState('') // '' | 'main' | 'move'
+  const [menu, setMenu] = useState('') // '' | 'main' | 'move' | 'move-rings' | 'move-letters'
   const [dateOpen, setDateOpen] = useState(false)
   const [tagSpaceOpen, setTagSpaceOpen] = useState(false)
   const bodyRef = useRef(null)
@@ -394,14 +389,34 @@ export default function MemoryDetail() {
                   {locked ? '删除（请先解锁）' : '删除'}
                 </button>
               </>
-            ) : (
+            ) : menu === 'move' ? (
               <>
                 <button className="dm-opt dm-back" onClick={() => setMenu('main')}>
                   <ChevronLeft size={14} /> 移动到
                 </button>
-                {MOVE_TYPES.map(([k, label]) => (
-                  <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
-                    {label}
+                {MOVE_GROUPS.filter((g) => groupHasOptions(g, CUR_TYPE)).map((g) =>
+                  g.leaf ? (
+                    <button key={g.key} className="dm-opt" onClick={() => doMove(g.leaf, g.label)}>
+                      {g.label}
+                    </button>
+                  ) : (
+                    <button key={g.key} className="dm-opt" onClick={() => setMenu('move-' + g.key)}>
+                      {g.label} <span className="faint">›</span>
+                    </button>
+                  ),
+                )}
+              </>
+            ) : (
+              <>
+                <button className="dm-opt dm-back" onClick={() => setMenu('move')}>
+                  <ChevronLeft size={14} /> {menu === 'move-rings' ? '年轮' : '留言'}
+                </button>
+                {visibleChildren(
+                  MOVE_GROUPS.find((g) => g.key === menu.replace('move-', '')),
+                  CUR_TYPE,
+                ).map((c) => (
+                  <button key={c.key} className="dm-opt" onClick={() => doMove(c.key, c.label)}>
+                    {c.label}
                   </button>
                 ))}
               </>

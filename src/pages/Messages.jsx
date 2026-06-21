@@ -12,21 +12,17 @@ import {
 } from '../api.js'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
+import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
 
-// 移动到… 弹出菜单（六类互转，去掉自己）
-const ALL_MOVE_TYPES = [
-  ['memory', '记忆'],
-  ['moment', '瞬记'],
-  ['diary', '日记'],
-  ['story', '故事'],
-  ['message', '便条'],
-  ['idea', '想法'],
-]
 function MoveButton({ id, fromType, onMoved }) {
   const [open, setOpen] = useState(false)
-  const types = ALL_MOVE_TYPES.filter(([k]) => k !== fromType)
-  const doMove = async (to, label) => {
+  const [view, setView] = useState('groups') // 'groups' | 'rings' | 'letters'
+  const close = () => {
     setOpen(false)
+    setView('groups')
+  }
+  const doMove = async (to, label) => {
+    close()
     try {
       await memoryMove(id, fromType, to)
       showToast('已移动到 ' + label)
@@ -47,14 +43,38 @@ function MoveButton({ id, fromType, onMoved }) {
       </button>
       {open && (
         <>
-          <div className="tl-scrim tl-scrim--clear" onClick={() => setOpen(false)} />
+          <div className="tl-scrim tl-scrim--clear" onClick={close} />
           <div className="sort-menu card" style={{ right: 8, top: 36 }}>
-            <div className="dm-opt faint" style={{ pointerEvents: 'none' }}>移动到</div>
-            {types.map(([k, label]) => (
-              <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
-                {label}
-              </button>
-            ))}
+            {view === 'groups' ? (
+              <>
+                <div className="dm-opt faint" style={{ pointerEvents: 'none' }}>移动到</div>
+                {MOVE_GROUPS.filter((g) => groupHasOptions(g, fromType)).map((g) =>
+                  g.leaf ? (
+                    <button key={g.key} className="dm-opt" onClick={() => doMove(g.leaf, g.label)}>
+                      {g.label}
+                    </button>
+                  ) : (
+                    <button key={g.key} className="dm-opt" onClick={() => setView(g.key)}>
+                      {g.label} <span className="faint">›</span>
+                    </button>
+                  ),
+                )}
+              </>
+            ) : (
+              <>
+                <button className="dm-opt dm-back" onClick={() => setView('groups')}>
+                  ‹ {view === 'rings' ? '年轮' : '留言'}
+                </button>
+                {visibleChildren(
+                  MOVE_GROUPS.find((g) => g.key === view),
+                  fromType,
+                ).map((c) => (
+                  <button key={c.key} className="dm-opt" onClick={() => doMove(c.key, c.label)}>
+                    {c.label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </>
       )}

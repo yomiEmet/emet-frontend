@@ -4,18 +4,9 @@ import { ArrowLeft, Lock, Trash2, MoreHorizontal, ChevronLeft } from 'lucide-rea
 import { diaryGet, diaryDate, diaryUpdate, diaryDelete, memoryMove } from '../api.js'
 import { dayKey, formatDateZh, weekdayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
+import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
 
 const SAVE_TEXT = { idle: '', saving: '保存中…', saved: '已保存', error: '保存失败' }
-
-// 移动到…六类互转。当前类型 diary 或 story（author='story' 视为 story）会从列表里被剔除
-const ALL_MOVE_TYPES = [
-  ['memory', '记忆'],
-  ['moment', '瞬记'],
-  ['diary', '日记'],
-  ['story', '故事'],
-  ['message', '便条'],
-  ['idea', '想法'],
-]
 
 // 日记 / 周记 / 月记 / 故事 共用详情页。v66 风格：textarea 永远在线，500ms 自动保存
 export default function DiaryDetail() {
@@ -142,7 +133,6 @@ export default function DiaryDetail() {
 
   // 当前实际类型：story 是 diary 的子类（author='story'）
   const curType = diary?.author === 'story' ? 'story' : 'diary'
-  const moveTypes = ALL_MOVE_TYPES.filter(([k]) => k !== curType)
 
   const toggleLock = async () => {
     setMenu('')
@@ -282,14 +272,34 @@ export default function DiaryDetail() {
                   <Trash2 size={14} /> 删除
                 </button>
               </>
-            ) : (
+            ) : menu === 'move' ? (
               <>
                 <button className="dm-opt dm-back" onClick={() => setMenu('main')}>
                   <ChevronLeft size={14} /> 移动到
                 </button>
-                {moveTypes.map(([k, label]) => (
-                  <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
-                    {label}
+                {MOVE_GROUPS.filter((g) => groupHasOptions(g, curType)).map((g) =>
+                  g.leaf ? (
+                    <button key={g.key} className="dm-opt" onClick={() => doMove(g.leaf, g.label)}>
+                      {g.label}
+                    </button>
+                  ) : (
+                    <button key={g.key} className="dm-opt" onClick={() => setMenu('move-' + g.key)}>
+                      {g.label} <span className="faint">›</span>
+                    </button>
+                  ),
+                )}
+              </>
+            ) : (
+              <>
+                <button className="dm-opt dm-back" onClick={() => setMenu('move')}>
+                  <ChevronLeft size={14} /> {menu === 'move-rings' ? '年轮' : '留言'}
+                </button>
+                {visibleChildren(
+                  MOVE_GROUPS.find((g) => g.key === menu.replace('move-', '')),
+                  curType,
+                ).map((c) => (
+                  <button key={c.key} className="dm-opt" onClick={() => doMove(c.key, c.label)}>
+                    {c.label}
                   </button>
                 ))}
               </>
