@@ -248,7 +248,7 @@ export default function MomentDetail() {
       </div>
     )
   }
-  if (!isNew && !moment) {
+  if ((!isNew && !moment) || !work) {
     return (
       <div className="page detail">
         <header className="detail-header">
