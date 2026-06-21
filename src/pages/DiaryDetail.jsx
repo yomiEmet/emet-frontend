@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Lock, Trash2, MoreHorizontal, Pencil, Check } from 'lucide-react'
-import { diaryGet, diaryDate, diaryUpdate, diaryDelete } from '../api.js'
+import { ArrowLeft, Lock, Trash2, MoreHorizontal, Pencil, Check, ChevronLeft } from 'lucide-react'
+import { diaryGet, diaryDate, diaryUpdate, diaryDelete, memoryMove } from '../api.js'
 import { dayKey, formatDateZh, weekdayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 
 const SAVE_TEXT = { idle: '', saving: '保存中…', saved: '已保存', error: '保存失败' }
+
+// 移动到…六类互转。当前类型 diary 或 story（author='story' 视为 story）会从列表里被剔除
+const ALL_MOVE_TYPES = [
+  ['memory', '记忆'],
+  ['moment', '瞬记'],
+  ['diary', '日记'],
+  ['story', '故事'],
+  ['message', '便条'],
+  ['idea', '想法'],
+]
 
 // 日记 / 周记 / 月记 / 故事 共用详情页。仿 MemoryDetail 的双模式：
 // - 读态：标题 / meta / 正文 / 署名 像原版纯文字流，跟随页面滚动，不带任何输入框
@@ -20,7 +30,7 @@ export default function DiaryDetail() {
   const [work, setWork] = useState(null)
   const [saveState, setSaveState] = useState('idle')
   const [busy, setBusy] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menu, setMenu] = useState('') // '' | 'main' | 'move'
   const workRef = useRef(null)
   const timerRef = useRef(null)
   const savingRef = useRef(false)
@@ -124,8 +134,12 @@ export default function DiaryDetail() {
     }
   }
 
+  // 当前实际类型：story 是 diary 的子类（author='story'）
+  const curType = diary?.author === 'story' ? 'story' : 'diary'
+  const moveTypes = ALL_MOVE_TYPES.filter(([k]) => k !== curType)
+
   const toggleLock = async () => {
-    setMenuOpen(false)
+    setMenu('')
     if (!diary || busy) return
     setBusy(true)
     try {
@@ -139,8 +153,24 @@ export default function DiaryDetail() {
     }
   }
 
+  const doMove = async (to, label) => {
+    setMenu('')
+    if (!diary) return
+    if (diary.locked) {
+      showToast('请先解锁')
+      return
+    }
+    try {
+      await memoryMove(diary.id, curType, to)
+      showToast('已移动到 ' + label)
+      navigate(-1)
+    } catch (e) {
+      showToast(e?.message || '移动失败')
+    }
+  }
+
   const doDelete = async () => {
-    setMenuOpen(false)
+    setMenu('')
     if (!diary) return
     if (diary.locked) {
       showToast('请先解锁')
@@ -229,7 +259,7 @@ export default function DiaryDetail() {
           )}
           <button
             className="detail-more"
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => setMenu(menu ? '' : 'main')}
             aria-label="更多"
           >
             <MoreHorizontal size={20} />
@@ -237,16 +267,36 @@ export default function DiaryDetail() {
         </div>
       </header>
 
-      {menuOpen && (
+      {menu && (
         <>
-          <div className="tl-scrim tl-scrim--clear" onClick={() => setMenuOpen(false)} />
+          <div className="tl-scrim tl-scrim--clear" onClick={() => setMenu('')} />
           <div className="sort-menu card">
-            <button className="dm-opt" onClick={toggleLock} disabled={busy}>
-              <Lock size={14} /> {diary.locked ? '解锁' : '锁定'}
-            </button>
-            <button className="dm-opt" onClick={doDelete}>
-              <Trash2 size={14} /> 删除
-            </button>
+            {menu === 'main' ? (
+              <>
+                <button className="dm-opt" onClick={toggleLock} disabled={busy}>
+                  <Lock size={14} /> {diary.locked ? '解锁' : '锁定'}
+                </button>
+                {!diary.locked && (
+                  <button className="dm-opt" onClick={() => setMenu('move')}>
+                    移动到… <span className="faint">›</span>
+                  </button>
+                )}
+                <button className="dm-opt" onClick={doDelete}>
+                  <Trash2 size={14} /> 删除
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="dm-opt dm-back" onClick={() => setMenu('main')}>
+                  <ChevronLeft size={14} /> 移动到
+                </button>
+                {moveTypes.map(([k, label]) => (
+                  <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
+                    {label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </>
       )}

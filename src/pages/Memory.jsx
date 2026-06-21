@@ -25,7 +25,7 @@ export default function Memory() {
   // sub-tab 同步 URL：详情页返回能保留 sub-tab，不被 useState 默认值重置
   // 用 prev URLSearchParams 保留其它参数（例如 Rings 内部的 view=diary）
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = ['galaxy', 'rings'].includes(searchParams.get('tab'))
+  const tab = ['galaxy', 'rings', 'log'].includes(searchParams.get('tab'))
     ? searchParams.get('tab')
     : 'memory'
   const setTab = (next) => {
@@ -55,6 +55,12 @@ export default function Memory() {
         >
           年轮
         </button>
+        <button
+          className={'subtab' + (tab === 'log' ? ' is-active' : '')}
+          onClick={() => setTab('log')}
+        >
+          日志
+        </button>
         <button className="subtab" onClick={() => navigate('/archive')}>
           档案
         </button>
@@ -63,11 +69,14 @@ export default function Memory() {
       {tab === 'memory' && <MemoryManage />}
       {tab === 'galaxy' && <Galaxy focusId={focusId} />}
       {tab === 'rings' && <Rings />}
+      {tab === 'log' && <MemoryManage mode="log" />}
     </div>
   )
 }
 
-function MemoryManage() {
+function MemoryManage({ mode = 'memory' }) {
+  // mode='log': 只显示 tags 含 'log' 的，隐藏分类筛选条；暂作"日志"过渡视图
+  const isLog = mode === 'log'
   const navigate = useNavigate()
   const [all, setAll] = useState(null) // null=loading
   const [query, setQuery] = useState('')
@@ -105,6 +114,7 @@ function MemoryManage() {
   const list = useMemo(() => {
     if (!all) return []
     let arr = all
+    if (isLog) arr = arr.filter((m) => m.tags?.includes('log'))
     if (category !== 'all') arr = arr.filter((m) => m.category === category)
     const q = query.trim().toLowerCase()
     if (q) {
@@ -231,7 +241,7 @@ function MemoryManage() {
           <Search size={16} className="search-box__icon" />
           <input
             className="search-box__input"
-            placeholder="搜索记忆…"
+            placeholder={isLog ? '搜索日志…' : '搜索记忆…'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -285,19 +295,21 @@ function MemoryManage() {
         </>
       )}
 
-      {/* 分类筛选 + 数量 */}
-      <div className="chips">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            className={'chip' + (category === f.key ? ' is-active' : '')}
-            onClick={() => setCategory(f.key)}
-          >
-            {f.label}
-            <em className="chip-count">{counts[f.key] || 0}</em>
-          </button>
-        ))}
-      </div>
+      {/* 分类筛选 + 数量（日志模式隐藏：暂不分类） */}
+      {!isLog && (
+        <div className="chips">
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              className={'chip' + (category === f.key ? ' is-active' : '')}
+              onClick={() => setCategory(f.key)}
+            >
+              {f.label}
+              <em className="chip-count">{counts[f.key] || 0}</em>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* sticky 月份标签 + 日历按钮（旧版 A7：滚动定位）*/}
       {curMonth && list.length > 0 && (
@@ -345,7 +357,7 @@ function MemoryManage() {
         {all === null ? (
           <p className="faint list-hint">加载中…</p>
         ) : list.length === 0 ? (
-          <p className="faint list-hint">没有匹配的记忆</p>
+          <p className="faint list-hint">{isLog ? '还没有日志' : '没有匹配的记忆'}</p>
         ) : (
           list.map((m) => (
             <MemoryCard
@@ -361,7 +373,11 @@ function MemoryManage() {
       </div>
 
       {/* 新增按钮 */}
-      <button className="fab" onClick={() => navigate('/memory/new')} aria-label="新增记忆">
+      <button
+        className="fab"
+        onClick={() => navigate(isLog ? '/memory/new?tag=log' : '/memory/new')}
+        aria-label={isLog ? '新增日志' : '新增记忆'}
+      >
         <Plus size={24} />
       </button>
     </div>

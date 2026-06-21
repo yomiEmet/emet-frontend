@@ -1,11 +1,20 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Lock, Trash2, MoreHorizontal, Pencil, Check, X } from 'lucide-react'
-import { momentAll, momentCreate, momentUpdate, momentDelete } from '../api.js'
+import { ArrowLeft, Lock, Trash2, MoreHorizontal, Pencil, Check, X, ChevronLeft } from 'lucide-react'
+import { momentAll, momentCreate, momentUpdate, momentDelete, memoryMove } from '../api.js'
 import { shortDateZh, timeOfDayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 
 const SAVE_TEXT = { idle: '', saving: '保存中…', saved: '已保存', error: '保存失败', new: '新建中' }
+
+// 移动到…（六类互转，去掉自己 moment）
+const MOVE_TYPES = [
+  ['memory', '记忆'],
+  ['diary', '日记'],
+  ['story', '故事'],
+  ['message', '便条'],
+  ['idea', '想法'],
+]
 
 // 瞬记详情：仿 MemoryDetail 双模式。
 // 读态：meta + 正文 + tags 纯文字。编辑态（点 ✎ 切换）：透明 input/textarea，自适应高度。
@@ -23,7 +32,7 @@ export default function MomentDetail() {
   const [tagInput, setTagInput] = useState('')
   const [saveState, setSaveState] = useState(isNew ? 'new' : 'idle')
   const [busy, setBusy] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menu, setMenu] = useState('') // '' | 'main' | 'move'
   const workRef = useRef(isNew ? { content: '', tags: [], mood: 0 } : null)
   const timerRef = useRef(null)
   const idRef = useRef(isNew ? null : id)
@@ -173,7 +182,7 @@ export default function MomentDetail() {
   }
 
   const toggleLock = async () => {
-    setMenuOpen(false)
+    setMenu('')
     if (!moment || busy) return
     setBusy(true)
     try {
@@ -187,8 +196,24 @@ export default function MomentDetail() {
     }
   }
 
+  const doMove = async (to, label) => {
+    setMenu('')
+    if (!moment) return
+    if (moment.locked) {
+      showToast('请先解锁')
+      return
+    }
+    try {
+      await memoryMove(moment.id, 'moment', to)
+      showToast('已移动到 ' + label)
+      navigate(-1)
+    } catch (e) {
+      showToast(e?.message || '移动失败')
+    }
+  }
+
   const doDelete = async () => {
-    setMenuOpen(false)
+    setMenu('')
     if (!moment) return
     if (moment.locked) {
       showToast('请先解锁')
@@ -269,7 +294,7 @@ export default function MomentDetail() {
           {moment && (
             <button
               className="detail-more"
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={() => setMenu(menu ? '' : 'main')}
               aria-label="更多"
             >
               <MoreHorizontal size={20} />
@@ -278,16 +303,36 @@ export default function MomentDetail() {
         </div>
       </header>
 
-      {menuOpen && (
+      {menu && (
         <>
-          <div className="tl-scrim tl-scrim--clear" onClick={() => setMenuOpen(false)} />
+          <div className="tl-scrim tl-scrim--clear" onClick={() => setMenu('')} />
           <div className="sort-menu card">
-            <button className="dm-opt" onClick={toggleLock} disabled={busy}>
-              <Lock size={14} /> {moment.locked ? '解锁' : '锁定'}
-            </button>
-            <button className="dm-opt" onClick={doDelete}>
-              <Trash2 size={14} /> 删除
-            </button>
+            {menu === 'main' ? (
+              <>
+                <button className="dm-opt" onClick={toggleLock} disabled={busy}>
+                  <Lock size={14} /> {moment.locked ? '解锁' : '锁定'}
+                </button>
+                {!moment.locked && (
+                  <button className="dm-opt" onClick={() => setMenu('move')}>
+                    移动到… <span className="faint">›</span>
+                  </button>
+                )}
+                <button className="dm-opt" onClick={doDelete}>
+                  <Trash2 size={14} /> 删除
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="dm-opt dm-back" onClick={() => setMenu('main')}>
+                  <ChevronLeft size={14} /> 移动到
+                </button>
+                {MOVE_TYPES.map(([k, label]) => (
+                  <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
+                    {label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </>
       )}

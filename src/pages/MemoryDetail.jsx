@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Star, Lock, X, Plus, Pencil, Link2, Search,
   MoreHorizontal, Sparkles, ChevronLeft, Check,
@@ -44,12 +44,17 @@ export default function MemoryDetail() {
   const { id } = useParams()
   const isNew = id === 'new'
   const navigate = useNavigate()
+  const [sp] = useSearchParams()
+  // /memory/new?tag=log 时预填一个 tag，方便从日志 tab 进来直接是日志
+  const presetTag = isNew ? sp.get('tag') : null
 
   const [allMems, setAllMems] = useState([])
   const [memo, setMemo] = useState(null)
   const [notFound, setNotFound] = useState(false)
   const [editing, setEditing] = useState(isNew)
-  const [work, setWork] = useState(isNew ? { ...NEW_WORK } : null)
+  const [work, setWork] = useState(
+    isNew ? { ...NEW_WORK, tags: presetTag ? [presetTag] : [] } : null,
+  )
   const [saveState, setSaveState] = useState(isNew ? 'new' : 'idle')
   const [busy, setBusy] = useState(false)
   const [tagInput, setTagInput] = useState('')

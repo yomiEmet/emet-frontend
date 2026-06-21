@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Send, Plus, X, Lock } from 'lucide-react'
+import { Send, Plus, X, Lock, MoreHorizontal } from 'lucide-react'
 import {
   messageAll,
   messageLeave,
@@ -8,8 +8,59 @@ import {
   ideaCreate,
   ideaDelete,
   letterAll,
+  memoryMove,
 } from '../api.js'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
+import { showToast } from '../utils/toast.js'
+
+// 移动到… 弹出菜单（六类互转，去掉自己）
+const ALL_MOVE_TYPES = [
+  ['memory', '记忆'],
+  ['moment', '瞬记'],
+  ['diary', '日记'],
+  ['story', '故事'],
+  ['message', '便条'],
+  ['idea', '想法'],
+]
+function MoveButton({ id, fromType, onMoved }) {
+  const [open, setOpen] = useState(false)
+  const types = ALL_MOVE_TYPES.filter(([k]) => k !== fromType)
+  const doMove = async (to, label) => {
+    setOpen(false)
+    try {
+      await memoryMove(id, fromType, to)
+      showToast('已移动到 ' + label)
+      onMoved?.()
+    } catch (e) {
+      showToast(e?.message || '移动失败')
+    }
+  }
+  return (
+    <>
+      <button
+        className="idea-card__del"
+        style={{ right: 32 }}
+        onClick={() => setOpen((v) => !v)}
+        aria-label="移动"
+      >
+        <MoreHorizontal size={14} />
+      </button>
+      {open && (
+        <>
+          <div className="tl-scrim tl-scrim--clear" onClick={() => setOpen(false)} />
+          <div className="sort-menu card" style={{ right: 8, top: 36 }}>
+            <div className="dm-opt faint" style={{ pointerEvents: 'none' }}>移动到</div>
+            {types.map(([k, label]) => (
+              <button key={k} className="dm-opt" onClick={() => doMove(k, label)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
 
 // 留言页（设计 4.4）：信件 + 留言板 + 灵感板
 // 信件迁回（旧版 v6.8.2 顶部 tab）：交接信 / 日常信，共用 handoffs 表，kind 区分
@@ -254,7 +305,12 @@ function MessageBoard() {
           <p className="faint list-hint">还没有留言</p>
         ) : (
           list.map((m) => (
-            <div key={m.id} className={'card msg-card' + (m.from === 'emet' ? ' msg-card--emet' : '')}>
+            <div
+              key={m.id}
+              className={'card msg-card' + (m.from === 'emet' ? ' msg-card--emet' : '')}
+              style={{ position: 'relative' }}
+            >
+              <MoveButton id={m.id} fromType="message" onMoved={load} />
               <div className="msg-card__head">
                 <span className="msg-card__who">{SENDER_LABEL[m.from] || m.from}</span>
                 <span className="faint msg-card__time">
@@ -364,11 +420,14 @@ function IdeaBoard() {
           <p className="faint list-hint">还没有灵感</p>
         ) : (
           list.map((i) => (
-            <div key={i.id} className="card idea-card">
+            <div key={i.id} className="card idea-card" style={{ position: 'relative' }}>
               {!i.locked && (
-                <button className="idea-card__del" onClick={() => remove(i.id)} aria-label="删除">
-                  <X size={14} />
-                </button>
+                <>
+                  <MoveButton id={i.id} fromType="idea" onMoved={load} />
+                  <button className="idea-card__del" onClick={() => remove(i.id)} aria-label="删除">
+                    <X size={14} />
+                  </button>
+                </>
               )}
               <p className="idea-card__content">{i.content}</p>
               {i.tags?.length > 0 && (
