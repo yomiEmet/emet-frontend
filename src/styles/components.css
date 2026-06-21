@@ -1359,12 +1359,28 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  touch-action: manipulation;
+  /* none：把所有手势让给 Canvas 自己处理（pinch/pan 不被浏览器抢走） */
+  touch-action: none;
 }
 .galaxy-canvas {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* 视角操作提示（底部居中，淡淡的） */
+.gx-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 11px;
+  color: #b0a090;
+  pointer-events: none;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .gx-title {
