@@ -1,545 +1,388 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { memoryAll } from '../api.js'
+import { vizData, memoryLink, memoryUnlink, memoryAll } from '../api.js'
+import { showToast } from '../utils/toast.js'
 
-// 星图 · Dear Data 风格（静怡的视觉 demo，接真实记忆数据）
-// 无限画布 + 可拉伸视角：单指/鼠标拖动平移，双指 pinch 或滚轮缩放，双击复位。
-// 节点/藤蔓在世界坐标系绘制，背景纸纹固定屏幕坐标；标签字号按 scale 反向缩放保持屏幕大小稳定。
-const CATS = {
-  core: { color: '#C96442', label: '核心', shape: 'circle' },
-  scene: { color: '#7EA67E', label: '情景', shape: 'triangle' },
-  emotion: { color: '#C47060', label: '情绪', shape: 'wave' },
-  semantic: { color: '#6A8EB0', label: '语义', shape: 'square' },
-  image: { color: '#D4956A', label: '形象', shape: 'diamond' },
-  procedure: { color: '#8A8477', label: '程序', shape: 'hex' },
-}
-const SHAPE_GLYPH = { circle: '●', triangle: '▲', wave: '∿', square: '■', diamond: '◆', hex: '⬡' }
-const CAT_KEYS = Object.keys(CATS)
-
-// 缩放范围 + LOD 阈值（低于此 scale 隐藏标签 / 藤蔓，避免节点过密时一团糟）
-const MIN_SCALE = 0.3
-const MAX_SCALE = 4
-const LOD_LABEL = 0.65
-const LOD_LINKS = 0.45
-// 拖动判定阈值：累计移动 < 此值算 click，否则算 drag
-// 触屏手指抖动可达 8~12px，桌面鼠标精度高用 6；按设备类型动态选
-const CLICK_SLOP = typeof window !== 'undefined' && 'ontouchstart' in window ? 12 : 6
-
-function seeded(i) {
-  const x = Math.sin(i * 127.1 + 0.5) * 43758.5453
-  return x - Math.floor(x)
-}
+// 星图 · 完整照搬 v66（public/legacy/index.html line 3254-3568）
+// 只做必要的"全局依赖 → React 注入"转换：
+//   callAPI('/api/viz-data')     → vizData()
+//   callAPI('/api/link',...)     → memoryLink(a, b)
+//   callAPI('/api/unlink',...)   → memoryUnlink(a, b)
+//   memoriesData[]               → await memoryAll()
+//   openEditor(...)              → navigate('/memory/' + id)
+//   showToast(...)               → 来自 ../utils/toast.js
+// 其余 GX 对象 / GX_COLORS / GX_CATS / GX_CAT_ZH / 所有 gx* 函数：一字不改
 
 export default function Galaxy({ focusId = null }) {
   const navigate = useNavigate()
-  const wrapRef = useRef(null)
-  const canvasRef = useRef(null)
-  const S = useRef({
-    nodes: [], links: [], sel: null, t: 0, raf: 0, W: 0, H: 0, dpr: 1,
-    cam: { tx: 0, ty: 0, scale: 1 },
-    pointers: new Map(),     // pointerId -> { x, y, startX, startY }
-    pinch: null,             // { startDist, startScale, startTx, startTy, cx, cy }
-    drag: null,              // { lastX, lastY, moved }
-    bounds: null,            // { minX, minY, maxX, maxY }（节点包围盒，用于约束 cam）
-  })
-  const [selNode, setSelNode] = useState(null)
-  const [status, setStatus] = useState('loading')
+  const rootRef = useRef(null)
+  const focusIdRef = useRef(focusId)
+  focusIdRef.current = focusId
 
-  // 拉真实记忆，构建节点 + 藤蔓
   useEffect(() => {
-    let alive = true
-    memoryAll()
-      .then((list) => {
-        if (!alive) return
-        const nodes = list.map((m) => ({
-          id: m.id,
-          cat: CATS[m.category] ? m.category : 'semantic',
-          imp: m.rawImportance || 5,
-          text: m.content,
-          tags: m.tags,
-          label: (m.content || '').replace(/\s+/g, ' ').slice(0, 8),
-        }))
-        const idx = {}
-        nodes.forEach((n, i) => (idx[n.id] = i))
-        const seen = {}
-        const links = []
-        list.forEach((m) => {
-          ;(m.linked || []).forEach((lid) => {
-            if (idx[lid] == null) return
-            const a = idx[m.id]
-            const b = idx[lid]
-            const key = a < b ? a + '-' + b : b + '-' + a
-            if (seen[key]) return
-            seen[key] = 1
-            links.push([a, b])
-          })
-        })
-        S.current.nodes = nodes
-        S.current.links = links
-        if (focusId && idx[focusId] != null) {
-          S.current.sel = idx[focusId]
-          setSelNode(nodes[idx[focusId]])
-        }
-        setStatus(nodes.length ? 'ready' : 'error')
-      })
-      .catch(() => alive && setStatus('error'))
+    if (!rootRef.current) return
+
+    // ─── 以下为 v66 line 3254-3568 原样照搬，仅在末尾把外部依赖切到 React/项目 API ───
+    var GX = { loaded:false, nodes:[], byId:{}, edges:[], edgeSeen:{}, haslink:{},
+      W:0, H:0, mode:'relation', focusId:null, edgesVisible:true,
+      linkSource:null, edgesBeforeLink:true, pendingDelKey:null,
+      pressTimer:null, pressId:null, pressXY:null, suppressClick:false,
+      catAnchor:{}, catCached:false, animRAF:null, curTipId:null, bound:false,
+      view:{k:1,tx:0,ty:0}, ptrs:{}, gesture:null, panStart:null, pinchStart:null, gestureEndAt:0, searchActive:false,
+      eN:{}, eH:{}, eL:{}, eE:{}, eHit:{}, catLabel:{}, el:{} };
+    var GX_COLORS = { core:'#C6613F', scene:'#8B9D7F', emotion:'#C99B8B', semantic:'#6B655E', image:'#A8956B', procedure:'#7A8B99' };
+    var GX_CATS = ['core','scene','emotion','semantic','image','procedure'];
+    var GX_CAT_ZH = { core:'核心', scene:'情景', emotion:'情绪', semantic:'语义', image:'形象', procedure:'程序' };
+
+    // root 限定查找：组件内的 id 都通过 rootRef 找，避免污染全局 document
+    var ROOT = rootRef.current;
+    function $id(id){ return ROOT.querySelector('#' + id); }
+
+    function gxKey(a,b){ return [a,b].sort().join('|'); }
+    function gxFloatStyle(i){ var dur=6+(i%7)*0.5; var dly=-((i*1.37)%dur); return 'animation-delay:'+dly.toFixed(2)+'s;animation-duration:'+dur.toFixed(2)+'s;'; }
+    function gxBuildLegend(){ var el=$id('galaxyLegend'); if(!el)return; el.innerHTML=GX_CATS.map(function(c){ return '<div class="gx-leg-item"><i style="background:'+GX_COLORS[c]+'"></i>'+GX_CAT_ZH[c]+'</div>'; }).join(''); }
+    function gxBaseR(n){ return GX.haslink[n.id] ? (2.6+n.importance*0.4) : (2.2+n.importance*0.24); }
+    function gxHaloR(n){ return 6+n.importance*0.7; }
+    function gxClampK(k){ return Math.min(8, Math.max(0.5, k)); }
+    function gxApplyView(){ if(GX.el.viewport) GX.el.viewport.setAttribute('transform','translate('+GX.view.tx+','+GX.view.ty+') scale('+GX.view.k+')'); }
+    function gxZoomAt(mx,my,factor){ var k=gxClampK(GX.view.k*factor); var gx=(mx-GX.view.tx)/GX.view.k, gy=(my-GX.view.ty)/GX.view.k; GX.view.k=k; GX.view.tx=mx-gx*k; GX.view.ty=my-gy*k; gxApplyView(); }
+    function gxResetView(){ GX.view={k:1,tx:0,ty:0}; gxApplyView(); }
+    function gxCenterOn(id){ var n=GX.byId[id]; if(!n)return; var k=gxClampK(Math.max(GX.view.k,1.6)); GX.view.k=k; GX.view.tx=GX.W/2-n.x*k; GX.view.ty=GX.H/2-n.y*k; gxApplyView(); }
+    function gxEsc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function gxRelX(n){ return GX.W/2 + n.ox * GX.W*0.42; }
+    function gxRelY(n){ return GX.H/2 + n.oy * GX.H*0.42; }
+
+    async function gxLoad(){
+      // 原：var data = await callAPI('/api/viz-data');
+      var data = await vizData();
+      GX.nodes = (data.nodes||[]).filter(function(n){ return !n.archived; }).map(function(n){
+        return { id:n.id, content:n.content||'', category:GX_COLORS[n.category]?n.category:'semantic', importance:n.importance||5,
+          ox:(n.x||0), oy:(n.y||0), x:0, y:0, catX:0, catY:0,
+          linked:(n.linked||[]).slice(), link_rel:n.link_rel||{} };
+      });
+      GX.byId = {}; GX.nodes.forEach(function(n){ GX.byId[n.id]=n; });
+      GX.edges = []; GX.edgeSeen = {};
+      GX.nodes.forEach(function(n){ (n.linked||[]).forEach(function(l){
+        var k = gxKey(n.id,l); if (GX.edgeSeen[k] || !GX.byId[l]) return; GX.edgeSeen[k]=1;
+        GX.edges.push({ source:n.id, target:l, key:k });
+      }); });
+      GX.haslink = {}; GX.nodes.forEach(function(n){ if((n.linked||[]).length) GX.haslink[n.id]=1; });
+      GX.catCached = false;
+      GX.loaded = true;
+    }
+
+    function gxSize(){ var c=GX.el.container; GX.W=c.clientWidth; GX.H=c.clientHeight; GX.el.svg.setAttribute('viewBox','0 0 '+GX.W+' '+GX.H); gxComputeAnchors(); }
+    function gxComputeAnchors(){ var cx=GX.W/2, cy=GX.H*0.5, R=Math.min(GX.W,GX.H)*0.33; GX_CATS.forEach(function(c,k){ var a=(k/6)*Math.PI*2 - Math.PI/2; GX.catAnchor[c]={ x:cx+Math.cos(a)*R, y:cy+Math.sin(a)*R }; }); }
+
+    function gxComputeCatLayout(){
+      GX.nodes.forEach(function(n){ var a=GX.catAnchor[n.category]||{x:GX.W/2,y:GX.H/2}; n.catX=a.x+(Math.random()-0.5)*40; n.catY=a.y+(Math.random()-0.5)*40; n._cvx=0; n._cvy=0; });
+      for(var it=0; it<170; it++){
+        GX.nodes.forEach(function(n){ var a=GX.catAnchor[n.category]||{x:GX.W/2,y:GX.H/2}; n._cvx+=(a.x-n.catX)*0.03; n._cvy+=(a.y-n.catY)*0.03; });
+        for(var p=0;p<GX.nodes.length;p++)for(var q=p+1;q<GX.nodes.length;q++){ var A=GX.nodes[p],B=GX.nodes[q]; var dx=B.catX-A.catX,dy=B.catY-A.catY,d=Math.sqrt(dx*dx+dy*dy)||1; if(d>110)continue; var f=420/(d*d),fx=dx/d*f,fy=dy/d*f; A._cvx-=fx;A._cvy-=fy;B._cvx+=fx;B._cvy+=fy; }
+        GX.nodes.forEach(function(n){ n._cvx*=0.84;n._cvy*=0.84;n.catX+=n._cvx;n.catY+=n._cvy; var m=26;n.catX=Math.max(m,Math.min(GX.W-m,n.catX));n.catY=Math.max(m,Math.min(GX.H-m,n.catY)); });
+      }
+      GX.catCached = true;
+    }
+
+    function gxSetTargets(){
+      if(GX.mode==='relation'){ GX.nodes.forEach(function(n){ n._tx=gxRelX(n); n._ty=gxRelY(n); }); }
+      else { if(!GX.catCached)gxComputeCatLayout(); GX.nodes.forEach(function(n){ n._tx=n.catX; n._ty=n.catY; }); }
+    }
+    function gxSnap(){ GX.nodes.forEach(function(n){ n.x=n._tx; n.y=n._ty; }); }
+    function gxAnimate(){
+      if(GX.animRAF)cancelAnimationFrame(GX.animRAF);
+      var f=0;
+      function tick(){ f++; var mv=false; GX.nodes.forEach(function(n){ n.x+=(n._tx-n.x)*0.16; n.y+=(n._ty-n.y)*0.16; if(Math.abs(n._tx-n.x)>0.5||Math.abs(n._ty-n.y)>0.5)mv=true; }); gxPaint(); if(mv&&f<140)GX.animRAF=requestAnimationFrame(tick); else GX.animRAF=null; }
+      GX.animRAF=requestAnimationFrame(tick);
+    }
+
+    function gxMkLine(cls,id){ var l=document.createElementNS('http://www.w3.org/2000/svg','line'); l.setAttribute('class',cls); if(id)l.id=id; return l; }
+    function gxAppendEdge(e){
+      var vis=gxMkLine('gx-edge','gxe_'+e.key); vis.setAttribute('stroke','rgba(107,101,94,0.18)'); vis.setAttribute('stroke-width','0.6');
+      var hit=gxMkLine('gx-edge-hit'); hit.setAttribute('data-key',e.key);
+      GX.el.edgeLayer.appendChild(vis); GX.el.edgeLayer.appendChild(hit); GX.eE[e.key]=vis; GX.eHit[e.key]=hit;
+    }
+    function gxBuild(){
+      var h='<g id="gxEdgeLayer"></g>';
+      GX.nodes.forEach(function(n,i){ var c=GX_COLORS[n.category]; var lk=GX.haslink[n.id]; h+='<circle class="gx-halo" id="gxh_'+n.id+'" style="'+gxFloatStyle(i)+'" fill="'+c+'" fill-opacity="'+(lk?0.15:0)+'" r="'+(lk?gxHaloR(n):0)+'"/>'; });
+      GX.nodes.forEach(function(n,i){ var c=GX_COLORS[n.category]; var lk=GX.haslink[n.id]; h+='<circle class="gx-core" id="gxn_'+n.id+'" data-id="'+n.id+'" style="'+gxFloatStyle(i)+'" fill="'+c+'" fill-opacity="'+(lk?1:0.55)+'" r="'+gxBaseR(n)+'"/>'; });
+      GX_CATS.forEach(function(c){ h+='<g class="gx-cat" id="gxc_'+c+'" opacity="0"><text class="gx-cat-zh" text-anchor="middle" font-size="15" fill="'+GX_COLORS[c]+'" font-weight="600"></text><text class="gx-cat-num" text-anchor="middle" font-size="11" fill="#A8A39B"></text></g>'; });
+      GX.nodes.forEach(function(n){ h+='<g class="gx-label" id="gxl_'+n.id+'" opacity="0"><rect class="gx-label-bg" rx="4"/><text class="gx-label-text" text-anchor="middle"></text></g>'; });
+      GX.el.svg.innerHTML='<g id="gxViewport">'+h+'</g>';
+      GX.el.viewport=GX.el.svg.querySelector('#gxViewport'); gxApplyView();
+      GX.el.edgeLayer=GX.el.svg.querySelector('#gxEdgeLayer');
+      GX.eN={};GX.eH={};GX.eL={};GX.eE={};GX.eHit={};
+      GX.edges.forEach(function(e){ gxAppendEdge(e); });
+      GX.nodes.forEach(function(n){ GX.eN[n.id]=GX.el.svg.querySelector('#gxn_'+CSS.escape(n.id)); GX.eH[n.id]=GX.el.svg.querySelector('#gxh_'+CSS.escape(n.id)); GX.eL[n.id]=GX.el.svg.querySelector('#gxl_'+CSS.escape(n.id)); GX.eL[n.id].querySelector('text').textContent=(n.content||'').slice(0,15); });
+      GX.catLabel={}; GX_CATS.forEach(function(c){ var g=GX.el.svg.querySelector('#gxc_'+c); var cnt=GX.nodes.filter(function(n){return n.category===c;}).length; g.querySelector('.gx-cat-zh').textContent=GX_CAT_ZH[c]; g.querySelector('.gx-cat-num').textContent=cnt+' 颗'; GX.catLabel[c]=g; });
+    }
+    function gxPaint(){
+      GX.edges.forEach(function(e){ var a=GX.byId[e.source],b=GX.byId[e.target]; var v=GX.eE[e.key],ht=GX.eHit[e.key]; if(v){v.setAttribute('x1',a.x);v.setAttribute('y1',a.y);v.setAttribute('x2',b.x);v.setAttribute('y2',b.y);} if(ht){ht.setAttribute('x1',a.x);ht.setAttribute('y1',a.y);ht.setAttribute('x2',b.x);ht.setAttribute('y2',b.y);} });
+      GX.nodes.forEach(function(n){ GX.eN[n.id].setAttribute('cx',n.x);GX.eN[n.id].setAttribute('cy',n.y); GX.eH[n.id].setAttribute('cx',n.x);GX.eH[n.id].setAttribute('cy',n.y); if(GX.eL[n.id].getAttribute('opacity')!=='0')gxPosLabel(n); });
+      if(GX.mode==='category'){ GX_CATS.forEach(function(c){ var a=GX.catAnchor[c]; var g=GX.catLabel[c]; var off=Math.min(GX.W,GX.H)*0.13; g.querySelector('.gx-cat-zh').setAttribute('x',a.x); g.querySelector('.gx-cat-zh').setAttribute('y',a.y-off); g.querySelector('.gx-cat-num').setAttribute('x',a.x); g.querySelector('.gx-cat-num').setAttribute('y',a.y-off+16); }); }
+    }
+    function gxPosLabel(n){ var g=GX.eL[n.id],txt=g.querySelector('text'),rect=g.querySelector('rect'); var ty=n.y-(GX.haslink[n.id]?(6+n.importance):8)-9; txt.setAttribute('x',n.x);txt.setAttribute('y',ty); var bb=txt.getBBox(); rect.setAttribute('x',bb.x-7);rect.setAttribute('y',bb.y-3);rect.setAttribute('width',bb.width+14);rect.setAttribute('height',bb.height+6); }
+    function gxRefreshNode(id){ var n=GX.byId[id],lk=GX.haslink[id]; GX.eN[id].setAttribute('fill',GX_COLORS[n.category]); GX.eN[id].setAttribute('fill-opacity',lk?1:0.55); GX.eN[id].setAttribute('r',gxBaseR(n)); GX.eN[id].classList.remove('gx-pulse'); GX.eH[id].setAttribute('fill',GX_COLORS[n.category]); GX.eH[id].setAttribute('fill-opacity',lk?0.15:0); GX.eH[id].setAttribute('r',lk?gxHaloR(n):0); }
+
+    function gxApplyFocus(id){
+      GX.focusId=id;
+      var node=GX.byId[id]; var rel=(node.linked||[]).filter(function(l){return GX.byId[l];}); var keep={}; keep[id]=1; rel.forEach(function(l){keep[l]=1;});
+      GX.nodes.forEach(function(n){ var on=keep[n.id];
+        if(on){ GX.eN[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eN[n.id].setAttribute('fill-opacity','1'); GX.eN[n.id].setAttribute('r',gxBaseR(n)*(n.id===id?1.6:1.28)); GX.eH[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eH[n.id].setAttribute('fill-opacity',n.id===id?0.24:0.18); GX.eH[n.id].setAttribute('r',gxHaloR(n)+2); }
+        else { GX.eN[n.id].setAttribute('fill','#BDB9B2'); GX.eN[n.id].setAttribute('fill-opacity','0.5'); GX.eN[n.id].setAttribute('r',gxBaseR(n)); GX.eH[n.id].setAttribute('fill-opacity','0'); } });
+      GX.edges.forEach(function(e){ var r=(e.source===id||e.target===id); var el=GX.eE[e.key]; if(r)el.classList.add('gx-flow'); else el.classList.remove('gx-flow'); el.setAttribute('stroke', r?'var(--accent)':'rgba(189,185,178,0.35)'); el.setAttribute('stroke-width', r?'1.5':'0.5'); el.style.strokeOpacity = r?'1':'0.25'; });
+      GX.nodes.forEach(function(n){ var sh=keep[n.id]; GX.eL[n.id].setAttribute('opacity',sh?'1':'0'); if(sh)gxPosLabel(n); });
+      gxTipShow(id);
+      GX.el.hint.textContent='点空白处取消聚焦'; GX.el.hint.style.opacity='0.85';
+    }
+    function gxClearFocus(){
+      GX.focusId=null;
+      GX.nodes.forEach(function(n){ gxRefreshNode(n.id); GX.eL[n.id].setAttribute('opacity','0'); });
+      GX.edges.forEach(function(e){ var el=GX.eE[e.key]; el.classList.remove('gx-flow'); el.setAttribute('stroke','rgba(107,101,94,0.18)'); el.setAttribute('stroke-width','0.6'); el.style.strokeOpacity=GX.edgesVisible?'1':'0'; });
+      gxTipHide();
+      GX.el.hint.textContent='长按一颗星 → 连藤 · 点连线 → 拆藤 · 点空白恢复'; GX.el.hint.style.opacity='0.85';
+    }
+    function gxClearSearch(){ GX.searchActive=false; GX.el.search.value=''; if(GX.focusId)gxClearFocus(); else GX.nodes.forEach(function(n){ var lk=GX.haslink[n.id]; GX.eN[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eN[n.id].setAttribute('fill-opacity',lk?1:0.55); }); }
+
+    function gxTipShow(id){ GX.curTipId=id; var tip=GX.el.tip; tip.innerHTML='<div class="gt-title">'+gxEsc(GX.byId[id].content)+'</div><div class="gt-open" data-act="open">打开</div><div class="gt-close" data-act="close">✕</div>'; tip.classList.add('show'); }
+    function gxTipHide(){ GX.curTipId=null; GX.el.tip.classList.remove('show'); }
+    function gxOpenCard(id){
+      // 原：从 memoriesData 找；这里直接走 React 路由
+      gxClose(); navigate('/memory/' + id);
+    }
+
+    function gxSetEdges(on){ GX.edgesVisible=on; GX.el.edgeBtn.className=on?'galaxy-btn on':'galaxy-btn'; GX.edges.forEach(function(e){ var el=GX.eE[e.key]; if(el){ if(on){ var hl=el.getAttribute('stroke').indexOf('accent')>=0; el.style.strokeOpacity = GX.focusId ? (hl?'1':'0.25') : '1'; } else { el.style.strokeOpacity='0'; el.classList.remove('gx-flow'); } } }); }
+    function gxBanner(txt,auto){ var b=GX.el.banner; b.textContent=txt; b.classList.add('show'); if(auto)setTimeout(function(){b.classList.remove('show');},auto); }
+    function gxHideBanner(){ GX.el.banner.classList.remove('show'); }
+
+    function gxStartLink(id){
+      GX.linkSource=id;
+      GX.edgesBeforeLink=GX.edgesVisible; if(!GX.edgesVisible)gxSetEdges(true);
+      GX.nodes.forEach(function(n){ if(n.id===id)GX.eN[n.id].classList.add('gx-pulse'); else GX.eN[n.id].classList.remove('gx-pulse'); });
+      GX.eN[id].setAttribute('r', gxBaseR(GX.byId[id])*1.5);
+      gxBanner('再点另一颗星 → 连成一条藤');
+      GX.el.hint.style.opacity='0';
+    }
+    function gxEndLink(){
+      if(GX.linkSource){ GX.eN[GX.linkSource].classList.remove('gx-pulse'); gxRefreshNode(GX.linkSource); }
+      GX.linkSource=null; gxSetEdges(GX.edgesBeforeLink); gxHideBanner();
+      GX.el.hint.style.opacity='0.85';
+    }
+    function gxTryConnect(a,b){
+      if(a===b){ gxEndLink(); return; }
+      var k=gxKey(a,b);
+      if(GX.eE[k]){ gxBanner('这两颗已经连着了',1400); gxEndLink(); return; }
+      gxAddEdge(a,b); gxEndLink();
+    }
+    async function gxAddEdge(a,b){
+      var k=gxKey(a,b);
+      GX.byId[a].linked=GX.byId[a].linked||[]; if(GX.byId[a].linked.indexOf(b)<0)GX.byId[a].linked.push(b);
+      GX.byId[b].linked=GX.byId[b].linked||[]; if(GX.byId[b].linked.indexOf(a)<0)GX.byId[b].linked.push(a);
+      GX.haslink[a]=1;GX.haslink[b]=1;
+      var e={source:a,target:b,key:k}; GX.edges.push(e); GX.edgeSeen[k]=1; gxAppendEdge(e);
+      gxRefreshNode(a);gxRefreshNode(b);
+      var A=GX.byId[a],B=GX.byId[b]; var v=GX.eE[k]; if(v){v.setAttribute('x1',A.x);v.setAttribute('y1',A.y);v.setAttribute('x2',B.x);v.setAttribute('y2',B.y);} var ht=GX.eHit[k]; if(ht){ht.setAttribute('x1',A.x);ht.setAttribute('y1',A.y);ht.setAttribute('x2',B.x);ht.setAttribute('y2',B.y);}
+      gxBanner('连好了 ✓',1400);
+      try {
+        // 原：var res = await callAPI('/api/link', { method:'POST', body: JSON.stringify({ from_id:a, to_id:b }) });
+        var res = await memoryLink(a, b);
+        if(res && res.error){ throw new Error(res.error); }
+      } catch(err){
+        gxRemoveEdgeLocal(k); gxBanner('没连上，撤回了',1800);
+      }
+    }
+    function gxRemoveEdgeLocal(k){
+      var idx=-1; for(var p=0;p<GX.edges.length;p++){ if(GX.edges[p].key===k){ idx=p; break; } }
+      if(idx<0)return; var e=GX.edges[idx];
+      GX.byId[e.source].linked=(GX.byId[e.source].linked||[]).filter(function(x){return x!==e.target;});
+      GX.byId[e.target].linked=(GX.byId[e.target].linked||[]).filter(function(x){return x!==e.source;});
+      if(!(GX.byId[e.source].linked||[]).length)delete GX.haslink[e.source];
+      if(!(GX.byId[e.target].linked||[]).length)delete GX.haslink[e.target];
+      GX.edges.splice(idx,1); delete GX.edgeSeen[k];
+      if(GX.eE[k]){GX.eE[k].remove();delete GX.eE[k];} if(GX.eHit[k]){GX.eHit[k].remove();delete GX.eHit[k];}
+      gxRefreshNode(e.source);gxRefreshNode(e.target);
+    }
+    async function gxRemoveEdge(k){
+      var idx=-1; for(var p=0;p<GX.edges.length;p++){ if(GX.edges[p].key===k){ idx=p; break; } }
+      if(idx<0)return; var e=GX.edges[idx]; var a=e.source, b=e.target;
+      gxRemoveEdgeLocal(k);
+      try {
+        // 原：var res = await callAPI('/api/unlink', { method:'POST', body: JSON.stringify({ from_id:a, to_id:b }) });
+        var res = await memoryUnlink(a, b);
+        if(res && res.error){ throw new Error(res.error); }
+        gxBanner('拆掉了',1200);
+      } catch(err){
+        gxAddEdge(a,b); gxBanner('没拆成，恢复了',1800);
+      }
+    }
+
+    function gxAskRemove(k){ if(GX.linkSource)return; GX.pendingDelKey=k; if(GX.eE[k])GX.eE[k].classList.add('gx-del'); GX.el.confirm.classList.add('show'); }
+    function gxCloseConfirm(){ if(GX.pendingDelKey&&GX.eE[GX.pendingDelKey])GX.eE[GX.pendingDelKey].classList.remove('gx-del'); GX.pendingDelKey=null; GX.el.confirm.classList.remove('show'); }
+
+    function gxOnTap(ev){
+      if(GX.gestureEndAt && Date.now()-GX.gestureEndAt<350){ return; }
+      if(GX.suppressClick){ GX.suppressClick=false; return; }
+      var t=ev.target;
+      if(t.classList && t.classList.contains('gx-edge-hit')){ gxAskRemove(t.getAttribute('data-key')); return; }
+      var isNode=t.classList && t.classList.contains('gx-core');
+      if(GX.linkSource){ if(isNode)gxTryConnect(GX.linkSource,t.getAttribute('data-id')); else gxEndLink(); return; }
+      if(GX.pendingDelKey){ gxCloseConfirm(); return; }
+      if(!isNode){ if(GX.searchActive)return; if(GX.focusId)gxClearFocus(); return; }
+      var id=t.getAttribute('data-id');
+      if(GX.mode==='category')gxTipShow(id); else gxApplyFocus(id);
+    }
+    function gxPtrPos(e){ var r=GX.el.container.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+    function gxOnDown(e){
+      var p=gxPtrPos(e); GX.ptrs[e.pointerId]={x:p.x,y:p.y};
+      var ids=Object.keys(GX.ptrs);
+      if(ids.length>=2){
+        if(GX.pressTimer){clearTimeout(GX.pressTimer);GX.pressTimer=null;}
+        GX.gesture='pinch'; GX.suppressClick=true; GX.panStart=null;
+        var a=GX.ptrs[ids[0]], b=GX.ptrs[ids[1]]; var dx=b.x-a.x, dy=b.y-a.y;
+        GX.pinchStart={ d:Math.sqrt(dx*dx+dy*dy)||1, mx:(a.x+b.x)/2, my:(a.y+b.y)/2, k:GX.view.k, tx:GX.view.tx, ty:GX.view.ty };
+        return;
+      }
+      var t=e.target; var onNode=t.classList&&t.classList.contains('gx-core');
+      if(onNode){
+        GX.pressId=t.getAttribute('data-id'); GX.pressXY=[p.x,p.y]; GX.suppressClick=false; GX.panStart=null;
+        if(GX.pressTimer)clearTimeout(GX.pressTimer);
+        GX.pressTimer=setTimeout(function(){ GX.pressTimer=null; GX.suppressClick=true; gxStartLink(GX.pressId); }, 480);
+      } else {
+        GX.panStart={x:p.x,y:p.y,tx:GX.view.tx,ty:GX.view.ty};
+      }
+    }
+    function gxOnMove(e){
+      if(!GX.ptrs[e.pointerId])return;
+      var p=gxPtrPos(e); GX.ptrs[e.pointerId]={x:p.x,y:p.y};
+      var ids=Object.keys(GX.ptrs);
+      if(GX.gesture==='pinch' && ids.length>=2){
+        var a=GX.ptrs[ids[0]], b=GX.ptrs[ids[1]]; var dx=b.x-a.x, dy=b.y-a.y; var d=Math.sqrt(dx*dx+dy*dy)||1;
+        var mx=(a.x+b.x)/2, my=(a.y+b.y)/2; var ps=GX.pinchStart;
+        var k=gxClampK(ps.k*(d/ps.d)); var gx=(ps.mx-ps.tx)/ps.k, gy=(ps.my-ps.ty)/ps.k;
+        GX.view.k=k; GX.view.tx=mx-gx*k; GX.view.ty=my-gy*k; gxApplyView(); return;
+      }
+      if(GX.pressTimer&&GX.pressXY){ var ex=p.x-GX.pressXY[0],ey=p.y-GX.pressXY[1]; if(ex*ex+ey*ey>120){ clearTimeout(GX.pressTimer); GX.pressTimer=null; } }
+      if(GX.panStart){
+        var px=p.x-GX.panStart.x, py=p.y-GX.panStart.y;
+        if(GX.gesture==='pan' || px*px+py*py>80){ GX.gesture='pan'; GX.suppressClick=true; GX.view.tx=GX.panStart.tx+px; GX.view.ty=GX.panStart.ty+py; gxApplyView(); }
+      }
+    }
+    function gxOnUp(e){
+      delete GX.ptrs[e.pointerId];
+      if(GX.pressTimer){clearTimeout(GX.pressTimer);GX.pressTimer=null;}
+      if(GX.gesture==='pan'||GX.gesture==='pinch')GX.gestureEndAt=Date.now();
+      var ids=Object.keys(GX.ptrs);
+      if(ids.length===1){ var pp=GX.ptrs[ids[0]]; GX.panStart={x:pp.x,y:pp.y,tx:GX.view.tx,ty:GX.view.ty}; GX.pinchStart=null; GX.gesture=null; }
+      else if(ids.length===0){ GX.gesture=null; GX.panStart=null; GX.pinchStart=null; }
+    }
+
+    function gxSwitchMode(m){
+      if(m===GX.mode)return; if(GX.linkSource)gxEndLink(); if(GX.focusId)gxClearFocus(); gxCloseConfirm();
+      GX.searchActive=false; gxResetView();
+      GX.mode=m;
+      $id('galaxySegRel').className=m==='relation'?'active':'';
+      $id('galaxySegCat').className=m==='category'?'active':'';
+      GX.el.search.value='';
+      GX_CATS.forEach(function(c){ GX.catLabel[c].setAttribute('opacity',m==='category'?'1':'0'); });
+      GX.edges.forEach(function(e){ GX.eE[e.key].classList.remove('gx-flow'); GX.eE[e.key].setAttribute('stroke','rgba(107,101,94,0.18)'); GX.eE[e.key].setAttribute('stroke-width','0.6'); });
+      gxSetEdges(m==='relation');
+      GX.nodes.forEach(function(n){ gxRefreshNode(n.id); GX.eL[n.id].setAttribute('opacity','0'); });
+      gxTipHide(); GX.el.hint.style.opacity='0.85';
+      gxSetTargets(); gxAnimate();
+    }
+
+    function gxSearch(){
+      var q=GX.el.search.value.trim().toLowerCase();
+      if(GX.searchActive){ GX.searchActive=false; if(GX.focusId)gxClearFocus(); }
+      if(!q){ if(!GX.focusId)GX.nodes.forEach(function(n){ var lk=GX.haslink[n.id]; GX.eN[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eN[n.id].setAttribute('fill-opacity',lk?1:0.55); }); return; }
+      if(GX.focusId)gxClearFocus();
+      GX.nodes.forEach(function(n){ var hit=(n.content||'').toLowerCase().indexOf(q)>=0; GX.eN[n.id].setAttribute('fill', hit?GX_COLORS[n.category]:'#BDB9B2'); GX.eN[n.id].setAttribute('fill-opacity', hit?1:0.45); });
+    }
+
+    async function openGalaxy(centerId){
+      GX.el.overlay = $id('galaxyOverlay');
+      GX.el.container = $id('galaxyContainer');
+      GX.el.svg = $id('galaxySvg');
+      GX.el.tip = $id('galaxyTooltip');
+      GX.el.banner = $id('galaxyBanner');
+      GX.el.confirm = $id('galaxyConfirm');
+      GX.el.hint = $id('galaxyHint');
+      GX.el.search = $id('galaxySearch');
+      GX.el.edgeBtn = $id('galaxyEdgeBtn');
+      GX.el.overlay.classList.add('active');
+      try { await gxLoad(); } catch(e){ showToast('星图数据加载失败'); return; }
+      if(!GX.nodes.length){ showToast('还没有可显示的记忆坐标'); return; }
+      gxSize();
+      GX.mode='relation';
+      $id('galaxySegRel').className='active';
+      $id('galaxySegCat').className='';
+      GX.focusId=null; GX.linkSource=null; GX.pendingDelKey=null;
+      GX.searchActive=false; GX.view={k:1,tx:0,ty:0}; GX.ptrs={}; GX.gesture=null;
+      gxBuild();
+      gxBuildLegend();
+      gxSetEdges(true);
+      gxSetTargets(); gxSnap(); gxPaint();
+      GX.el.search.value=''; GX.el.hint.textContent='长按一颗星 → 连藤 · 点连线 → 拆藤 · 点空白恢复'; GX.el.hint.style.opacity='0.85';
+      if(!GX.bound){
+        GX.el.svg.addEventListener('click', gxOnTap);
+        GX.el.svg.addEventListener('pointerdown', gxOnDown);
+        GX.el.svg.addEventListener('pointermove', gxOnMove);
+        GX.el.svg.addEventListener('pointerup', gxOnUp);
+        GX.el.svg.addEventListener('pointercancel', gxOnUp);
+        GX.el.svg.addEventListener('wheel', function(e){ e.preventDefault(); var p=gxPtrPos(e); gxZoomAt(p.x,p.y, e.deltaY<0?1.12:0.893); }, {passive:false});
+        GX.el.tip.addEventListener('click', function(ev){ var act=ev.target&&ev.target.getAttribute&&ev.target.getAttribute('data-act'); if(act==='close'){ gxTipHide(); return; } if(GX.curTipId)gxOpenCard(GX.curTipId); });
+        GX.el.search.addEventListener('input', gxSearch);
+        GX.el.search.addEventListener('keydown', function(e){ if(e.key==='Enter'){ var q=GX.el.search.value.trim().toLowerCase(); if(!q)return; var m=GX.nodes.find(function(n){return (n.content||'').toLowerCase().indexOf(q)>=0;}); if(m){ GX.el.search.blur(); GX.searchActive=true; if(GX.mode==='relation')gxApplyFocus(m.id); else gxTipShow(m.id); gxCenterOn(m.id); } else { showToast('没找到包含「'+q+'」的记忆'); } } });
+        GX.el.edgeBtn.addEventListener('click', function(){ gxSetEdges(!GX.edgesVisible); });
+        $id('galaxySegRel').addEventListener('click', function(){ gxSwitchMode('relation'); });
+        $id('galaxySegCat').addEventListener('click', function(){ gxSwitchMode('category'); });
+        $id('galaxyCancel').addEventListener('click', gxCloseConfirm);
+        $id('galaxyDel').addEventListener('click', function(){ if(GX.pendingDelKey){ var k=GX.pendingDelKey; GX.pendingDelKey=null; GX.el.confirm.classList.remove('show'); gxRemoveEdge(k); } });
+        GX.bound=true;
+      }
+      if(centerId && GX.byId[centerId]){ setTimeout(function(){ gxApplyFocus(centerId); gxCenterOn(centerId); }, 320); }
+    }
+    function gxClose(){ var o=$id('galaxyOverlay'); if(o)o.classList.remove('active'); if(GX.animRAF){cancelAnimationFrame(GX.animRAF);GX.animRAF=null;} }
+
+    // ─── 入口：mount 后立刻 openGalaxy ───
+    openGalaxy(focusIdRef.current);
+
+    // resize 监听
+    function onResize(){ if(GX.loaded){ gxSize(); gxComputeAnchors(); gxSetTargets(); gxSnap(); gxPaint(); } }
+    window.addEventListener('resize', onResize);
+
+    // cleanup
     return () => {
-      alive = false
-    }
-  }, [focusId])
+      window.removeEventListener('resize', onResize);
+      if (GX.animRAF) cancelAnimationFrame(GX.animRAF);
+    };
+  }, []) // 仅 mount 一次
 
-  const layout = useCallback(() => {
-    const st = S.current
-    const { W, H } = st
-    const cx = W / 2
-    const cy = H / 2.2
-    // 放大初始半径范围（之前 0.15+imp*0.022 太挤）：基础 0.18 + 重要度 0.035 + 抖动 60
-    // 让默认视角下节点分散度更高；用户可以再缩小看全局或放大看细节
-    st.nodes.forEach((n, i) => {
-      const a = (i / st.nodes.length) * Math.PI * 2 + seeded(i) * 0.5
-      const ci = CAT_KEYS.indexOf(n.cat)
-      const ca = (ci / CAT_KEYS.length) * Math.PI * 2
-      const br = Math.min(W, H) * 0.18 + n.imp * Math.min(W, H) * 0.035 + seeded(i + 99) * 60
-      n.ox = cx + Math.cos(a + ca * 0.3) * br
-      n.oy = cy + Math.sin(a + ca * 0.3) * br
-      n.x = n.ox
-      n.y = n.oy
-      n.r = 3 + n.imp * 1.3
-      n.ph = seeded(i + 7) * Math.PI * 2
-    })
-    // 算节点包围盒（cam 约束用，给一圈 padding）
-    if (st.nodes.length > 0) {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-      for (const n of st.nodes) {
-        if (n.ox < minX) minX = n.ox
-        if (n.ox > maxX) maxX = n.ox
-        if (n.oy < minY) minY = n.oy
-        if (n.oy > maxY) maxY = n.oy
-      }
-      const pad = 80
-      st.bounds = { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
-    } else {
-      st.bounds = null
-    }
-  }, [])
-
-  const resize = useCallback(() => {
-    const st = S.current
-    const cvs = canvasRef.current
-    const wrap = wrapRef.current
-    if (!cvs || !wrap) return
-    const dpr = window.devicePixelRatio || 1
-    st.dpr = dpr
-    st.W = wrap.clientWidth
-    st.H = wrap.clientHeight
-    cvs.width = st.W * dpr
-    cvs.height = st.H * dpr
-    cvs.style.width = st.W + 'px'
-    cvs.style.height = st.H + 'px'
-    layout()
-  }, [layout])
-
-  // 视角约束：scale 在 [MIN,MAX]，cam.tx/ty 保证节点包围盒至少有一部分在视野里
-  const clampCam = useCallback(() => {
-    const st = S.current
-    const cam = st.cam
-    cam.scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, cam.scale))
-    if (!st.bounds) return
-    const { minX, minY, maxX, maxY } = st.bounds
-    // 允许内容跑到屏幕外，但至少保留 60px 的"抓手"在视野里
-    const handle = 60
-    // tx 上界：minX*scale + tx <= W - handle → tx <= W - handle - minX*scale
-    cam.tx = Math.min(st.W - handle - minX * cam.scale, cam.tx)
-    // tx 下界：maxX*scale + tx >= handle → tx >= handle - maxX*scale
-    cam.tx = Math.max(handle - maxX * cam.scale, cam.tx)
-    cam.ty = Math.min(st.H - handle - minY * cam.scale, cam.ty)
-    cam.ty = Math.max(handle - maxY * cam.scale, cam.ty)
-  }, [])
-
-  const draw = useCallback(() => {
-    const st = S.current
-    const cvs = canvasRef.current
-    if (!cvs) return
-    const ctx = cvs.getContext('2d')
-    const { W, H, sel, cam, dpr } = st
-    st.t += 0.005
-
-    // 重置 transform 到 DPR 基线（清屏 + 画背景用屏幕坐标系）
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, W, H)
-
-    // 背景纸纹（屏幕固定，不跟视角拉动 → 给"无限画布"一个稳定地基）
-    ctx.save()
-    ctx.globalAlpha = 0.025
-    for (let i = 0; i < 12; i++) {
-      ctx.beginPath()
-      ctx.arc(W * (0.3 + Math.sin(i) * 0.4), H * (0.3 + Math.cos(i * 0.7) * 0.4), 60 + i * 25, 0, Math.PI * 2)
-      ctx.fillStyle = i % 3 === 0 ? '#d4c4a8' : i % 3 === 1 ? '#c9b89a' : '#baa888'
-      ctx.fill()
-    }
-    ctx.restore()
-
-    // ── 应用视角变换：之后所有节点/藤蔓都在世界坐标 ──
-    ctx.save()
-    ctx.translate(cam.tx, cam.ty)
-    ctx.scale(cam.scale, cam.scale)
-
-    // 漂浮
-    st.nodes.forEach((n) => {
-      n.x = n.ox + Math.sin(st.t + n.ph) * 1.0
-      n.y = n.oy + Math.cos(st.t * 0.6 + n.ph) * 0.8
-    })
-
-    // 藤蔓弯线（缩太小不画，避免一团糟）
-    if (cam.scale >= LOD_LINKS) {
-      st.links.forEach((l) => {
-        const na = st.nodes[l[0]]
-        const nb = st.nodes[l[1]]
-        const isSel = sel !== null && (l[0] === sel || l[1] === sel)
-        const alpha = sel === null ? 0.06 : isSel ? 0.35 : 0.02
-        const mx = (na.x + nb.x) / 2
-        const my = (na.y + nb.y) / 2
-        const dx = nb.x - na.x
-        const dy = nb.y - na.y
-        const cx1 = mx - dy * 0.18 + Math.sin(na.x * 0.01) * 12
-        const cy1 = my + dx * 0.18 + Math.cos(na.y * 0.01) * 12
-        ctx.save()
-        ctx.globalAlpha = alpha
-        ctx.strokeStyle = '#c96442'
-        ctx.lineWidth = 0.7 / cam.scale
-        ctx.beginPath()
-        ctx.moveTo(na.x, na.y)
-        ctx.quadraticCurveTo(cx1, cy1, nb.x, nb.y)
-        ctx.stroke()
-        ctx.restore()
-      })
-    }
-
-    // 星星
-    st.nodes.forEach((n, i) => {
-      const c = CATS[n.cat]
-      const isSel = sel === i
-      const isLn =
-        sel !== null && st.links.some((l) => (l[0] === sel && l[1] === i) || (l[1] === sel && l[0] === i))
-      const dim = sel !== null && !isSel && !isLn
-      drawShape(ctx, n.x, n.y, n.r, c.shape, c.color, dim ? 0.12 : 0.8, cam.scale)
-      if (isSel) {
-        ctx.save()
-        ctx.globalAlpha = 0.12
-        ctx.strokeStyle = '#c96442'
-        ctx.lineWidth = 0.5 / cam.scale
-        ctx.setLineDash([2 / cam.scale, 3 / cam.scale])
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, n.r + 12 / cam.scale, 0, Math.PI * 2)
-        ctx.stroke()
-        ctx.setLineDash([])
-        ctx.restore()
-      }
-      // LOD：scale 大才画标签
-      if (cam.scale >= LOD_LABEL) {
-        if (isSel) drawLabel(ctx, n.x, n.y, n.r, n.label, c.color, 0.9, cam.scale)
-        else if (isLn) drawLabel(ctx, n.x, n.y, n.r, n.label, c.color, 0.5, cam.scale)
-      }
-    })
-
-    ctx.restore()
-    st.raf = requestAnimationFrame(draw)
-  }, [])
-
-  // 屏幕 → 世界坐标
-  const screenToWorld = (sx, sy) => {
-    const cam = S.current.cam
-    return { x: (sx - cam.tx) / cam.scale, y: (sy - cam.ty) / cam.scale }
-  }
-
-  const handleClick = (sx, sy) => {
-    const st = S.current
-    const { x: wx, y: wy } = screenToWorld(sx, sy)
-    let hit = -1
-    st.nodes.forEach((n, i) => {
-      // hit 半径在屏幕坐标系是 r+12px，所以世界坐标要除以 scale
-      if (Math.hypot(n.x - wx, n.y - wy) < n.r + 12 / st.cam.scale) hit = i
-    })
-    if (hit >= 0) {
-      st.sel = st.sel === hit ? null : hit
-      setSelNode(st.sel === null ? null : st.nodes[st.sel])
-    } else {
-      st.sel = null
-      setSelNode(null)
-    }
-  }
-
-  const onPointerDown = (e) => {
-    const st = S.current
-    const rect = wrapRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    st.pointers.set(e.pointerId, { x, y, startX: x, startY: y })
-    e.target.setPointerCapture?.(e.pointerId)
-
-    if (st.pointers.size === 1) {
-      st.drag = { lastX: x, lastY: y, moved: 0 }
-      st.pinch = null
-    } else if (st.pointers.size === 2) {
-      const pts = [...st.pointers.values()]
-      const dx = pts[0].x - pts[1].x
-      const dy = pts[0].y - pts[1].y
-      st.pinch = {
-        startDist: Math.hypot(dx, dy) || 1,
-        startScale: st.cam.scale,
-        startTx: st.cam.tx,
-        startTy: st.cam.ty,
-        cx: (pts[0].x + pts[1].x) / 2,
-        cy: (pts[0].y + pts[1].y) / 2,
-      }
-      st.drag = null // 双指期间不平移
-    }
-  }
-
-  const onPointerMove = (e) => {
-    const st = S.current
-    if (!st.pointers.has(e.pointerId)) return
-    const rect = wrapRef.current.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    const prev = st.pointers.get(e.pointerId)
-    st.pointers.set(e.pointerId, { ...prev, x, y })
-
-    if (st.pinch && st.pointers.size === 2) {
-      const pts = [...st.pointers.values()]
-      const dx = pts[0].x - pts[1].x
-      const dy = pts[0].y - pts[1].y
-      const dist = Math.hypot(dx, dy) || 1
-      const ratio = dist / st.pinch.startDist
-      const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, st.pinch.startScale * ratio))
-      // 以 pinch 起始中点为缩放锚（屏幕同一像素对应的世界点保持不变）
-      const { cx, cy, startScale, startTx, startTy } = st.pinch
-      st.cam.scale = newScale
-      st.cam.tx = cx - (newScale / startScale) * (cx - startTx)
-      st.cam.ty = cy - (newScale / startScale) * (cy - startTy)
-      clampCam()
-    } else if (st.drag) {
-      // 双指→单指过渡的第一帧只更新起点，不累计位移（防 jump）
-      if (st.drag.skipNext) {
-        st.drag.skipNext = false
-        st.drag.lastX = x
-        st.drag.lastY = y
-        return
-      }
-      const dx = x - st.drag.lastX
-      const dy = y - st.drag.lastY
-      st.cam.tx += dx
-      st.cam.ty += dy
-      st.drag.lastX = x
-      st.drag.lastY = y
-      st.drag.moved += Math.abs(dx) + Math.abs(dy)
-      clampCam()
-    }
-  }
-
-  const onPointerUp = (e) => {
-    const st = S.current
-    if (!st.pointers.has(e.pointerId)) return
-    const ptr = st.pointers.get(e.pointerId)
-    st.pointers.delete(e.pointerId)
-
-    // 单指松开 + 未明显移动 → 视为 click
-    if (st.drag && st.drag.moved < CLICK_SLOP && st.pointers.size === 0) {
-      handleClick(ptr.startX, ptr.startY)
-    }
-
-    if (st.pointers.size === 1) {
-      // 双指→单指：重置 drag 起点 + skipNext 跳过下一帧的 dx/dy 计算（防止 pinch 残留位移被当成 jump）
-      const remaining = [...st.pointers.values()][0]
-      st.drag = { lastX: remaining.x, lastY: remaining.y, moved: 0, skipNext: true }
-      if (st.pinch) st.lastPinchEnd = Date.now()
-      st.pinch = null
-    } else if (st.pointers.size === 0) {
-      if (st.pinch) st.lastPinchEnd = Date.now()
-      st.drag = null
-      st.pinch = null
-    }
-  }
-
-  // 启动渲染循环 + 绑事件
-  useEffect(() => {
-    if (status !== 'ready') return
-    resize()
-    S.current.raf = requestAnimationFrame(draw)
-    const wrap = wrapRef.current
-    if (!wrap) return
-    const ro = new ResizeObserver(() => resize())
-    ro.observe(wrap)
-
-    // wheel：原生绑（React 的 onWheel 是 passive 不能 preventDefault）
-    const onWheel = (e) => {
-      e.preventDefault()
-      const st = S.current
-      const rect = wrap.getBoundingClientRect()
-      const mx = e.clientX - rect.left
-      const my = e.clientY - rect.top
-      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1
-      const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, st.cam.scale * factor))
-      // 以鼠标位置为缩放锚
-      st.cam.tx = mx - (newScale / st.cam.scale) * (mx - st.cam.tx)
-      st.cam.ty = my - (newScale / st.cam.scale) * (my - st.cam.ty)
-      st.cam.scale = newScale
-      clampCam()
-    }
-    wrap.addEventListener('wheel', onWheel, { passive: false })
-
-    return () => {
-      cancelAnimationFrame(S.current.raf)
-      ro.disconnect()
-      wrap.removeEventListener('wheel', onWheel)
-    }
-  }, [status, resize, draw, clampCam])
-
-  // 双击复位视角；pinch 期间或刚结束 300ms 内禁用（防手机上 pinch 的余波被识别为 dblclick）
-  // verify 指出：dblclick 触发时 pointers 已为空，单靠 pointers.size 守不住，要加时间戳兜底
-  const onDoubleClick = () => {
-    const st = S.current
-    if (st.pointers.size > 0) return
-    if (st.lastPinchEnd && Date.now() - st.lastPinchEnd < 300) return
-    st.cam.tx = 0
-    st.cam.ty = 0
-    st.cam.scale = 1
-  }
-
+  // ─── JSX 模板：照搬 public/legacy/index.html line 1315-1333 ───
+  // class → className，自闭合标签，移除 .active（由 openGalaxy 加）
   return (
-    <div className="galaxy-canvas-wrap" ref={wrapRef}>
-      <canvas
-        ref={canvasRef}
-        className="galaxy-canvas"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDoubleClick={onDoubleClick}
-        style={{ touchAction: 'none', cursor: 'grab' }}
-      />
-      <div className="gx-title">Emet Memory</div>
-      <div className="gx-legend2">
-        {CAT_KEYS.map((k) => (
-          <span key={k} className="gx-leg2">
-            <span className="gx-leg2__sh" style={{ color: CATS[k].color }}>
-              {SHAPE_GLYPH[CATS[k].shape]}
-            </span>
-            {CATS[k].label}
-          </span>
-        ))}
-      </div>
-
-      {/* 视角操作提示（首次进入提醒；可以做成关闭一次后不再显示，先简化） */}
-      <div className="gx-hint faint">拖动平移 · 双指/滚轮缩放 · 双击复位</div>
-
-      {status === 'loading' && <div className="gx-status faint">星图加载中…</div>}
-      {status === 'error' && <div className="gx-status faint">星图加载失败</div>}
-
-      {selNode && (
-        <div className="gx-card" onClick={() => navigate(`/memory/${selNode.id}`)}>
-          <div className="gx-card__top">
-            <span className="gx-card__cat" style={{ color: CATS[selNode.cat].color }}>
-              {CATS[selNode.cat].label}
-            </span>
-            <span className="gx-card__imp">
-              {'●'.repeat(Math.round(selNode.imp / 2))}
-              {'○'.repeat(5 - Math.round(selNode.imp / 2))}
-            </span>
-          </div>
-          <div className="gx-card__text">{selNode.text}</div>
-          {selNode.tags?.length > 0 && (
-            <div className="gx-card__tags">{selNode.tags.map((t) => '#' + t).join('  ')}</div>
-          )}
-          <div className="gx-card__open">打开记忆 ›</div>
+    <div className="galaxy-overlay" id="galaxyOverlay" ref={rootRef}>
+      <div className="galaxy-header">
+        <button className="galaxy-btn" id="galaxyCloseBtn" style={{ padding: '7px 13px' }} onClick={() => navigate(-1)}>✕</button>
+        <div className="galaxy-seg">
+          <button id="galaxySegRel" className="active">按关系</button>
+          <button id="galaxySegCat">按分类</button>
         </div>
-      )}
+        <div className="galaxy-search-wrap"><input className="galaxy-search" id="galaxySearch" placeholder="搜索…" /></div>
+        <button className="galaxy-btn on" id="galaxyEdgeBtn">连线</button>
+      </div>
+      <div className="galaxy-container" id="galaxyContainer">
+        <svg className="galaxy-svg" id="galaxySvg"></svg>
+        <div className="galaxy-tooltip" id="galaxyTooltip"></div>
+        <div className="gx-banner" id="galaxyBanner"></div>
+        <div className="gx-confirm" id="galaxyConfirm">
+          <span className="gx-confirm-txt" id="galaxyConfirmTxt">拆掉这条藤?</span>
+          <button className="gx-cbtn gx-cancel" id="galaxyCancel">算了</button>
+          <button className="gx-cbtn gx-cdel" id="galaxyDel">拆掉</button>
+        </div>
+        <div className="gx-hint" id="galaxyHint"></div>
+        <div className="gx-legend" id="galaxyLegend"></div>
+      </div>
     </div>
   )
-}
-
-// ── canvas 绘制（移植自 demo + scale 适配）─────────────────
-// drawShape 不动 lineWidth，让节点形状自然随 scale 缩放（节点本身有大小感）
-function drawShape(ctx, x, y, r, shape, color, alpha /* , scale */) {
-  ctx.save()
-  ctx.globalAlpha = alpha
-  ctx.fillStyle = color
-  ctx.strokeStyle = color
-  ctx.lineWidth = 1.2
-  if (shape === 'circle') {
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fill()
-    ctx.globalAlpha = alpha * 0.25
-    ctx.lineWidth = 0.8
-    ctx.beginPath()
-    ctx.arc(x, y, r + 2.5, 0, Math.PI * 2)
-    ctx.stroke()
-  } else if (shape === 'triangle') {
-    ctx.beginPath()
-    ctx.moveTo(x, y - r * 1.15)
-    ctx.lineTo(x - r * 0.95, y + r * 0.7)
-    ctx.lineTo(x + r * 0.95, y + r * 0.7)
-    ctx.closePath()
-    ctx.fill()
-  } else if (shape === 'wave') {
-    ctx.lineWidth = Math.max(1.5, r * 0.35)
-    const w = r * 1.5
-    ctx.beginPath()
-    ctx.moveTo(x - w, y)
-    ctx.quadraticCurveTo(x - w / 2, y - r * 0.9, x, y)
-    ctx.quadraticCurveTo(x + w / 2, y + r * 0.9, x + w, y)
-    ctx.stroke()
-    ctx.beginPath()
-    ctx.arc(x, y, 2.5, 0, Math.PI * 2)
-    ctx.fill()
-  } else if (shape === 'square') {
-    const s = r * 0.8
-    ctx.save()
-    ctx.translate(x, y)
-    ctx.rotate(0.06)
-    ctx.fillRect(-s, -s, s * 2, s * 2)
-    ctx.restore()
-  } else if (shape === 'diamond') {
-    ctx.beginPath()
-    ctx.moveTo(x, y - r * 1.15)
-    ctx.lineTo(x + r * 0.8, y)
-    ctx.lineTo(x, y + r * 1.15)
-    ctx.lineTo(x - r * 0.8, y)
-    ctx.closePath()
-    ctx.fill()
-  } else if (shape === 'hex') {
-    ctx.beginPath()
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i - Math.PI / 6
-      ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a))
-    }
-    ctx.closePath()
-    ctx.fill()
-  }
-  ctx.restore()
-}
-
-// drawLabel：所有 px 值都按 scale 反向缩放，保持文字在屏幕上的尺寸恒定不被缩放扭曲
-function drawLabel(ctx, x, y, r, text, color, alpha, scale) {
-  const fontPx = 11 / scale
-  const off = 8 / scale
-  const lead = 2 / scale
-  ctx.save()
-  ctx.globalAlpha = alpha
-  ctx.font = `italic ${fontPx}px Georgia, serif`
-  ctx.fillStyle = color
-  const lx = x + r + off
-  const ly = y + 3 / scale
-  ctx.save()
-  ctx.globalAlpha = alpha * 0.15
-  ctx.strokeStyle = color
-  ctx.lineWidth = 0.5 / scale
-  ctx.beginPath()
-  ctx.moveTo(x + r + lead, y)
-  ctx.lineTo(lx - lead, ly - 3 / scale)
-  ctx.stroke()
-  ctx.restore()
-  ctx.fillText(text, lx, ly)
-  ctx.restore()
 }
