@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Lock, Trash2, MoreHorizontal, Pencil, Check, ChevronLeft } from 'lucide-react'
+import { ArrowLeft, Lock, Trash2, MoreHorizontal, ChevronLeft } from 'lucide-react'
 import { diaryGet, diaryDate, diaryUpdate, diaryDelete, memoryMove } from '../api.js'
 import { dayKey, formatDateZh, weekdayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
@@ -17,16 +17,12 @@ const ALL_MOVE_TYPES = [
   ['idea', '想法'],
 ]
 
-// 日记 / 周记 / 月记 / 故事 共用详情页。仿 MemoryDetail 的双模式：
-// - 读态：标题 / meta / 正文 / 署名 像原版纯文字流，跟随页面滚动，不带任何输入框
-// - 编辑态（点 ✎ 切换）：inputs / textarea，textarea 高度自适应内容不出现滚动条
-// 删除 / 锁定走右上角 ⋯ 菜单。
+// 日记 / 周记 / 月记 / 故事 共用详情页。v66 风格：textarea 永远在线，500ms 自动保存
 export default function DiaryDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [diary, setDiary] = useState(null)
   const [notFound, setNotFound] = useState(false)
-  const [editing, setEditing] = useState(false)
   const [work, setWork] = useState(null)
   const [saveState, setSaveState] = useState('idle')
   const [busy, setBusy] = useState(false)
@@ -36,7 +32,6 @@ export default function DiaryDetail() {
   const savingRef = useRef(false)
   const textareaRef = useRef(null)
 
-  // textarea 自适应高度：每次内容变化 + 进入编辑态时调整
   const adjustHeight = () => {
     const el = textareaRef.current
     if (!el) return
@@ -44,11 +39,8 @@ export default function DiaryDetail() {
     el.style.height = el.scrollHeight + 'px'
   }
   useEffect(() => {
-    if (editing) {
-      // 等下一帧 DOM 真渲染了再调高度
-      requestAnimationFrame(adjustHeight)
-    }
-  }, [editing, work?.content])
+    if (work) requestAnimationFrame(adjustHeight)
+  }, [work?.content])
 
   const refresh = async () => {
     const d = await diaryGet(id)
@@ -69,38 +61,28 @@ export default function DiaryDetail() {
     }
   }, [id])
 
-  const startEdit = () => {
-    if (!diary || diary.locked) {
-      if (diary?.locked) showToast('请先解锁')
-      return
+  // diary 加载完后初始化 work（v66 风格：永远在编辑态）
+  useEffect(() => {
+    if (diary && !work) {
+      const w = {
+        title: diary.title || '',
+        content: diary.content || '',
+        diary_date: diary.diary_date || dayKey(),
+        author_label: diary.author_label || '',
+      }
+      workRef.current = w
+      setWork(w)
+      setSaveState('idle')
     }
-    const w = {
-      title: diary.title || '',
-      content: diary.content || '',
-      diary_date: diary.diary_date || dayKey(),
-      author_label: diary.author_label || '',
-    }
-    setWork(w)
-    workRef.current = w
-    setEditing(true)
-    setSaveState('idle')
-  }
-
-  const finishEdit = async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-      await doSave()
-    }
-    setEditing(false)
-    setWork(null)
-    workRef.current = null
-    setSaveState('idle')
-    await refresh()
-  }
+  }, [diary, work])
 
   const set = (key, value) => {
     if (!workRef.current) return
+    if (diary?.locked) {
+      setSaveState('error')
+      showToast('请先解锁')
+      return
+    }
     const next = { ...workRef.current, [key]: value }
     workRef.current = next
     setWork(next)
@@ -108,6 +90,30 @@ export default function DiaryDetail() {
     setSaveState('saving')
     timerRef.current = setTimeout(doSave, 500)
   }
+
+  const flushSave = async () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+      await doSave()
+    }
+  }
+
+  const goBack = async () => {
+    await flushSave()
+    navigate(-1)
+  }
+
+  // 卸载时 flush
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        doSave()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const doSave = async () => {
     timerRef.current = null
@@ -221,7 +227,8 @@ export default function DiaryDetail() {
         : diary.author === 'story'
           ? '故事'
           : '日记'
-  const headerTitle = editing ? SAVE_TEXT[saveState] || titleLabel : titleLabel
+  const headerTitle = SAVE_TEXT[saveState] || titleLabel
+  const locked = !!diary.locked
 
   // 编辑态用的透明输入框样式（看起来跟正文一样）
   const transparentInput = {
@@ -241,22 +248,12 @@ export default function DiaryDetail() {
   return (
     <div className="page detail">
       <header className="detail-header">
-        <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
+        <button className="detail-back" onClick={goBack} aria-label="返回">
           <ArrowLeft size={20} />
         </button>
         <span className="detail-title">{headerTitle}</span>
         <div className="detail-header__right">
-          {diary.locked && <Lock size={16} className="faint" />}
-          {!editing && !diary.locked && (
-            <button className="detail-edit-btn" onClick={startEdit} aria-label="编辑">
-              <Pencil size={15} /> 编辑
-            </button>
-          )}
-          {editing && (
-            <button className="detail-edit-btn" onClick={finishEdit} aria-label="完成">
-              <Check size={15} /> 完成
-            </button>
-          )}
+          {locked && <Lock size={16} className="faint" />}
           <button
             className="detail-more"
             onClick={() => setMenu(menu ? '' : 'main')}
@@ -301,66 +298,52 @@ export default function DiaryDetail() {
         </>
       )}
 
-      {/* 标题 */}
-      {editing ? (
-        <input
-          className="diary-read__title"
-          placeholder="标题（可留空）"
-          value={work.title}
-          onChange={(e) => set('title', e.target.value)}
-          style={{ ...transparentInput, margin: '6px 0 4px' }}
-        />
-      ) : (
-        diary.title && <h1 className="diary-read__title">{diary.title}</h1>
-      )}
+      {/* 标题：永远在线 */}
+      <input
+        className="diary-read__title"
+        placeholder="标题（可留空）"
+        value={work?.title ?? ''}
+        onChange={(e) => set('title', e.target.value)}
+        readOnly={locked}
+        style={{ ...transparentInput, margin: '6px 0 4px' }}
+      />
 
-      {/* meta：日期 + 周几（读态直接文字；编辑态也只显示文字，date input 隐去避免视觉散乱） */}
+      {/* meta：日期 + 周几 */}
       <div className="faint diary-read__meta">
         {formatDateZh(diaryDate(diary))} {weekdayZh(diaryDate(diary))}
       </div>
 
-      {/* 正文：读态纯文字流，编辑态自适应高度 textarea（无滚动） */}
-      {editing ? (
-        <textarea
-          ref={textareaRef}
-          className="detail-read-body"
-          placeholder="写点什么…"
-          value={work.content}
-          onChange={(e) => {
-            set('content', e.target.value)
-            // 当帧立刻调高度（避免渲染抖动）
-            requestAnimationFrame(adjustHeight)
-          }}
-          style={{
-            ...transparentInput,
-            resize: 'none',
-            overflow: 'hidden',
-            whiteSpace: 'pre-wrap',
-            display: 'block',
-          }}
-        />
-      ) : (
-        <div className="detail-read-body">{diary.content}</div>
-      )}
+      {/* 正文：textarea 永远在线，视觉同阅读态 */}
+      <textarea
+        ref={textareaRef}
+        className="detail-read-body"
+        placeholder="写点什么…"
+        value={work?.content ?? ''}
+        onChange={(e) => {
+          set('content', e.target.value)
+          requestAnimationFrame(adjustHeight)
+        }}
+        readOnly={locked}
+        style={{
+          ...transparentInput,
+          resize: 'none',
+          overflow: 'hidden',
+          whiteSpace: 'pre-wrap',
+          display: 'block',
+        }}
+      />
 
       {/* author_label 底部署名 */}
-      {editing ? (
-        <div className="diary-read__author faint" style={{ marginTop: 16 }}>
-          —{' '}
-          <input
-            value={work.author_label}
-            onChange={(e) => set('author_label', e.target.value)}
-            placeholder="作者署名（例：Emet · Claude Opus 4.6）"
-            style={{ ...transparentInput, width: '80%' }}
-          />
-        </div>
-      ) : (
-        (diary.author_label || diary.author === 'weekly' || diary.author === 'monthly') && (
-          <div className="diary-read__author faint" style={{ marginTop: 16 }}>
-            — {diary.author_label || 'Emet · 自动生成'}
-          </div>
-        )
-      )}
+      <div className="diary-read__author faint" style={{ marginTop: 16 }}>
+        —{' '}
+        <input
+          value={work?.author_label ?? ''}
+          onChange={(e) => set('author_label', e.target.value)}
+          placeholder="作者署名（例：Emet · Claude Opus 4.6）"
+          readOnly={locked}
+          style={{ ...transparentInput, width: '80%' }}
+        />
+      </div>
     </div>
   )
 }
