@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Lock, Trash2, MoreHorizontal, Pencil, Check, X, ChevronLeft } from 'lucide-react'
+import { ArrowLeft, Lock, Trash2, MoreHorizontal, X, ChevronLeft } from 'lucide-react'
 import { momentAll, momentCreate, momentUpdate, momentDelete, memoryMove } from '../api.js'
 import { shortDateZh, timeOfDayZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
@@ -16,16 +16,13 @@ const MOVE_TYPES = [
   ['idea', '想法'],
 ]
 
-// 瞬记详情：仿 MemoryDetail 双模式。
-// 读态：meta + 正文 + tags 纯文字。编辑态（点 ✎ 切换）：透明 input/textarea，自适应高度。
-// 新建（id=new）默认就在编辑态。
+// 瞬记详情：v66 风格——打开即编辑，textarea 永远在线，500ms 自动保存
 export default function MomentDetail() {
   const { id } = useParams()
   const isNew = id === 'new'
   const navigate = useNavigate()
   const [moment, setMoment] = useState(null)
   const [notFound, setNotFound] = useState(false)
-  const [editing, setEditing] = useState(isNew)
   const [work, setWork] = useState(
     isNew ? { content: '', tags: [], mood: 0 } : null,
   )
@@ -46,8 +43,8 @@ export default function MomentDetail() {
     el.style.height = el.scrollHeight + 'px'
   }
   useEffect(() => {
-    if (editing) requestAnimationFrame(adjustHeight)
-  }, [editing, work?.content])
+    if (work) requestAnimationFrame(adjustHeight)
+  }, [work?.content])
 
   const refresh = async () => {
     const list = await momentAll()
@@ -73,42 +70,27 @@ export default function MomentDetail() {
     }
   }, [id, isNew])
 
-  const startEdit = () => {
-    if (!moment || moment.locked) {
-      if (moment?.locked) showToast('请先解锁')
-      return
+  // moment 加载完后初始化 work（v66 风格：永远在编辑态）
+  useEffect(() => {
+    if (moment && !work) {
+      const w = {
+        content: moment.content || '',
+        tags: Array.isArray(moment.tags) ? [...moment.tags] : [],
+        mood: typeof moment.mood === 'number' ? moment.mood : 0,
+      }
+      workRef.current = w
+      setWork(w)
+      setSaveState('idle')
     }
-    const w = {
-      content: moment.content || '',
-      tags: Array.isArray(moment.tags) ? [...moment.tags] : [],
-      mood: typeof moment.mood === 'number' ? moment.mood : 0,
-    }
-    setWork(w)
-    workRef.current = w
-    setEditing(true)
-    setSaveState('idle')
-  }
-
-  const finishEdit = async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-      await doSave()
-    }
-    setEditing(false)
-    setWork(null)
-    workRef.current = null
-    setSaveState('idle')
-    if (isNew && !idRef.current) {
-      navigate(-1)
-      return
-    }
-    await refresh()
-    if (isNew && idRef.current) navigate(`/moment/${idRef.current}`, { replace: true })
-  }
+  }, [moment, work])
 
   const set = (key, value) => {
     if (!workRef.current) return
+    if (moment?.locked) {
+      setSaveState('error')
+      showToast('请先解锁')
+      return
+    }
     const next = { ...workRef.current, [key]: value }
     workRef.current = next
     setWork(next)
@@ -116,6 +98,30 @@ export default function MomentDetail() {
     setSaveState('saving')
     timerRef.current = setTimeout(doSave, 500)
   }
+
+  const flushSave = async () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+      await doSave()
+    }
+  }
+
+  const goBack = async () => {
+    await flushSave()
+    navigate(-1)
+  }
+
+  // 卸载时 flush
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        doSave()
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const doSave = async () => {
     timerRef.current = null
@@ -256,7 +262,8 @@ export default function MomentDetail() {
     )
   }
 
-  const headerTitle = editing ? SAVE_TEXT[saveState] || '瞬记' : '瞬记'
+  const headerTitle = SAVE_TEXT[saveState] || '瞬记'
+  const locked = !!moment?.locked
 
   const transparentInput = {
     width: '100%',
@@ -275,22 +282,12 @@ export default function MomentDetail() {
   return (
     <div className="page detail">
       <header className="detail-header">
-        <button className="detail-back" onClick={() => navigate(-1)} aria-label="返回">
+        <button className="detail-back" onClick={goBack} aria-label="返回">
           <ArrowLeft size={20} />
         </button>
         <span className="detail-title">{headerTitle}</span>
         <div className="detail-header__right">
-          {moment?.locked && <Lock size={16} className="faint" />}
-          {!editing && moment && !moment.locked && (
-            <button className="detail-edit-btn" onClick={startEdit} aria-label="编辑">
-              <Pencil size={15} /> 编辑
-            </button>
-          )}
-          {editing && (
-            <button className="detail-edit-btn" onClick={finishEdit} aria-label="完成">
-              <Check size={15} /> 完成
-            </button>
-          )}
+          {locked && <Lock size={16} className="faint" />}
           {moment && (
             <button
               className="detail-more"
@@ -343,45 +340,42 @@ export default function MomentDetail() {
         </div>
       )}
 
-      {/* 正文 */}
-      {editing ? (
-        <textarea
-          ref={textareaRef}
-          className="detail-read-body"
-          placeholder="写下当下…"
-          value={work.content}
-          onChange={(e) => {
-            set('content', e.target.value)
-            requestAnimationFrame(adjustHeight)
-          }}
-          autoFocus={isNew}
-          style={{
-            ...transparentInput,
-            resize: 'none',
-            overflow: 'hidden',
-            whiteSpace: 'pre-wrap',
-            display: 'block',
-            marginTop: 8,
-          }}
-        />
-      ) : (
-        <div className="detail-read-body">{moment.content}</div>
-      )}
+      {/* 正文：v66 风格永远在线 */}
+      <textarea
+        ref={textareaRef}
+        className="detail-read-body"
+        placeholder="写下当下…"
+        value={work.content}
+        onChange={(e) => {
+          set('content', e.target.value)
+          requestAnimationFrame(adjustHeight)
+        }}
+        autoFocus={isNew}
+        readOnly={locked}
+        style={{
+          ...transparentInput,
+          resize: 'none',
+          overflow: 'hidden',
+          whiteSpace: 'pre-wrap',
+          display: 'block',
+          marginTop: 8,
+        }}
+      />
 
-      {/* tags */}
-      {editing ? (
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            marginTop: 16,
-            alignItems: 'center',
-          }}
-        >
-          {work.tags.map((t) => (
-            <span key={t} className="tag-pill">
-              #{t}
+      {/* tags：永远显示 + 可加可删 */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 6,
+          marginTop: 16,
+          alignItems: 'center',
+        }}
+      >
+        {work.tags.map((t) => (
+          <span key={t} className="tag-pill">
+            #{t}
+            {!locked && (
               <button
                 onClick={() => removeTag(t)}
                 aria-label="移除"
@@ -394,8 +388,10 @@ export default function MomentDetail() {
               >
                 <X size={10} />
               </button>
-            </span>
-          ))}
+            )}
+          </span>
+        ))}
+        {!locked && (
           <input
             placeholder="加标签…"
             value={tagInput}
@@ -408,23 +404,8 @@ export default function MomentDetail() {
               fontSize: 13,
             }}
           />
-        </div>
-      ) : (
-        moment?.tags?.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 6,
-              marginTop: 16,
-            }}
-          >
-            {moment.tags.map((t) => (
-              <span key={t} className="tag-pill">#{t}</span>
-            ))}
-          </div>
-        )
-      )}
+        )}
+      </div>
     </div>
   )
 }
