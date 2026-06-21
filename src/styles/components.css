@@ -48,11 +48,17 @@
 /* ════════════════════════════════════════
    通用卡片
    ════════════════════════════════════════ */
+/* v66 通用卡片：白色 + 10 圆角 + 柔阴影，无 1px 边框 */
 .card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  background: var(--card);
+  border: none;
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px;
+  transition: transform 0.15s;
+}
+.card:active {
+  transform: scale(0.995);
 }
 
 .stack > * + * {
@@ -891,9 +897,12 @@
   color: var(--text);
 }
 .detail-title {
-  font-family: var(--font-serif);
-  font-size: 18px;
-  font-weight: 600;
+  font-family: var(--serif-en);
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  letter-spacing: 0.05em;
 }
 .detail-header__right {
   margin-left: auto;
@@ -917,10 +926,11 @@
   font-size: 13px;
 }
 .detail-date__big {
-  font-family: var(--font-serif);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
+  font-family: var(--serif-zh);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: 0.02em;
 }
 
 .detail-body {
@@ -945,12 +955,20 @@
   border: none;
   border-radius: 0;
   padding: 0;
+  font-family: var(--sans-zh);
+  font-size: 15px;
+  font-weight: 300;
   line-height: 1.85;
+  color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
   min-height: 6em;
   resize: none;
-  font-family: inherit;
+  margin-bottom: 18px;
+}
+.detail-body--seamless::placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
 }
 .detail-body--seamless:focus {
   border: none;
@@ -969,34 +987,41 @@
   gap: 10px;
 }
 .detail-label {
-  font-size: 13px;
-  color: var(--text-muted);
+  font-size: 12px;
+  color: var(--ink-soft);
   flex-shrink: 0;
-  min-width: 44px;
+  min-width: 48px;
+  font-family: var(--sans-zh);
 }
 
-/* 分类选择 */
+/* v66：分类按钮组用 tag pill 视觉（rose 背景 + accent 文字 + 14px 圆角） */
 .cat-select {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 .cat-opt {
+  font-family: var(--sans-zh);
   font-size: 13px;
-  color: var(--text-muted);
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  padding: 5px 13px;
+  font-weight: 400;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 4px 12px;
   transition: all 0.15s ease;
+  cursor: pointer;
+}
+.cat-opt:active {
+  transform: scale(0.96);
 }
 .cat-opt.is-active {
-  color: #fff;
-  background: var(--tag-color);
-  border-color: var(--tag-color);
+  color: var(--accent);
+  background: var(--rose);
+  border-color: transparent;
 }
 
-/* 滑块 */
+/* v66 滑块：4px 轨道 + 16px accent 圆 thumb + 2px bg 描边 */
 .slider-row .slider {
   flex: 1;
 }
@@ -1005,38 +1030,37 @@
   appearance: none;
   height: 4px;
   border-radius: 2px;
-  background: var(--border);
+  background: var(--line);
+  accent-color: var(--accent);
   outline: none;
 }
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  border: 2px solid #fff;
-  box-shadow: 0 1px 3px rgba(44, 42, 36, 0.25);
+  border: 2px solid var(--bg);
   cursor: pointer;
 }
 .slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  border: 2px solid #fff;
+  border: 2px solid var(--bg);
   cursor: pointer;
 }
 .slider-val {
-  font-family: var(--font-serif);
-  font-size: 15px;
-  font-weight: 600;
+  font-family: var(--sans-en);
+  font-size: 12px;
   color: var(--accent);
   min-width: 38px;
   text-align: right;
 }
 
-/* 标签编辑 */
+/* v66 标签 pill：rose 背景 + accent 文字 + # 半透明前缀 + 14px 圆角 */
 .tag-edit {
   display: flex;
   flex-wrap: wrap;
@@ -1047,37 +1071,53 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-family: var(--sans-zh);
+  font-size: 13px;
   color: var(--accent);
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-soft);
-  border-radius: 999px;
-  padding: 3px 6px 3px 10px;
+  background: var(--rose);
+  border: none;
+  border-radius: 14px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.tag-pill:active {
+  transform: scale(0.95);
 }
 .tag-pill button {
   display: flex;
   color: var(--accent);
   opacity: 0.7;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 .tag-add {
   display: inline-flex;
   align-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  padding-right: 4px;
+  background: transparent;
+  border: 1px dashed var(--line);
+  border-radius: 14px;
+  padding: 4px 10px;
 }
 .tag-add input {
   width: 92px;
   border: none;
   outline: none;
   background: none;
-  padding: 4px 10px;
+  font-family: var(--sans-zh);
   font-size: 12px;
+  color: var(--ink-faint);
+}
+.tag-add input::placeholder {
+  color: var(--ink-faint);
 }
 .tag-add button {
   display: flex;
-  color: var(--accent);
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 /* 藤蔓关联 */
@@ -1177,16 +1217,24 @@
   padding: 3px 10px;
 }
 
-/* 三维度卡片 */
+/* v66 editor-meta-section：card-soft 背景 + line 描边 + 10 圆角 + 16 padding */
 .meta-card {
-  padding: 4px 16px;
+  background: var(--card-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
   margin-bottom: 16px;
+  box-shadow: none;
 }
 .meta-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 0;
+  gap: 10px;
+  padding: 0;
+  margin-bottom: 12px;
+}
+.meta-row:last-child {
+  margin-bottom: 0;
 }
 .meta-row + .meta-row {
   border-top: 1px solid var(--border-soft);

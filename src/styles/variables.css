@@ -1,61 +1,95 @@
-:root {
-  /* ── 主色 ───────────────────────────── */
-  --accent: #C96442;        /* 赤陶橙——按钮、强调、Emet 的颜色 */
-  --accent-soft: #E8B89F;   /* 浅赤陶——hover、边框 */
-  --accent-bg: #FDF5F0;     /* 极淡赤陶——卡片高亮底色 */
-  --rose: #F2DAD4;          /* v66 粉橙底——tag/重点入口卡 */
+/* v66 paper 主题 + 完整变量套。home 旧别名（--text/--bg/--accent 等）保留映射到 v66 变量，
+   不破坏现有 components.css 引用。 */
+:root,
+[data-theme='paper'] {
+  /* ── v66 paper 色板 ──────────────── */
+  --bg: #f9f9f7;
+  --bg-soft: #f2f2ef;
+  --card: #ffffff;
+  --card-soft: #efefed;
+  --ink: #2a2724;
+  --ink-soft: #6b655e;
+  --ink-faint: #a8a39b;
+  --line: #e8e5df;
+  --accent: #c6613f;
+  --rose: #f2dad4;
+  --note-1: #fbf6e8;
+  --note-2: #f4ecdd;
+  --note-3: #f8e4d6;
+  --note-4: #ede8da;
+  --del: #d85040;
+  --pin: #d4a85e;
+  --lock: #6b655e;
+  --moment-glow: rgba(198, 97, 63, 0.07);
+  --shadow-sm: 0 1px 2px rgba(42, 39, 36, 0.04), 0 8px 24px rgba(42, 39, 36, 0.04);
+  --shadow-md: 0 1px 2px rgba(42, 39, 36, 0.06), 0 12px 32px rgba(42, 39, 36, 0.06);
+  --shadow-pop: 0 4px 32px rgba(42, 39, 36, 0.18);
 
-  /* ── 背景层次 ───────────────────────── */
-  --bg: #F8F8F6;            /* 页面底色：暖白 */
-  --bg-card: #FFFFFF;       /* 卡片底色 */
-  --bg-sidebar: #F2F2EF;    /* 侧栏底色 */
-  --bg-human: #EEEEEC;      /* 用户消息气泡 */
+  /* ── home 旧别名 → v66 映射（避免现有 CSS 大面积破坏） ── */
+  --bg-card: var(--card);
+  --bg-sidebar: var(--bg-soft);
+  --bg-human: var(--card-soft);
+  --text: var(--ink);
+  --text-muted: var(--ink-soft);
+  --text-faint: var(--ink-faint);
+  --border: var(--line);
+  --border-soft: var(--line);
+  --accent-soft: var(--rose);
+  --accent-bg: var(--rose);
+  --green: #7ea67e;
+  --red: var(--del);
+  --blue: #6a8eb0;
+  --shadow-card: var(--shadow-sm);
 
-  /* ── 文字 ───────────────────────────── */
-  --text: #2C2A24;          /* 正文 */
-  --text-muted: #7E7867;    /* 次要文字 */
-  --text-faint: #ADA796;    /* 最淡文字 */
+  /* ── 记忆分类配色 ─────────────────── */
+  --cat-core: var(--accent);
+  --cat-scene: #7ea67e;
+  --cat-emotion: #c47060;
+  --cat-semantic: #6a8eb0;
+  --cat-image: #d4956a;
+  --cat-procedure: #8a8477;
 
-  /* ── 边框 ───────────────────────────── */
-  --border: #E5E2D4;
-  --border-soft: #EDEBE0;
+  /* ── 字体（v66 三件套）────────────── */
+  --serif-en: 'Cormorant Garamond', serif;
+  --serif-zh: 'Noto Serif SC', 'PingFang SC', 'Songti SC', serif;
+  --sans-zh: 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'Microsoft YaHei', sans-serif;
+  --sans-en: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
-  /* ── 语义色 ─────────────────────────── */
-  --green: #7EA67E;         /* 成功/在线 */
-  --red: #C47060;           /* 警告/超标 */
-  --blue: #6A8EB0;          /* 信息 */
+  /* 旧别名 */
+  --font-serif: var(--serif-zh);
+  --font-sans: var(--sans-zh);
 
-  /* ── 记忆分类配色 ───────────────────── */
-  --cat-core: #C96442;      /* 核心 */
-  --cat-scene: #7EA67E;     /* 情景 */
-  --cat-emotion: #C47060;   /* 情绪 */
-  --cat-semantic: #6A8EB0;  /* 语义 */
-  --cat-image: #D4956A;     /* 形象 */
-  --cat-procedure: #8A8477; /* 程序 */
+  /* ── 圆角 ────────────────────────── */
+  --radius-lg: 14px;
+  --radius-sm: 10px;
+  --radius-bubble: 20px;
 
-  /* ── 字体 ───────────────────────────── */
-  /* v66 思路：英文像诗 / 中文像信 / 数字像表 */
-  --font-serif-en: 'Cormorant Garamond', 'Source Serif 4', Georgia, serif;
-  --font-serif-zh: 'Noto Serif SC', 'Source Serif 4', 'Songti SC', Georgia, serif;
-  --font-sans-en: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-
-  /* 保留旧别名，避免老组件大面积破坏 */
-  --font-serif: var(--font-serif-zh);
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Microsoft YaHei', Roboto, 'Helvetica Neue', Arial, sans-serif;
-
-  /* ── 圆角 ───────────────────────────── */
-  --radius-lg: 12px;        /* 大卡片 */
-  --radius-sm: 8px;         /* 小卡片、按钮 */
-  --radius-bubble: 20px;    /* 聊天气泡 */
-
-  /* ── 阴影 ───────────────────────────── */
-  --shadow-card: 0 1px 2px rgba(44, 42, 36, 0.04), 0 1px 8px rgba(44, 42, 36, 0.03);
-
-  /* ── 布局 ───────────────────────────── */
+  /* ── 布局 ────────────────────────── */
   --tabbar-height: 60px;
-  --content-max: 480px;     /* 手机优先，桌面端居中限宽 */
+  --content-max: 680px;
 }
 
-/* 未来：深色主题（三套光之"深夜"） */
-/* [data-theme="night"] { ... } */
+[data-theme='night'] {
+  --bg: #000000;
+  --bg-soft: #000000;
+  --card: #000000;
+  --card-soft: #060606;
+  --ink: #e8e5de;
+  --ink-soft: #948f84;
+  --ink-faint: #4a4640;
+  --line: #232220;
+  --accent: #d87e5c;
+  --rose: #2a1614;
+  --note-1: #060604;
+  --note-2: #050503;
+  --note-3: #060503;
+  --note-4: #050504;
+  --del: #b83b30;
+  --pin: #b0884a;
+  --lock: #948f84;
+  --moment-glow: rgba(216, 126, 92, 0.1);
+  --shadow-sm: 0 0 0 1px #1f1e1c;
+  --shadow-md: 0 0 0 1px #2a2926, 0 4px 20px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 0 0 1px #2a2926, 0 8px 40px rgba(0, 0, 0, 0.7);
+}

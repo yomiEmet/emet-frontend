@@ -13,18 +13,21 @@ body,
   height: 100%;
 }
 
+/* v66 body 风格：sans-zh + 1.85 行距 + 300 字重 */
 body {
-  font-family: var(--font-sans);
-  color: var(--text);
+  font-family: var(--sans-zh);
+  color: var(--ink);
   background: var(--bg);
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.85;
+  font-weight: 300;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background 0.4s, color 0.4s;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-serif-zh);
+  font-family: var(--serif-zh);
   font-weight: 500;
   line-height: 1.35;
 }
