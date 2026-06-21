@@ -8,6 +8,7 @@ import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, formatD
 import { DIARY_AUTHORS, diaryAuthorLabel } from '../utils/authors.js'
 import { showToast } from '../utils/toast.js'
 import { memoryAll, countByCategory, momentAll, diaryAll, diaryDate, getData } from '../api.js'
+import { smartSearch } from '../utils/search.js'
 
 const FILTERS = [{ key: 'all', label: '全部' }, ...CATEGORIES]
 
@@ -116,21 +117,19 @@ function MemoryManage({ mode = 'memory' }) {
     let arr = all
     if (isLog) arr = arr.filter((m) => m.tags?.includes('log'))
     if (category !== 'all') arr = arr.filter((m) => m.category === category)
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     if (q) {
-      arr = arr.filter(
-        (m) =>
-          m.content.toLowerCase().includes(q) ||
-          m.tags.some((t) => t.toLowerCase().includes(q)),
-      )
+      // 有查询：smartSearch 按相关性排（关键词分词+三维加权+沿藤蔓走一步）；忽略 sortKey
+      arr = smartSearch(arr, q, { withLinked: true })
+    } else {
+      // 无查询：保留旧版排序（重要度/编辑日期/创建日期/标题 + 升降序）
+      arr = [...arr]
+      if (sortKey === 'importance') arr.sort((a, b) => b.rawImportance - a.rawImportance)
+      else if (sortKey === 'edit') arr.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
+      else if (sortKey === 'title') arr.sort((a, b) => a.content.localeCompare(b.content))
+      else arr.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      if (sortOrder === 'asc') arr.reverse()
     }
-    arr = [...arr]
-    // 完整排序（旧版 A4）：重要度 / 编辑日期 / 创建日期 / 标题 + 升降序
-    if (sortKey === 'importance') arr.sort((a, b) => b.rawImportance - a.rawImportance)
-    else if (sortKey === 'edit') arr.sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))
-    else if (sortKey === 'title') arr.sort((a, b) => a.content.localeCompare(b.content))
-    else arr.sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-    if (sortOrder === 'asc') arr.reverse()
     arr.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)) // 置顶恒在最前
     return arr
   }, [all, category, query, sortKey, sortOrder])
