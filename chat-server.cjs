@@ -9,7 +9,9 @@
 // 关进程 / 关页面 / Ctrl+C 都会断流。
 
 const http = require('http')
-const { spawn } = require('child_process')
+const path = require('path')
+const fs = require('fs')
+const { spawn, execSync } = require('child_process')
 
 const HOST = '127.0.0.1'
 const PORT = 8000
@@ -35,7 +37,27 @@ const EXTRA_ORIGINS = (process.env.CC_BRIDGE_CORS || '')
 const CORS_ORIGINS = new Set([...DEFAULT_ORIGINS, ...EXTRA_ORIGINS])
 
 const IS_WIN = process.platform === 'win32'
-const CLAUDE = IS_WIN ? 'claude.cmd' : 'claude'
+
+// 找到 claude 的真实可执行文件：
+// - Windows：优先 npm 全局里的 claude.exe（避开 Node 24 spawn .cmd 的 EINVAL）
+// - 其它：直接走 claude，让 PATH 解析
+function resolveClaude() {
+  if (!IS_WIN) return { file: 'claude', useShell: false }
+  // 先试常见 npm 全局位置
+  const candidates = []
+  if (process.env.APPDATA) candidates.push(path.join(process.env.APPDATA, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'))
+  try {
+    const npmRoot = execSync('npm root -g', { encoding: 'utf8', windowsHide: true }).trim()
+    if (npmRoot) candidates.push(path.join(npmRoot, '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'))
+  } catch { /* npm 不在 PATH 也无所谓，下面还有兜底 */ }
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return { file: p, useShell: false } } catch { /* ignore */ }
+  }
+  // 兜底：用 shell: true 让 cmd.exe 解析 claude.cmd
+  return { file: 'claude', useShell: true }
+}
+
+const CLAUDE_RUN = resolveClaude()
 
 function corsHeaders(req) {
   const origin = req.headers.origin
@@ -87,18 +109,31 @@ function sseSend(res, event, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`)
 }
 
-// 把前端给的 messages 数组拼成一段对话脚本喂给 claude -p。
-// claude -p 是一次性问答，没有"会话"概念，所以历史得我们自己塞进 prompt 里。
-function buildPrompt(messages) {
-  const lines = []
-  for (const m of messages) {
-    const who = m.role === 'user' ? '我' : '你'
-    const txt = (m.content || '').toString()
-    if (!txt.trim()) continue
-    lines.push(`${who}：${txt}`)
+// claude -p 是一次性问答。我们把"最后一条用户消息"当 prompt（喂 stdin），
+// 之前的历史塞进 system 提示里作为上下文——这样 claude 知道"我现在要回答这一句"，
+// 而不会把"我：xxx 你："当成对话脚本去续写。
+function buildPromptText(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') return (messages[i].content || '').toString()
   }
-  lines.push('你：')
-  return lines.join('\n\n')
+  return ''
+}
+
+function composeSystem(baseSystem, messages) {
+  const sys = (baseSystem || '').trim()
+  // 历史 = 除最后一条 user 之外的所有消息
+  let lastUserIdx = -1
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') { lastUserIdx = i; break }
+  }
+  const history = lastUserIdx >= 0 ? messages.slice(0, lastUserIdx) : messages
+  if (history.length === 0) return sys
+  const transcript = history
+    .map((m) => (m.role === 'user' ? '用户' : '你') + '：' + (m.content || '').toString().trim())
+    .filter((s) => s.length > 2)
+    .join('\n')
+  if (!transcript) return sys
+  return (sys ? sys + '\n\n' : '') + '以下是你与用户之前的对话历史，仅作为上下文参考。请直接回答用户最新的一句：\n' + transcript
 }
 
 const server = http.createServer(async (req, res) => {
@@ -110,7 +145,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(req) })
-    res.end(JSON.stringify({ ok: true, host: HOST, port: PORT, claude: CLAUDE }))
+    res.end(JSON.stringify({ ok: true, host: HOST, port: PORT, claude: CLAUDE_RUN.file }))
     return
   }
 
@@ -138,21 +173,23 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  const prompt = buildPrompt(messages)
+  const promptText = buildPromptText(messages)
+  const systemFull = composeSystem(system, messages)
 
   // claude -p --tools ""（关全部工具）--system-prompt（替换 agent 默认提示）
   // 不传 --output-format → 默认 text，stdout 直接吐字
   const args = ['-p', '--tools', '']
-  if (system && system.trim()) args.push('--system-prompt', system)
+  if (systemFull) args.push('--system-prompt', systemFull)
 
   writeSseHead(res, req)
 
-  const child = spawn(CLAUDE, args, {
+  const child = spawn(CLAUDE_RUN.file, args, {
     stdio: ['pipe', 'pipe', 'pipe'],
+    shell: CLAUDE_RUN.useShell,
     windowsHide: true,
   })
 
-  child.stdin.write(prompt, 'utf8')
+  child.stdin.write(promptText, 'utf8')
   child.stdin.end()
 
   child.stdout.setEncoding('utf8')
@@ -190,7 +227,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log('Emet 本机聊天后端已启动')
   console.log(`  地址：http://${HOST}:${PORT}`)
-  console.log(`  CLI：${CLAUDE}`)
+  console.log(`  CLI：${CLAUDE_RUN.file}${CLAUDE_RUN.useShell ? '（shell 模式）' : ''}`)
   console.log(`  鉴权：${AUTH_TOKEN ? '✓ 已开（环境变量 CC_BRIDGE_TOKEN）' : '⚠ 未设 token —— 仅适合纯本机用；公网请设 CC_BRIDGE_TOKEN'}`)
   if (EXTRA_ORIGINS.length) {
     console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
