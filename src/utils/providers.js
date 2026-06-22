@@ -20,44 +20,51 @@ import { schedulePushSettings, notifyKeyChanged } from './settingsSync.js'
 const LS = 'emet.providers'
 const LS_TARGET = 'emet.chatTarget'
 
+// 跟 CC 当前可选的模型保持一致：
+// - Opus 4.8 / Sonnet 4.6 / Haiku 4.5 是主推
+// - Opus 4.7 / 4.6 在 CC 的"More models"里能选
+// - Fable 5 当前 Anthropic 标 Currently unavailable，先不列；以后回来再补
 export const DEFAULT_ANTHROPIC_MODELS = [
-  'claude-fable-5',
   'claude-opus-4-8',
-  'claude-opus-4-7',
   'claude-sonnet-4-6',
   'claude-haiku-4-5',
+  'claude-opus-4-7',
+  'claude-opus-4-6',
 ]
 
 // 本机 Claude（订阅）走的是同一批模型，列表与 DEFAULT_ANTHROPIC_MODELS 完全一致
 // 全名形式直接传给 claude --model，claude -p 支持全名也支持别名
 export const LOCAL_CLAUDE_MODELS = DEFAULT_ANTHROPIC_MODELS
 
-// 老的本机供应商可能只有 ['本机订阅'] 或前一版 ['sonnet','opus','haiku','fable'] 这种过时清单；
-// 一律迁到当前 LOCAL_CLAUDE_MODELS（与 Anthropic 原生同步的全名列表）。
-const LEGACY_PLACEHOLDER = '本机订阅'
-const LEGACY_ALIASES = new Set(['sonnet', 'opus', 'haiku', 'fable'])
+// 本机 Claude 的模型清单始终跟随 LOCAL_CLAUDE_MODELS（Anthropic 那边可选模型变化时自动跟齐）。
+// 与现存清单不一致就覆盖：fable-5 下架要清掉，opus-4-6 上架要补上，都靠这一步。
+function pickLocalDefault() {
+  return LOCAL_CLAUDE_MODELS.find((m) => m.includes('sonnet')) || LOCAL_CLAUDE_MODELS[0]
+}
 function migrateLocalClaude(arr) {
   let changed = false
   for (const p of arr) {
     if (p.protocol !== 'claude-cli') continue
-    const needs =
-      (p.models.length === 1 && p.models[0] === LEGACY_PLACEHOLDER) ||
-      p.models.every((m) => LEGACY_ALIASES.has(m))
-    if (needs) {
-      p.models = [...LOCAL_CLAUDE_MODELS]
-      p.defaultModel = LOCAL_CLAUDE_MODELS.find((m) => m.includes('sonnet')) || LOCAL_CLAUDE_MODELS[0]
-      changed = true
-    }
+    const same =
+      Array.isArray(p.models) &&
+      p.models.length === LOCAL_CLAUDE_MODELS.length &&
+      p.models.every((m, i) => m === LOCAL_CLAUDE_MODELS[i])
+    if (same) continue
+    p.models = [...LOCAL_CLAUDE_MODELS]
+    if (!LOCAL_CLAUDE_MODELS.includes(p.defaultModel)) p.defaultModel = pickLocalDefault()
+    changed = true
   }
   if (changed) {
     try {
       localStorage.setItem(LS, JSON.stringify(arr))
-      // 当前 target 如果还指着旧 model，也迁一下
+      // 当前选中的 model 已经不在新清单里 → 把指向本机供应商的 target 切到默认（sonnet）
       try {
         const t = JSON.parse(localStorage.getItem(LS_TARGET) || 'null')
-        if (t && (t.model === LEGACY_PLACEHOLDER || LEGACY_ALIASES.has(t.model))) {
-          const target = LOCAL_CLAUDE_MODELS.find((m) => m.includes('sonnet')) || LOCAL_CLAUDE_MODELS[0]
-          localStorage.setItem(LS_TARGET, JSON.stringify({ providerId: t.providerId, model: target }))
+        if (t && !LOCAL_CLAUDE_MODELS.includes(t.model)) {
+          const owner = arr.find((p) => p.id === t.providerId)
+          if (owner?.protocol === 'claude-cli') {
+            localStorage.setItem(LS_TARGET, JSON.stringify({ providerId: t.providerId, model: pickLocalDefault() }))
+          }
         }
       } catch { /* ignore */ }
     } catch { /* localStorage 写不进去就算了 */ }
