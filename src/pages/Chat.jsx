@@ -5,7 +5,7 @@ import { marked } from 'marked'
 import { chatSystemPrompt } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
-import { loadProviders, getActiveTarget, setActiveTarget } from '../utils/providers.js'
+import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from '../utils/providers.js'
 import { loadAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
@@ -418,7 +418,7 @@ export default function Chat() {
               </button>
             </div>
             <div className="model-sheet">
-              {loadProviders().filter((p) => p.enabled && p.apiKey).length === 0 ? (
+              {loadProviders().filter(isProviderReady).length === 0 ? (
                 <p className="faint ts-empty">
                   没有可用供应商，去 <Link to="/settings" onClick={() => setModelOpen(false)}>设置页</Link> 添加。
                 </p>

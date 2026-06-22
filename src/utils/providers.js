@@ -2,11 +2,18 @@
 // 多供应商管理（参考 Kelivo）。
 // localStorage emet.providers = [{
 //   id, name, baseUrl, apiKey,
-//   protocol: 'anthropic' | 'openai',   // 原生 / OpenAI 兼容（中转站常见）
+//   protocol: 'anthropic' | 'openai' | 'claude-cli',
+//     // anthropic   = 原生 API（API key 烧余额）
+//     // openai      = OpenAI 兼容（中转站常见，API key 烧余额）
+//     // claude-cli  = 本机 chat-server.cjs → claude -p（烧订阅额度，不需要 apiKey）
 //   models: ['model-id', ...], defaultModel, enabled
 // }]
 // emet.chatTarget = { providerId, model }  当前聊天用哪个
 // ═══════════════════════════════════════════════════════════
+
+// claude-cli 类型不需要 apiKey 也算"可用"；其它协议必须有 key。
+export const isProviderReady = (p) => p.enabled && (p.protocol === 'claude-cli' || !!p.apiKey)
+const isReady = isProviderReady
 
 import { schedulePushSettings, notifyKeyChanged } from './settingsSync.js'
 
@@ -61,7 +68,7 @@ export function saveProviders(arr) {
 
 // 当前聊天目标：{ provider, model }；没有可用供应商返回 null
 export function getActiveTarget() {
-  const enabled = loadProviders().filter((p) => p.enabled && p.apiKey)
+  const enabled = loadProviders().filter(isReady)
   let t = null
   try {
     t = JSON.parse(localStorage.getItem(LS_TARGET))
