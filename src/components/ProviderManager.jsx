@@ -21,7 +21,7 @@ const LOCAL_CLAUDE_PRESET = {
   apiKey: '',
   protocol: 'claude-cli',
   models: [...LOCAL_CLAUDE_MODELS],
-  defaultModel: 'sonnet',
+  defaultModel: LOCAL_CLAUDE_MODELS.find((m) => m.includes('sonnet')) || LOCAL_CLAUDE_MODELS[0],
   enabled: true,
 }
 

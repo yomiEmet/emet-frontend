@@ -28,19 +28,24 @@ export const DEFAULT_ANTHROPIC_MODELS = [
   'claude-haiku-4-5',
 ]
 
-// 本机 Claude（订阅）支持的模型别名，传给 claude --model
-// 顺序就是下拉里出现的顺序
-export const LOCAL_CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'fable']
+// 本机 Claude（订阅）走的是同一批模型，列表与 DEFAULT_ANTHROPIC_MODELS 完全一致
+// 全名形式直接传给 claude --model，claude -p 支持全名也支持别名
+export const LOCAL_CLAUDE_MODELS = DEFAULT_ANTHROPIC_MODELS
 
-// 老的本机供应商可能只有 ['本机订阅'] 这种占位 model，迁到正式模型列表上
+// 老的本机供应商可能只有 ['本机订阅'] 或前一版 ['sonnet','opus','haiku','fable'] 这种过时清单；
+// 一律迁到当前 LOCAL_CLAUDE_MODELS（与 Anthropic 原生同步的全名列表）。
+const LEGACY_PLACEHOLDER = '本机订阅'
+const LEGACY_ALIASES = new Set(['sonnet', 'opus', 'haiku', 'fable'])
 function migrateLocalClaude(arr) {
   let changed = false
   for (const p of arr) {
     if (p.protocol !== 'claude-cli') continue
-    const onlyPlaceholder = p.models.length === 1 && p.models[0] === '本机订阅'
-    if (onlyPlaceholder) {
+    const needs =
+      (p.models.length === 1 && p.models[0] === LEGACY_PLACEHOLDER) ||
+      p.models.every((m) => LEGACY_ALIASES.has(m))
+    if (needs) {
       p.models = [...LOCAL_CLAUDE_MODELS]
-      p.defaultModel = 'sonnet'
+      p.defaultModel = LOCAL_CLAUDE_MODELS.find((m) => m.includes('sonnet')) || LOCAL_CLAUDE_MODELS[0]
       changed = true
     }
   }
@@ -50,8 +55,9 @@ function migrateLocalClaude(arr) {
       // 当前 target 如果还指着旧 model，也迁一下
       try {
         const t = JSON.parse(localStorage.getItem(LS_TARGET) || 'null')
-        if (t && t.model === '本机订阅') {
-          localStorage.setItem(LS_TARGET, JSON.stringify({ providerId: t.providerId, model: 'sonnet' }))
+        if (t && (t.model === LEGACY_PLACEHOLDER || LEGACY_ALIASES.has(t.model))) {
+          const target = LOCAL_CLAUDE_MODELS.find((m) => m.includes('sonnet')) || LOCAL_CLAUDE_MODELS[0]
+          localStorage.setItem(LS_TARGET, JSON.stringify({ providerId: t.providerId, model: target }))
         }
       } catch { /* ignore */ }
     } catch { /* localStorage 写不进去就算了 */ }
