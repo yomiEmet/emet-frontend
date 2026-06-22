@@ -2373,10 +2373,12 @@
 
 .ts-panel {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 0;
-  transform: translateX(-50%);
+  margin: 0 auto;
   width: min(100%, var(--content-max));
+  max-width: var(--content-max);
   max-height: 70vh;
   display: flex;
   flex-direction: column;
@@ -2935,10 +2937,12 @@
 /* 历史对话底部抽屉 */
 .chat-history {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 0;
-  transform: translateX(-50%);
+  margin: 0 auto;
   width: min(100%, var(--content-max));
+  max-width: var(--content-max);
   max-height: 65vh;
   display: flex;
   flex-direction: column;
