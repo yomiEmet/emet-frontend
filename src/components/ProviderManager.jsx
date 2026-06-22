@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, X, Pencil, Trash2 } from 'lucide-react'
-import { loadProviders, saveProviders, DEFAULT_ANTHROPIC_MODELS } from '../utils/providers.js'
+import { loadProviders, saveProviders, DEFAULT_ANTHROPIC_MODELS, LOCAL_CLAUDE_MODELS } from '../utils/providers.js'
 import { showToast } from '../utils/toast.js'
 
 const mask = (k) => (k ? '···· ' + k.slice(-4) : '未填')
@@ -20,8 +20,8 @@ const LOCAL_CLAUDE_PRESET = {
   baseUrl: 'http://localhost:8000',
   apiKey: '',
   protocol: 'claude-cli',
-  models: ['本机订阅'],
-  defaultModel: '本机订阅',
+  models: [...LOCAL_CLAUDE_MODELS],
+  defaultModel: 'sonnet',
   enabled: true,
 }
 

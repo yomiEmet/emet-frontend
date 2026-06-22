@@ -28,6 +28,37 @@ export const DEFAULT_ANTHROPIC_MODELS = [
   'claude-haiku-4-5',
 ]
 
+// 本机 Claude（订阅）支持的模型别名，传给 claude --model
+// 顺序就是下拉里出现的顺序
+export const LOCAL_CLAUDE_MODELS = ['sonnet', 'opus', 'haiku', 'fable']
+
+// 老的本机供应商可能只有 ['本机订阅'] 这种占位 model，迁到正式模型列表上
+function migrateLocalClaude(arr) {
+  let changed = false
+  for (const p of arr) {
+    if (p.protocol !== 'claude-cli') continue
+    const onlyPlaceholder = p.models.length === 1 && p.models[0] === '本机订阅'
+    if (onlyPlaceholder) {
+      p.models = [...LOCAL_CLAUDE_MODELS]
+      p.defaultModel = 'sonnet'
+      changed = true
+    }
+  }
+  if (changed) {
+    try {
+      localStorage.setItem(LS, JSON.stringify(arr))
+      // 当前 target 如果还指着旧 model，也迁一下
+      try {
+        const t = JSON.parse(localStorage.getItem(LS_TARGET) || 'null')
+        if (t && t.model === '本机订阅') {
+          localStorage.setItem(LS_TARGET, JSON.stringify({ providerId: t.providerId, model: 'sonnet' }))
+        }
+      } catch { /* ignore */ }
+    } catch { /* localStorage 写不进去就算了 */ }
+  }
+  return arr
+}
+
 export function loadProviders() {
   let arr = null
   try {
@@ -35,7 +66,7 @@ export function loadProviders() {
   } catch {
     /* 坏数据当不存在 */
   }
-  if (Array.isArray(arr)) return arr
+  if (Array.isArray(arr)) return migrateLocalClaude(arr)
 
   // ── 迁移：旧的单 Key 配置（emet.anthropicKey / emet.model）→ 第一个供应商
   const oldKey = localStorage.getItem('emet.anthropicKey')

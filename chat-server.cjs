@@ -166,7 +166,7 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  const { system = '', messages = [] } = payload
+  const { system = '', messages = [], model = '' } = payload
   if (!Array.isArray(messages) || messages.length === 0) {
     res.writeHead(400, { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(req) })
     res.end(JSON.stringify({ error: 'messages required' }))
@@ -180,6 +180,7 @@ const server = http.createServer(async (req, res) => {
   // 不传 --output-format → 默认 text，stdout 直接吐字
   const args = ['-p', '--tools', '']
   if (systemFull) args.push('--system-prompt', systemFull)
+  if (model && model.trim()) args.push('--model', model.trim())
 
   writeSseHead(res, req)
 

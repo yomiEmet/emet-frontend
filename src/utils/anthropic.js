@@ -30,7 +30,7 @@ export async function streamChat({ system, messages, temperature, maxTokens, too
   const { provider, model } = target
   if (provider.protocol === 'claude-cli') {
     // 本机 chat-server.cjs；工具调用不支持（chat-server 已用 --tools "" 关掉）
-    return streamClaudeCli({ provider, system, messages, signal, onDelta })
+    return streamClaudeCli({ provider, model, system, messages, signal, onDelta })
   }
   if (provider.protocol === 'openai') {
     // 第一版工具调用只在 Anthropic 原生启用；OpenAI 兼容照旧纯文本聊天
@@ -190,17 +190,20 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 // 配合 chat-server.cjs（项目根目录，node 启动）；后端协议：
 //   POST {baseUrl}/chat   body { system, messages }
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
-async function streamClaudeCli({ provider, system, messages, signal, onDelta }) {
+async function streamClaudeCli({ provider, model, system, messages, signal, onDelta }) {
   const base = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 启动时的 CC_BRIDGE_TOKEN 环境变量
   const headers = { 'content-type': 'application/json' }
   if (provider.apiKey) headers.authorization = 'Bearer ' + provider.apiKey
+  // model 透传给后端，由 chat-server 转成 claude --model 参数；
+  // 跳过"本机订阅"这种占位（让 claude 走自己的默认）
+  const payloadModel = model && model !== '本机订阅' ? model : ''
   let res
   try {
     res = await fetch(base + '/chat', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ system, messages }),
+      body: JSON.stringify({ system, messages, model: payloadModel }),
       signal,
     })
   } catch (e) {
