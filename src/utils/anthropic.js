@@ -3,6 +3,8 @@
 //   SSE 事件 content_block_delta.text_delta
 // - OpenAI 兼容：POST {base}/v1/chat/completions，Authorization Bearer 头，
 //   system 放 messages 第一条，SSE data 行 choices[0].delta.content，[DONE] 结束
+// - 本机 claude-cli：POST {baseUrl}/chat，把对话+system 交给本机 chat-server.cjs，
+//   后端 spawn `claude -p` 把订阅额度当聊天用，文字流 SSE 吐回（无 [DONE]，靠 done/error 事件）
 import { getActiveTarget } from './providers.js'
 
 // baseUrl 归一：去尾斜杠；没带 /v1 的补上
@@ -26,6 +28,10 @@ export async function streamChat({ system, messages, temperature, maxTokens, too
   const target = getActiveTarget()
   if (!target) throw new Error('NO_PROVIDER')
   const { provider, model } = target
+  if (provider.protocol === 'claude-cli') {
+    // 本机 chat-server.cjs；工具调用不支持（chat-server 已用 --tools "" 关掉）
+    return streamClaudeCli({ provider, system, messages, signal, onDelta })
+  }
   if (provider.protocol === 'openai') {
     // 第一版工具调用只在 Anthropic 原生启用；OpenAI 兼容照旧纯文本聊天
     return streamOpenAI({ provider, model, system, messages, temperature, maxTokens, onDelta, onThinking, signal })
@@ -178,6 +184,67 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
   }
 
   return full // 达到轮数上限兜底
+}
+
+// ── 本机 Claude CLI（走订阅）─────────────────────────────
+// 配合 chat-server.cjs（项目根目录，node 启动）；后端协议：
+//   POST {baseUrl}/chat   body { system, messages }
+//   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
+async function streamClaudeCli({ provider, system, messages, signal, onDelta }) {
+  const base = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
+  let res
+  try {
+    res = await fetch(base + '/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ system, messages }),
+      signal,
+    })
+  } catch (e) {
+    throw new Error('连不上本机后端：' + (e?.message || e) + '。请先在终端跑 `node chat-server.cjs`')
+  }
+  if (!res.ok) await throwHttpError(res)
+
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  let full = ''
+  let err = null
+
+  outer: for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    // SSE 帧以空行（\n\n）分隔
+    let sep
+    while ((sep = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, sep)
+      buf = buf.slice(sep + 2)
+      let event = 'message'
+      let data = ''
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) data += line.slice(5).trim()
+      }
+      if (event === 'error') {
+        let msg = '本机后端错误'
+        try { msg = JSON.parse(data)?.message || msg } catch { /* 原样 */ }
+        err = new Error(msg)
+        break outer
+      }
+      if (event === 'done') break outer
+      if (data) {
+        let payload
+        try { payload = JSON.parse(data) } catch { continue }
+        if (payload?.text) {
+          full += payload.text
+          onDelta?.(payload.text, full)
+        }
+      }
+    }
+  }
+  if (err) throw err
+  return full
 }
 
 // ── OpenAI 兼容（中转站常见格式）─────────────────────────
