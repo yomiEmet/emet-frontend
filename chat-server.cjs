@@ -14,8 +14,25 @@ const { spawn } = require('child_process')
 const HOST = '127.0.0.1'
 const PORT = 8000
 
-// 允许的前端来源：本机 vite dev（5173）+ vite preview（4173）
-const CORS_ORIGINS = new Set(['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173', 'http://127.0.0.1:4173'])
+// ── 鉴权：可选的 Bearer Token（环境变量 CC_BRIDGE_TOKEN）─────────────
+// 设了：所有 /chat 请求必须带 Authorization: Bearer <同样的字符串>
+// 没设：不校验。仅推荐"本机回环、不挂公网"时这么用；挂公网必须设。
+const AUTH_TOKEN = (process.env.CC_BRIDGE_TOKEN || '').trim()
+
+// ── CORS 白名单 ─────────────────────────────────────
+// 默认放行本机 vite dev/preview；公网部署时用 CC_BRIDGE_CORS 环境变量
+// 追加（逗号分隔）。例：CC_BRIDGE_CORS=https://emet.pages.dev
+const DEFAULT_ORIGINS = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+]
+const EXTRA_ORIGINS = (process.env.CC_BRIDGE_CORS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+const CORS_ORIGINS = new Set([...DEFAULT_ORIGINS, ...EXTRA_ORIGINS])
 
 const IS_WIN = process.platform === 'win32'
 const CLAUDE = IS_WIN ? 'claude.cmd' : 'claude'
@@ -26,10 +43,21 @@ function corsHeaders(req) {
   return {
     'access-control-allow-origin': allow,
     'access-control-allow-methods': 'POST, GET, OPTIONS',
-    'access-control-allow-headers': 'content-type',
+    'access-control-allow-headers': 'content-type, authorization',
     'access-control-max-age': '86400',
     vary: 'origin',
   }
+}
+
+// 抽出来，缺/错 token 一律 401，方便排查
+function checkAuth(req, res) {
+  if (!AUTH_TOKEN) return true
+  const h = (req.headers.authorization || '').trim()
+  const got = h.startsWith('Bearer ') ? h.slice(7).trim() : ''
+  if (got && got === AUTH_TOKEN) return true
+  res.writeHead(401, { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(req) })
+  res.end(JSON.stringify({ error: 'auth required: 请求需带 Authorization: Bearer <CC_BRIDGE_TOKEN>' }))
+  return false
 }
 
 function readBody(req) {
@@ -91,6 +119,8 @@ const server = http.createServer(async (req, res) => {
     res.end()
     return
   }
+
+  if (!checkAuth(req, res)) return
 
   let payload
   try {
@@ -161,6 +191,10 @@ server.listen(PORT, HOST, () => {
   console.log('Emet 本机聊天后端已启动')
   console.log(`  地址：http://${HOST}:${PORT}`)
   console.log(`  CLI：${CLAUDE}`)
+  console.log(`  鉴权：${AUTH_TOKEN ? '✓ 已开（环境变量 CC_BRIDGE_TOKEN）' : '⚠ 未设 token —— 仅适合纯本机用；公网请设 CC_BRIDGE_TOKEN'}`)
+  if (EXTRA_ORIGINS.length) {
+    console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
+  }
   console.log('  前端打开 http://localhost:5173 → 设置页切到"本机 Claude（订阅）"供应商即可开聊')
   console.log('  退出按 Ctrl+C')
 })

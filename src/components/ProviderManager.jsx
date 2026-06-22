@@ -221,9 +221,21 @@ function ProviderForm({ draft, onSave, onClose }) {
           </label>
 
           {d.protocol === 'claude-cli' ? (
-            <p className="faint prov-tip" style={{ margin: '2px 0 8px' }}>
-              本机回环，不需要 API Key。先在终端跑 <code>node chat-server.cjs</code> 再切到这里。
-            </p>
+            <>
+              <label className="prov-field">
+                <span>暗号（Bearer Token）</span>
+                <input
+                  type="password"
+                  value={d.apiKey}
+                  placeholder="启动 chat-server 时的 CC_BRIDGE_TOKEN 同一串"
+                  onChange={(e) => set('apiKey', e.target.value)}
+                />
+              </label>
+              <p className="faint prov-tip" style={{ margin: '2px 0 8px' }}>
+                只在本机用可留空。挂公网（cloudflared）<b>必须填</b>，且与启动 chat-server 时的环境变量
+                <code> CC_BRIDGE_TOKEN </code>逐字相同。
+              </p>
+            </>
           ) : (
             <label className="prov-field">
               <span>API Key</span>

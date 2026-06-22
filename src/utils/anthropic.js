@@ -192,11 +192,14 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
 async function streamClaudeCli({ provider, system, messages, signal, onDelta }) {
   const base = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
+  // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 启动时的 CC_BRIDGE_TOKEN 环境变量
+  const headers = { 'content-type': 'application/json' }
+  if (provider.apiKey) headers.authorization = 'Bearer ' + provider.apiKey
   let res
   try {
     res = await fetch(base + '/chat', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({ system, messages }),
       signal,
     })
