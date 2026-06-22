@@ -372,6 +372,14 @@ export function dailyConfigSet(cfg) {
   return writeJSON('POST', '/api/config/daily', cfg)
 }
 
+// ── 凌晨守护（iOS app 事件触发，凌晨时段催睡）──
+export function nightGuardConfigGet() {
+  return getJSON('/api/config/night-guard') // { config: { enabled, start, end, monitor_apps, cooldown_min } }
+}
+export function nightGuardConfigSet(cfg) {
+  return writeJSON('POST', '/api/config/night-guard', cfg)
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()
