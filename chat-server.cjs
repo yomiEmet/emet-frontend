@@ -174,12 +174,23 @@ const server = http.createServer(async (req, res) => {
   }
 
   const promptText = buildPromptText(messages)
-  const systemFull = composeSystem(system, messages)
+  const baseSystem = composeSystem(system, messages)
+  const modelUsed = model && model.trim() ? model.trim() : '(claude 默认模型)'
+
+  // 给模型本人贴一张"身份牌"——否则它真的不知道自己是哪个版本（详见和 CC 的对照说明）。
+  // claude.exe 把 --model X 路由到对应权重，但权重本身没在训练时见过"你叫 X"，
+  // 所以只能我们这边在 system prompt 里写一句。
+  const systemFull = baseSystem
+    ? `${baseSystem}\n\n（系统说明：当前调用你的具体模型是 ${modelUsed}。如果用户问"你是哪个模型 / 哪个版本"，你就如实回答这个字符串。）`
+    : `（系统说明：你当前的具体模型是 ${modelUsed}。如果用户问"你是哪个模型"，如实回答。）`
+
+  // 启动时打一行日志，证明"前端选的"和"-p 传的"一字不差
+  const stampIn = new Date().toISOString().slice(11, 19)
+  console.log(`[${stampIn}] → claude --model ${modelUsed}`)
 
   // claude -p --tools ""（关全部工具）--system-prompt（替换 agent 默认提示）
   // 不传 --output-format → 默认 text，stdout 直接吐字
-  const args = ['-p', '--tools', '']
-  if (systemFull) args.push('--system-prompt', systemFull)
+  const args = ['-p', '--tools', '', '--system-prompt', systemFull]
   if (model && model.trim()) args.push('--model', model.trim())
 
   writeSseHead(res, req)
@@ -212,6 +223,8 @@ const server = http.createServer(async (req, res) => {
   })
 
   child.on('close', (code) => {
+    const stampOut = new Date().toISOString().slice(11, 19)
+    console.log(`[${stampOut}] ← claude --model ${modelUsed} 完成 (exit ${code})`)
     if (code !== 0) {
       sseSend(res, 'error', { message: `claude 退出码 ${code}` + (stderrBuf ? '：' + stderrBuf.trim().slice(0, 500) : '') })
     } else {
