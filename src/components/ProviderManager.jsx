@@ -5,10 +5,25 @@ import { showToast } from '../utils/toast.js'
 
 const mask = (k) => (k ? '···· ' + k.slice(-4) : '未填')
 
+const protocolLabel = (p) =>
+  p === 'openai' ? 'OpenAI 兼容' : p === 'claude-cli' ? '本机 Claude' : 'Anthropic'
+
 const PROTOCOLS = [
   { key: 'anthropic', label: 'Anthropic 原生' },
   { key: 'openai', label: 'OpenAI 兼容' },
+  { key: 'claude-cli', label: '本机 Claude（订阅）' },
 ]
+
+// 一键预设：在家本机起 chat-server.cjs 之后直接选这个供应商即可烧订阅额度
+const LOCAL_CLAUDE_PRESET = {
+  name: '本机 Claude（订阅）',
+  baseUrl: 'http://localhost:8000',
+  apiKey: '',
+  protocol: 'claude-cli',
+  models: ['本机订阅'],
+  defaultModel: '本机订阅',
+  enabled: true,
+}
 
 // 设置页"供应商管理"分组（参考 Kelivo：多供应商 + 各自模型列表）
 export default function ProviderManager() {
@@ -43,6 +58,15 @@ export default function ProviderManager() {
       enabled: true,
     })
 
+  const addLocalClaude = () => {
+    if (providers.some((p) => p.protocol === 'claude-cli')) {
+      showToast('已有本机 Claude 供应商')
+      return
+    }
+    persist([...providers, { ...LOCAL_CLAUDE_PRESET, id: 'p-local-' + Date.now() }])
+    showToast('已添加；先在终端 node chat-server.cjs')
+  }
+
   const save = (draft) => {
     if (draft.id) {
       persist(providers.map((p) => (p.id === draft.id ? draft : p)))
@@ -65,7 +89,7 @@ export default function ProviderManager() {
             <div key={p.id} className={'card prov-card' + (p.enabled ? '' : ' is-off')}>
               <div className="prov-card__head">
                 <span className="prov-card__name">{p.name}</span>
-                <span className="prov-badge">{p.protocol === 'openai' ? 'OpenAI 兼容' : 'Anthropic'}</span>
+                <span className="prov-badge">{protocolLabel(p.protocol)}</span>
                 <span style={{ flex: 1 }} />
                 <button
                   className={'prov-switch' + (p.enabled ? ' is-on' : '')}
@@ -76,7 +100,9 @@ export default function ProviderManager() {
                 </button>
               </div>
               <div className="prov-card__meta faint">
-                {(p.baseUrl || '').replace(/^https?:\/\//, '')} · Key {mask(p.apiKey)}
+                {p.protocol === 'claude-cli'
+                  ? `${(p.baseUrl || 'http://localhost:8000').replace(/^https?:\/\//, '')} · 无需密钥`
+                  : `${(p.baseUrl || '').replace(/^https?:\/\//, '')} · Key ${mask(p.apiKey)}`}
               </div>
               <div className="prov-card__meta faint">
                 {p.models.length} 个模型
@@ -98,6 +124,12 @@ export default function ProviderManager() {
       <button className="idea-add-btn" onClick={openNew}>
         <Plus size={16} /> 添加供应商
       </button>
+      <button className="idea-add-btn" onClick={addLocalClaude} style={{ marginTop: 6 }}>
+        <Plus size={16} /> 一键添加：本机 Claude（订阅）
+      </button>
+      <p className="faint prov-tip" style={{ marginTop: 4 }}>
+        用前先在本机终端跑 <code>node chat-server.cjs</code>；只本机回环，不对外。
+      </p>
 
       {editing && <ProviderForm draft={editing} onSave={save} onClose={() => setEditing(null)} />}
     </section>
@@ -135,7 +167,11 @@ function ProviderForm({ draft, onSave, onClose }) {
       defaultModel: x.defaultModel || DEFAULT_ANTHROPIC_MODELS[0],
     }))
 
-  const valid = d.name.trim() && d.baseUrl.trim() && d.apiKey.trim() && d.models.length > 0
+  const valid =
+    d.name.trim() &&
+    d.baseUrl.trim() &&
+    (d.protocol === 'claude-cli' || d.apiKey.trim()) &&
+    d.models.length > 0
 
   return (
     <>
@@ -170,18 +206,30 @@ function ProviderForm({ draft, onSave, onClose }) {
           </div>
 
           <label className="prov-field">
-            <span>API Base URL</span>
+            <span>{d.protocol === 'claude-cli' ? '本机后端地址' : 'API Base URL'}</span>
             <input
               value={d.baseUrl}
-              placeholder={d.protocol === 'openai' ? 'https://api.example.com（自动补 /v1）' : 'https://api.anthropic.com'}
+              placeholder={
+                d.protocol === 'claude-cli'
+                  ? 'http://localhost:8000'
+                  : d.protocol === 'openai'
+                    ? 'https://api.example.com（自动补 /v1）'
+                    : 'https://api.anthropic.com'
+              }
               onChange={(e) => set('baseUrl', e.target.value)}
             />
           </label>
 
-          <label className="prov-field">
-            <span>API Key</span>
-            <input type="password" value={d.apiKey} placeholder="sk-…" onChange={(e) => set('apiKey', e.target.value)} />
-          </label>
+          {d.protocol === 'claude-cli' ? (
+            <p className="faint prov-tip" style={{ margin: '2px 0 8px' }}>
+              本机回环，不需要 API Key。先在终端跑 <code>node chat-server.cjs</code> 再切到这里。
+            </p>
+          ) : (
+            <label className="prov-field">
+              <span>API Key</span>
+              <input type="password" value={d.apiKey} placeholder="sk-…" onChange={(e) => set('apiKey', e.target.value)} />
+            </label>
+          )}
 
           <div className="prov-field">
             <span>
