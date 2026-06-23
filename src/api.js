@@ -52,6 +52,7 @@ export function getData(force = false) {
 }
 export function invalidateData() {
   _dataPromise = null
+  _vizPromise = null // 星图缓存一并失效：连藤/拆藤后再进星图能看到最新（修 Bug 2）
 }
 
 // ── 归一化：把后端记忆对象转成前端用的形状 ───────────────

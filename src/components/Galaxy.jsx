@@ -13,7 +13,7 @@ import { showToast } from '../utils/toast.js'
 //   showToast(...)               → 来自 ../utils/toast.js
 // 其余 GX 对象 / GX_COLORS / GX_CATS / GX_CAT_ZH / 所有 gx* 函数：一字不改
 
-export default function Galaxy({ focusId = null }) {
+export default function Galaxy({ focusId = null, onClose }) {
   const navigate = useNavigate()
   const rootRef = useRef(null)
   const focusIdRef = useRef(focusId)
@@ -362,7 +362,7 @@ export default function Galaxy({ focusId = null }) {
   return (
     <div className="galaxy-overlay active" id="galaxyOverlay" ref={rootRef}>
       <div className="galaxy-header">
-        <button className="galaxy-btn" id="galaxyCloseBtn" style={{ padding: '7px 13px' }} onClick={() => navigate(-1)}>✕</button>
+        <button className="galaxy-btn" id="galaxyCloseBtn" style={{ padding: '7px 13px' }} onClick={() => (onClose ? onClose() : navigate(-1))}>✕</button>
         <div className="galaxy-seg">
           <button id="galaxySegRel" className="active">按关系</button>
           <button id="galaxySegCat">按分类</button>

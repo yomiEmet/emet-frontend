@@ -1424,7 +1424,7 @@
 .gx-cbtn { border:none; border-radius:12px; padding:7px 16px; font-size:13px; cursor:pointer; font-family:var(--sans-zh); }
 .gx-cancel { background:var(--bg-soft); color:var(--ink-soft); }
 .gx-cdel { background:#C0392B; color:#fff; }
-.gx-hint { display:none !important; }
+.gx-hint { position:absolute; bottom:14px; left:50%; transform:translateX(-50%); font-family:var(--serif-zh); font-size:11px; color:var(--ink-soft); letter-spacing:.5px; pointer-events:none; white-space:nowrap; opacity:0; transition:opacity .4s ease; background:var(--bg); padding:5px 12px; border-radius:12px; box-shadow:0 2px 10px rgba(42,39,36,0.06); }
 .gx-legend { position:absolute; top:14px; left:14px; display:flex; flex-direction:column; gap:5px; padding:9px 12px; background:var(--bg); border:1px solid var(--line); border-radius:10px; opacity:.92; pointer-events:none; box-shadow:0 2px 12px rgba(42,39,36,0.06); }
 .gx-leg-item { display:flex; align-items:center; gap:7px; font-family:var(--serif-zh); font-size:11px; color:var(--ink-soft); letter-spacing:.5px; line-height:1; }
 .gx-leg-item i { width:8px; height:8px; border-radius:50%; flex-shrink:0; }

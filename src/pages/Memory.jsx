@@ -68,7 +68,7 @@ export default function Memory() {
       </div>
 
       {tab === 'memory' && <MemoryManage />}
-      {tab === 'galaxy' && <Galaxy focusId={focusId} />}
+      {tab === 'galaxy' && <Galaxy focusId={focusId} onClose={() => setTab('memory')} />}
       {tab === 'rings' && <Rings />}
       {tab === 'log' && <MemoryManage mode="log" />}
     </div>
