@@ -3258,6 +3258,8 @@
 }
 
 .chat-history__list {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -3500,6 +3502,10 @@
 }
 
 .model-sheet {
+  /* 在 .ts-panel（flex column, max-height:70vh）里拿到剩余高度并内部滚动，
+     否则模型多了会溢出面板被裁掉，最后一个被底部盖住看不见 */
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
