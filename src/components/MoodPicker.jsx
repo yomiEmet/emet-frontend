@@ -6,7 +6,7 @@ import { MOODS, moodMeta } from '../utils/moods.js'
 import { moodList, moodSet } from '../api.js'
 import { showToast } from '../utils/toast.js'
 
-// today's mood —— 选表情即记今天（who=yomi，落心情日历）。
+// today's mood —— 选脸 → 写备注 → 记下（who=yomi，落心情日历）。
 // 右上角扩展按钮进入心情日历（月历 + 分布 + 趋势，你和 Emet 都能记）。
 function todayKey() {
   const d = new Date()
@@ -16,18 +16,19 @@ function todayKey() {
 
 export default function MoodPicker() {
   const today = todayKey()
-  const [selected, setSelected] = useState(null) // 今天已记的 mood id
+  const [saved, setSaved] = useState(null) // 今天已落库的 { mood, note }
+  const [draft, setDraft] = useState(null) // 当前选中待记的 mood id
+  const [note, setNote] = useState('')
   const [calOpen, setCalOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // 进来拉今天 静怡 的记录回显
   useEffect(() => {
     let alive = true
     moodList({ start: today, end: today })
       .then((r) => {
         if (!alive) return
         const mine = (r?.moods || []).find((e) => e.who === 'yomi')
-        if (mine) setSelected(mine.mood)
+        if (mine) setSaved({ mood: mine.mood, note: mine.note || '' })
       })
       .catch(() => {})
     return () => {
@@ -35,12 +36,21 @@ export default function MoodPicker() {
     }
   }, [today])
 
-  const pick = async (id) => {
-    if (busy) return
+  const pick = (id) => {
+    setDraft(id)
+    // 已记过同一个心情 → 把旧备注带出来可改
+    setNote(saved?.mood === id ? saved.note : '')
+  }
+
+  const save = async () => {
+    if (!draft || busy) return
     setBusy(true)
-    setSelected(id) // 乐观
     try {
-      await moodSet({ mood: id, who: 'yomi', date: today })
+      await moodSet({ mood: draft, note: note.trim(), who: 'yomi', date: today })
+      setSaved({ mood: draft, note: note.trim() })
+      setDraft(null)
+      setNote('')
+      showToast('已记下')
     } catch (e) {
       showToast(e?.message || '保存失败')
     } finally {
@@ -61,21 +71,41 @@ export default function MoodPicker() {
           {MOODS.map((m) => (
             <button
               key={m.id}
-              className={'mood-face' + (selected === m.id ? ' is-selected' : '')}
+              className={'mood-face' + ((draft || saved?.mood) === m.id ? ' is-selected' : '')}
               onClick={() => pick(m.id)}
               title={m.label}
               aria-label={m.label}
-              aria-pressed={selected === m.id}
+              aria-pressed={(draft || saved?.mood) === m.id}
             >
               <MoodFace mood={m.id} />
             </button>
           ))}
         </div>
-        {selected && (
-          <div className="mood-today-note faint">
-            今天：{moodMeta(selected)?.label} · 点扩展看日历
+
+        {draft ? (
+          <div className="mood-write">
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={`为什么${moodMeta(draft)?.label}？写一句…（可不写）`}
+              rows={2}
+              autoFocus
+            />
+            <div className="mood-write__foot">
+              <button className="mini-btn" onClick={() => { setDraft(null); setNote('') }} disabled={busy}>
+                取消
+              </button>
+              <button className="mini-btn mini-btn--accent" onClick={save} disabled={busy}>
+                {busy ? '记下…' : '记下'}
+              </button>
+            </div>
           </div>
-        )}
+        ) : saved ? (
+          <div className="mood-today-note faint">
+            今天：{moodMeta(saved.mood)?.label}
+            {saved.note ? ` · ${saved.note}` : ''}
+          </div>
+        ) : null}
       </div>
       {calOpen && <MoodCalendar onClose={() => setCalOpen(false)} />}
     </>
