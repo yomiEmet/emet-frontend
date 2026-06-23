@@ -3503,10 +3503,13 @@
 
 .model-sheet {
   /* 在 .ts-panel（flex column, max-height:70vh）里拿到剩余高度并内部滚动，
-     否则模型多了会溢出面板被裁掉，最后一个被底部盖住看不见 */
-  flex: 1;
+     否则模型多了会溢出面板被裁掉，最后一个被底部盖住看不见。
+     再加一个显式 max-height 兜底：即便 flex 链路没生效，也能独立滚动。 */
+  flex: 1 1 auto;
   min-height: 0;
+  max-height: 56vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .model-sheet__group {

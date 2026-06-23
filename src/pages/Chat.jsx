@@ -438,8 +438,9 @@ export default function Chat() {
                         return (
                           <button
                             key={m}
-                            // 打开面板时把选中项自动滚进可视区，避免被面板高度盖住看不到
-                            ref={active ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                            // 打开面板时把选中项自动滚进可视区，避免被面板高度盖住看不到。
+                            // 用 rAF 等布局稳定后再滚，否则 ref 回调时面板高度还没算好，滚动无效。
+                            ref={active ? (el) => { if (el) requestAnimationFrame(() => el.scrollIntoView({ block: 'center' })) } : undefined}
                             className={'model-sheet__item' + (active ? ' is-active' : '')}
                             onClick={() => pickModel(p.id, m)}
                           >
