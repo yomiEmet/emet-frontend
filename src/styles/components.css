@@ -266,6 +266,33 @@
   color: #fff;
   transform: scale(1.08);
 }
+.mood-write {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.mood-write textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--sans-zh);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+  resize: none;
+  padding: 0;
+}
+.mood-write textarea::placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+.mood-write__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
 
 /* 今日数据：三个统计小卡片一行 */
 .today-grid3 {
