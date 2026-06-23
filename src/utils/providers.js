@@ -129,7 +129,42 @@ export function getActiveTarget() {
   return { provider: p, model }
 }
 
+// 选当前聊天模型。同时把该供应商的 defaultModel 也设成同一个，
+// 这样"设置页的默认"和"聊天页的当前"永远一致（对单用户来说它俩就该是一回事）。
 export function setActiveTarget(providerId, model) {
   localStorage.setItem(LS_TARGET, JSON.stringify({ providerId, model }))
+  try {
+    const arr = JSON.parse(localStorage.getItem(LS) || '[]')
+    let changed = false
+    for (const p of arr) {
+      if (p.id === providerId && p.models?.includes(model) && p.defaultModel !== model) {
+        p.defaultModel = model
+        changed = true
+      }
+    }
+    if (changed) {
+      localStorage.setItem(LS, JSON.stringify(arr))
+      schedulePushSettings()
+    }
+  } catch {
+    /* 写不进去就只更新 target，不致命 */
+  }
   notifyKeyChanged(LS_TARGET)
+}
+
+// 设置页把某供应商的 defaultModel 改了之后调用：如果它正是当前聊天供应商，
+// 就把聊天页的"当前模型"也跟着切过去，保持两边一致。
+export function syncTargetToDefault(provider) {
+  if (!provider?.id || !provider.defaultModel) return
+  let t = null
+  try {
+    t = JSON.parse(localStorage.getItem(LS_TARGET) || 'null')
+  } catch {
+    /* ignore */
+  }
+  // 当前 target 指向这个供应商（或还没设过 target）→ 跟随它的新默认
+  if (!t || t.providerId === provider.id) {
+    localStorage.setItem(LS_TARGET, JSON.stringify({ providerId: provider.id, model: provider.defaultModel }))
+    notifyKeyChanged(LS_TARGET)
+  }
 }

@@ -424,18 +424,22 @@ export default function Chat() {
                 </p>
               ) : (
                 loadProviders()
-                  .filter((p) => p.enabled && p.apiKey)
+                  .filter(isProviderReady)
                   .map((p) => (
                     <div key={p.id} className="model-sheet__group">
                       <div className="model-sheet__prov faint">
                         {p.name}
-                        <em className="prov-badge">{p.protocol === 'openai' ? 'OpenAI 兼容' : 'Anthropic'}</em>
+                        <em className="prov-badge">
+                          {p.protocol === 'openai' ? 'OpenAI 兼容' : p.protocol === 'claude-cli' ? '本机 Claude' : 'Anthropic'}
+                        </em>
                       </div>
                       {p.models.map((m) => {
                         const active = target?.provider.id === p.id && target?.model === m
                         return (
                           <button
                             key={m}
+                            // 打开面板时把选中项自动滚进可视区，避免被面板高度盖住看不到
+                            ref={active ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                             className={'model-sheet__item' + (active ? ' is-active' : '')}
                             onClick={() => pickModel(p.id, m)}
                           >

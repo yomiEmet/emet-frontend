@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, X, Pencil, Trash2 } from 'lucide-react'
-import { loadProviders, saveProviders, DEFAULT_ANTHROPIC_MODELS, LOCAL_CLAUDE_MODELS } from '../utils/providers.js'
+import { loadProviders, saveProviders, syncTargetToDefault, DEFAULT_ANTHROPIC_MODELS, LOCAL_CLAUDE_MODELS } from '../utils/providers.js'
 import { showToast } from '../utils/toast.js'
 
 const mask = (k) => (k ? '···· ' + k.slice(-4) : '未填')
@@ -71,8 +71,11 @@ export default function ProviderManager() {
     if (draft.id) {
       persist(providers.map((p) => (p.id === draft.id ? draft : p)))
     } else {
-      persist([...providers, { ...draft, id: 'p' + Date.now() }])
+      draft = { ...draft, id: 'p' + Date.now() }
+      persist([...providers, draft])
     }
+    // 改了默认模型 → 若它是当前聊天供应商，聊天页"当前模型"跟着切，避免两边不一致
+    syncTargetToDefault(draft)
     setEditing(null)
     showToast('已保存')
   }
