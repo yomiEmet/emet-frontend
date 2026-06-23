@@ -381,6 +381,15 @@ export function nightGuardConfigSet(cfg) {
   return writeJSON('POST', '/api/config/night-guard', cfg)
 }
 
+// ── 心情日历（静怡 who=yomi 走前端，Emet who=emet 走 MCP）──
+export function moodList({ start, end } = {}) {
+  return getJSON('/api/mood', { start, end }) // { moods: [{ date, who, mood, note, valence }] }
+}
+export function moodSet({ mood, note, who = 'yomi', date }) {
+  // 不走 writeJSON（它会清 /api/data 缓存，心情跟 data 无关，没必要）
+  return request('/api/mood', { method: 'POST', body: { mood, note, who, date } })
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()

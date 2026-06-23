@@ -266,32 +266,311 @@
   color: #fff;
   transform: scale(1.08);
 }
-.mood-write {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+.mood-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
 }
-.mood-write textarea {
-  width: 100%;
+.mood-card__head .mood-label {
+  margin-bottom: 0;
+}
+.mood-expand {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--ink-soft);
   background: transparent;
   border: none;
-  outline: none;
-  font-family: var(--sans-zh);
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--ink);
-  resize: none;
-  padding: 0;
+  cursor: pointer;
+  transition: color 0.2s, transform 0.2s;
 }
-.mood-write textarea::placeholder {
-  color: var(--ink-faint);
-  font-style: italic;
+.mood-expand:active {
+  transform: scale(0.9);
 }
-.mood-write__foot {
+.mood-today-note {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+/* ════════ 心情日历 ════════ */
+.moodcal {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: var(--bg);
+  overflow-y: auto;
+  padding: 14px 18px 60px;
+}
+.moodcal-head {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  max-width: var(--content-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+.moodcal > *:not(.moodcal-scrim):not(.moodcal-sheet) {
+  max-width: var(--content-max);
+  margin-left: auto;
+  margin-right: auto;
+}
+.moodcal-title {
+  flex: 1;
+  text-align: center;
+  font-family: var(--serif-zh);
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.moodcal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 14px;
+}
+.moodcal-nav span {
+  font-family: var(--serif-zh);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  min-width: 110px;
+  text-align: center;
+}
+.moodcal-nav button {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.moodcal-card {
+  margin-bottom: 14px;
+  cursor: default;
+}
+.moodcal-card:active {
+  transform: none;
+}
+.moodcal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.moodcal-grid--head {
+  margin-bottom: 6px;
+}
+.moodcal-wd {
+  text-align: center;
+  font-family: var(--sans-en);
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding: 2px 0;
+}
+.moodcal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1px;
+  padding: 3px 0 0;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.moodcal-cell:active {
+  background: var(--card-soft);
+}
+.moodcal-cell.is-empty {
+  cursor: default;
+}
+.moodcal-cell.is-today {
+  background: var(--rose);
+}
+.moodcal-dnum {
+  font-family: var(--sans-en);
+  font-size: 11px;
+  color: var(--ink-faint);
+  line-height: 1;
+}
+.moodcal-faces {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+.moodcal-face {
+  display: flex;
+  line-height: 0;
+}
+.moodcal-legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.moodcal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lg-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.moodcal-whoswitch {
+  display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-bottom: 12px;
+}
+.mc-whobtn {
+  font-family: var(--sans-zh);
+  font-size: 13px;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 4px 16px;
+  cursor: pointer;
+}
+.mc-whobtn.is-active {
+  color: var(--accent);
+  background: var(--rose);
+  border-color: transparent;
+}
+.moodcal-section-label {
+  font-family: var(--sans-zh);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+}
+.mc-dist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.mc-dist-row:last-child {
+  margin-bottom: 0;
+}
+.mc-dist-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mc-dist-bar {
+  flex: 1;
+  height: 14px;
+  background: var(--card-soft);
+  border-radius: 7px;
+  overflow: hidden;
+}
+.mc-dist-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.3s;
+}
+.mc-dist-label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  min-width: 30px;
+}
+.mc-dist-count {
+  font-family: var(--sans-en);
+  font-size: 12px;
+  color: var(--ink-faint);
+  min-width: 16px;
+  text-align: right;
+}
+.mc-trend {
+  width: 100%;
+  height: 90px;
+  display: block;
+}
+.moodcal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 410;
+  background: rgba(42, 39, 36, 0.3);
+}
+.moodcal-sheet {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 420;
+  width: calc(100% - 36px);
+  max-width: 440px;
+  cursor: default;
+}
+.moodcal-sheet:active {
+  transform: translateX(-50%);
+}
+.moodcal-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  font-family: var(--serif-zh);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.moodcal-sheet-head button {
+  display: flex;
+  color: var(--ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.moodcal-sheet-faces {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.moodcal-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.moodcal-pick span {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.moodcal-pick.is-selected {
+  border-color: var(--mc);
+  background: color-mix(in srgb, var(--mc) 12%, transparent);
+}
+.moodcal-pick:active {
+  transform: scale(0.95);
 }
 
 /* 今日数据：三个统计小卡片一行 */
