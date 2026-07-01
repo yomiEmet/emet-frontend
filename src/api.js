@@ -38,21 +38,106 @@ async function writeJSON(method, path, body) {
   return json
 }
 
-// ── /api/data 缓存（同一次会话里多页共享一次请求）────────
+// ── 本地持久缓存（localStorage）────────────────────────────
+// 目的：冷启动/重开 App 时先用上次的数据秒显示，再后台刷新（stale-while-revalidate）。
+// 存不下（配额满/隐私模式）一律静默跳过，绝不影响使用。私密数据只存本机。
+const DATA_CACHE_KEY = 'emet.cache.data.v1'
+const VIZ_CACHE_KEY = 'emet.cache.viz.v1'
+
+function readCache(key) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const obj = JSON.parse(raw)
+    return obj && obj.data !== undefined ? obj.data : null
+  } catch {
+    return null
+  }
+}
+function writeCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ v: 1, at: new Date().toISOString(), data }))
+  } catch {
+    // 配额满/隐私模式：跳过持久化，内存缓存仍在，功能不受影响
+  }
+}
+function clearPersistCache() {
+  try {
+    localStorage.removeItem(DATA_CACHE_KEY)
+    localStorage.removeItem(VIZ_CACHE_KEY)
+  } catch {
+    /* 忽略 */
+  }
+}
+
+// 后台刷新落地后通知：页面可 subscribeData 订阅，在当前画面自动更新到最新。
+// 没有订阅者也不影响——内存缓存已更新，下次切页/重开自然是最新。
+const _dataSubs = new Set()
+export function subscribeData(cb) {
+  _dataSubs.add(cb)
+  return () => _dataSubs.delete(cb)
+}
+function emitDataUpdate() {
+  _dataSubs.forEach((cb) => {
+    try {
+      cb()
+    } catch {
+      /* 单个订阅者出错不影响其它 */
+    }
+  })
+}
+
+// ── /api/data 缓存（内存 + 本地持久，stale-while-revalidate）──
 let _dataPromise = null
-export function getData(force = false) {
-  if (force) _dataPromise = null
-  if (!_dataPromise) {
-    _dataPromise = getJSON('/api/data').catch((e) => {
+let _dataRevalidating = false
+
+function fetchData() {
+  return getJSON('/api/data')
+    .then((d) => {
+      writeCache(DATA_CACHE_KEY, d)
+      return d
+    })
+    .catch((e) => {
       _dataPromise = null // 失败不缓存，下次可重试
       throw e
     })
+}
+
+// 后台静默刷新：成功则更新本地+内存并通知；失败继续用缓存；401 清掉本地私密缓存
+function revalidateData() {
+  if (_dataRevalidating) return
+  _dataRevalidating = true
+  getJSON('/api/data')
+    .then((d) => {
+      writeCache(DATA_CACHE_KEY, d)
+      _dataPromise = Promise.resolve(d)
+      emitDataUpdate()
+    })
+    .catch((e) => {
+      if (e && e.status === 401) clearPersistCache()
+    })
+    .finally(() => {
+      _dataRevalidating = false
+    })
+}
+
+export function getData(force = false) {
+  if (force) _dataPromise = null
+  if (!_dataPromise) {
+    const cached = force ? null : readCache(DATA_CACHE_KEY)
+    if (cached) {
+      _dataPromise = Promise.resolve(cached) // 秒显示缓存
+      revalidateData() // 后台刷新最新
+    } else {
+      _dataPromise = fetchData() // 无缓存：正常走网络
+    }
   }
   return _dataPromise
 }
 export function invalidateData() {
   _dataPromise = null
   _vizPromise = null // 星图缓存一并失效：连藤/拆藤后再进星图能看到最新（修 Bug 2）
+  clearPersistCache() // 写后清本地缓存，强制下次走网络，避免看到写前的旧数据
 }
 
 // ── 归一化：把后端记忆对象转成前端用的形状 ───────────────
@@ -156,15 +241,48 @@ export function memoryUnlink(fromId, toId) {
   return writeJSON('POST', '/api/unlink', { from_id: fromId, to_id: toId })
 }
 
-// 星图数据：/api/viz-data 返回带 2D 坐标(x,y∈[-1,1])的节点。单独缓存。
+// 星图数据：/api/viz-data 返回带 2D 坐标(x,y∈[-1,1])的节点。单独缓存（同 data 走 SWR）。
 let _vizPromise = null
-export function vizData(force = false) {
-  if (force) _vizPromise = null
-  if (!_vizPromise) {
-    _vizPromise = getJSON('/api/viz-data').catch((e) => {
+let _vizRevalidating = false
+
+function fetchViz() {
+  return getJSON('/api/viz-data')
+    .then((d) => {
+      writeCache(VIZ_CACHE_KEY, d)
+      return d
+    })
+    .catch((e) => {
       _vizPromise = null
       throw e
     })
+}
+function revalidateViz() {
+  if (_vizRevalidating) return
+  _vizRevalidating = true
+  getJSON('/api/viz-data')
+    .then((d) => {
+      writeCache(VIZ_CACHE_KEY, d)
+      _vizPromise = Promise.resolve(d)
+      emitDataUpdate()
+    })
+    .catch((e) => {
+      if (e && e.status === 401) clearPersistCache()
+    })
+    .finally(() => {
+      _vizRevalidating = false
+    })
+}
+
+export function vizData(force = false) {
+  if (force) _vizPromise = null
+  if (!_vizPromise) {
+    const cached = force ? null : readCache(VIZ_CACHE_KEY)
+    if (cached) {
+      _vizPromise = Promise.resolve(cached)
+      revalidateViz()
+    } else {
+      _vizPromise = fetchViz()
+    }
   }
   return _vizPromise
 }
