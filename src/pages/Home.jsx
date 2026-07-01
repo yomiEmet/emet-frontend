@@ -9,7 +9,7 @@ import TodoList from '../components/TodoList.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
 import { greeting, longDate, daysTogether, sinceLabel, nowCST } from '../utils/time.js'
-import { homeSummary, healthLatest } from '../api.js'
+import { homeSummary, healthLatest, subscribeData } from '../api.js'
 
 // ── 仍是占位的部分 ──────────────────────────────────────
 // whisper 数据源：moments 里 #whisper 最新一条；都没有时用这句占位
@@ -43,12 +43,18 @@ export default function Home() {
 
   useEffect(() => {
     let alive = true
-    homeSummary()
-      .then((s) => alive && setSummary(s))
-      .catch(() => alive && setSummary(null))
-    healthLatest().then((h) => alive && setHealth(h))
+    const load = () => {
+      homeSummary()
+        .then((s) => alive && setSummary(s))
+        .catch(() => alive && setSummary(null))
+      healthLatest().then((h) => alive && setHealth(h))
+    }
+    load()
+    // 后台刷新落地后自动重载首页数据（不用切页）
+    const unsub = subscribeData(load)
     return () => {
       alive = false
+      unsub()
     }
   }, [])
 
