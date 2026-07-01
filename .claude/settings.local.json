@@ -81,7 +81,14 @@
       "PowerShell(git -C $front status --short)",
       "PowerShell(git -C $front diff --stat)",
       "PowerShell(\"===\")",
-      "PowerShell(node \"C:\\\\Users\\\\Administrator\\\\AppData\\\\Local\\\\Temp\\\\render-prompts.mjs\")"
+      "PowerShell(node \"C:\\\\Users\\\\Administrator\\\\AppData\\\\Local\\\\Temp\\\\render-prompts.mjs\")",
+      "Bash(node --check _syntax_check.mjs)",
+      "Bash(awk '{print \"worker.js 字节数:\", $5, \"≈\", $5/1024, \"KiB\"}')",
+      "WebFetch(domain:emet-memoty-v66.aandxiaobao.workers.dev)",
+      "Bash(git tag *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(grep -nE \"fetch\\\\\\('/api|fetch\\\\\\(\\\\`/api\" docs/legacy-v6.8.2.html)"
     ]
   }
 }
