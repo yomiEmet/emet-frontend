@@ -129,17 +129,17 @@ export default function Galaxy({ focusId = null, onClose }) {
       GX.nodes.forEach(function(n){ var on=keep[n.id];
         if(on){ GX.eN[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eN[n.id].setAttribute('fill-opacity','1'); GX.eN[n.id].setAttribute('r',gxBaseR(n)*(n.id===id?1.6:1.28)); GX.eH[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eH[n.id].setAttribute('fill-opacity',n.id===id?0.24:0.18); GX.eH[n.id].setAttribute('r',gxHaloR(n)+2); }
         else { GX.eN[n.id].setAttribute('fill','#BDB9B2'); GX.eN[n.id].setAttribute('fill-opacity','0.5'); GX.eN[n.id].setAttribute('r',gxBaseR(n)); GX.eH[n.id].setAttribute('fill-opacity','0'); } });
-      GX.edges.forEach(function(e){ var r=(e.source===id||e.target===id); var el=GX.eE[e.key]; if(r)el.classList.add('gx-flow'); else el.classList.remove('gx-flow'); el.setAttribute('stroke', r?'var(--accent)':'rgba(189,185,178,0.35)'); el.setAttribute('stroke-width', r?'1.5':'0.5'); el.style.strokeOpacity = r?'1':'0.25'; });
+      GX.edges.forEach(function(e){ var r=(e.source===id||e.target===id); var el=GX.eE[e.key]; if(r)el.classList.add('gx-flow'); else el.classList.remove('gx-flow'); el.setAttribute('stroke', r?'var(--accent)':'rgba(189,185,178,0.35)'); el.setAttribute('stroke-width', r?'1.5':'0.5'); el.style.strokeOpacity = r?'1':'0.25'; var ht=GX.eHit[e.key]; if(ht){ if(r)ht.classList.add('gx-hit-on'); else ht.classList.remove('gx-hit-on'); } });
       GX.nodes.forEach(function(n){ var sh=keep[n.id]; GX.eL[n.id].setAttribute('opacity',sh?'1':'0'); if(sh)gxPosLabel(n); });
       gxTipShow(id);
-      GX.el.hint.textContent='点空白处取消聚焦'; GX.el.hint.style.opacity='0.85';
+      GX.el.hint.textContent='点高亮的藤蔓可拆 · 点空白取消'; GX.el.hint.style.opacity='0.85';
     }
     function gxClearFocus(){
       GX.focusId=null;
       GX.nodes.forEach(function(n){ gxRefreshNode(n.id); GX.eL[n.id].setAttribute('opacity','0'); });
-      GX.edges.forEach(function(e){ var el=GX.eE[e.key]; el.classList.remove('gx-flow'); el.setAttribute('stroke','rgba(107,101,94,0.18)'); el.setAttribute('stroke-width','0.6'); el.style.strokeOpacity=GX.edgesVisible?'1':'0'; });
+      GX.edges.forEach(function(e){ var el=GX.eE[e.key]; el.classList.remove('gx-flow'); el.setAttribute('stroke','rgba(107,101,94,0.18)'); el.setAttribute('stroke-width','0.6'); el.style.strokeOpacity=GX.edgesVisible?'1':'0'; var ht=GX.eHit[e.key]; if(ht)ht.classList.remove('gx-hit-on'); });
       gxTipHide();
-      GX.el.hint.textContent='长按一颗星 → 连藤 · 点连线 → 拆藤 · 点空白恢复'; GX.el.hint.style.opacity='0.85';
+      GX.el.hint.textContent='点一颗星看它的关联 · 长按一颗星连藤'; GX.el.hint.style.opacity='0.85';
     }
     function gxClearSearch(){ GX.searchActive=false; GX.el.search.value=''; if(GX.focusId)gxClearFocus(); else GX.nodes.forEach(function(n){ var lk=GX.haslink[n.id]; GX.eN[n.id].setAttribute('fill',GX_COLORS[n.category]); GX.eN[n.id].setAttribute('fill-opacity',lk?1:0.55); }); }
 
@@ -222,7 +222,7 @@ export default function Galaxy({ focusId = null, onClose }) {
       if(GX.gestureEndAt && Date.now()-GX.gestureEndAt<350){ return; }
       if(GX.suppressClick){ GX.suppressClick=false; return; }
       var t=ev.target;
-      if(t.classList && t.classList.contains('gx-edge-hit')){ gxAskRemove(t.getAttribute('data-key')); return; }
+      if(t.classList && t.classList.contains('gx-edge-hit')){ if(!GX.focusId)return; gxAskRemove(t.getAttribute('data-key')); return; }
       var isNode=t.classList && t.classList.contains('gx-core');
       if(GX.linkSource){ if(isNode)gxTryConnect(GX.linkSource,t.getAttribute('data-id')); else gxEndLink(); return; }
       if(GX.pendingDelKey){ gxCloseConfirm(); return; }
