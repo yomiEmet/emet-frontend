@@ -93,12 +93,12 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
   // system 归一成 block 数组（只构造一次，跨轮不变）：
   //   对象 { stable, semi, volatile } → 稳定段(人设)+准静态段(记忆/日记)各打一个 cache_control 断点，
   //   易变段(时间/身体状态)放最后、不打断点；工具在 system 之前，断点会连工具一起缓存。
-  //   字符串（对话沉淀 DISTILL_SYSTEM）→ 原样单块、不缓存。默认 5 分钟 TTL（先证明命中，再升 1h）。
+  //   字符串（对话沉淀 DISTILL_SYSTEM）→ 原样单块、不缓存。1 小时 TTL（跨聊天间隔也保命中，命中会免费续期）。
   let systemBlocks
   if (system && typeof system === 'object') {
     systemBlocks = []
-    if (system.stable) systemBlocks.push({ type: 'text', text: system.stable, cache_control: { type: 'ephemeral' } })
-    if (system.semi) systemBlocks.push({ type: 'text', text: system.semi, cache_control: { type: 'ephemeral' } })
+    if (system.stable) systemBlocks.push({ type: 'text', text: system.stable, cache_control: { type: 'ephemeral', ttl: '1h' } })
+    if (system.semi) systemBlocks.push({ type: 'text', text: system.semi, cache_control: { type: 'ephemeral', ttl: '1h' } })
     if (system.volatile) systemBlocks.push({ type: 'text', text: system.volatile })
   } else if (typeof system === 'string' && system) {
     systemBlocks = [{ type: 'text', text: system }]

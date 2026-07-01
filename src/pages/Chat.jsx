@@ -382,17 +382,32 @@ export default function Chat() {
                     (streaming && i === messages.length - 1 ? '<span class="chat-cursor">▍</span>' : ''),
                 }}
               />
-              {m.usage && (
-                <div
-                  style={{ fontSize: 11, color: '#9a948c', marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}
-                >
-                  {m.usage.cache_read_input_tokens > 0 && <span>⚡ 缓存命中 {m.usage.cache_read_input_tokens}</span>}
-                  {m.usage.cache_creation_input_tokens > 0 && <span>📝 写入缓存 {m.usage.cache_creation_input_tokens}</span>}
-                  <span>
-                    输入 {m.usage.input_tokens ?? '—'} · 输出 {m.usage.output_tokens ?? '—'}
-                  </span>
-                </div>
-              )}
+              {m.usage &&
+                (() => {
+                  const inTok = m.usage.input_tokens || 0
+                  const read = m.usage.cache_read_input_tokens || 0
+                  const write = m.usage.cache_creation_input_tokens || 0
+                  const out = m.usage.output_tokens || 0
+                  const totalIn = inTok + read + write // 总输入（含命中/写入的缓存部分）
+                  if (!totalIn && !out) return null
+                  const pct = totalIn ? Math.round((read / totalIn) * 100) : 0
+                  // 命中优先显示命中率；首轮只有写入时显示写入量；都没有则只显示收发量
+                  const cache = read > 0 ? ` · 缓存命中 ${pct}% (${read})` : write > 0 ? ` · 写入缓存 ${write}` : ''
+                  return (
+                    <div
+                      style={{
+                        marginTop: 5,
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                        letterSpacing: '0.03em',
+                        color: '#b3aaa0',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      ↑{totalIn} ↓{out} tokens{cache}
+                    </div>
+                  )
+                })()}
             </div>
           ),
         )}
