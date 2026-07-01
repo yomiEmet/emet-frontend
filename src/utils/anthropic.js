@@ -76,6 +76,14 @@ function mergeUsage(acc, u) {
   return out
 }
 
+// 跨轮累加 usage：工具循环里每轮是一次独立计费的请求，读/写应相加而非覆盖，
+// 这样"调用工具"那一整轮显示的是两次请求的总读/总写（否则只剩最后一次的写、吞掉命中）。
+function sumUsage(a, b) {
+  const out = { ...(a || {}) }
+  if (b) for (const k in b) if (typeof b[k] === 'number') out[k] = (out[k] || 0) + b[k]
+  return out
+}
+
 // ── Anthropic 原生 ───────────────────────────────────────
 // 注意：Fable 5 / Opus 4.8 不接受 temperature / budget_tokens，
 // 一律不传采样参数、不主动请求 thinking（thinking 只解析返回里已有的块）。
@@ -88,7 +96,7 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
   // 内部 API 消息数组（可含 tool_use / tool_result 内容块），从 UI 的纯文本消息起步
   const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }))
   let full = '' // 跨轮累计的正文，最终返回
-  let usageAcc = null // 用量累计（缓存命中探针：读 usage 显示到前端，不改请求）
+  let turnUsage = null // 整轮用量（跨工具轮累加）：显示到前端的缓存命中/写入
 
   // ── prompt caching 前缀布局（Anthropic 顺序：tools → system → messages）──
   // system 只放稳定段(人设)+准静态段(记忆/日记)，各打一个 cache_control 断点（1h TTL，命中免费续期）；
@@ -145,6 +153,7 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
     let thinking = ''
     let stopReason = null
     let err = null
+    let roundUsage = null // 本轮请求的 usage（message_start 带读/写、message_delta 带输出，合并）
 
     await readSSE(res, (payload) => {
       let ev
@@ -154,8 +163,8 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
         return
       }
       if (ev.type === 'message_start') {
-        usageAcc = mergeUsage(usageAcc, ev.message?.usage)
-        onUsage?.(usageAcc)
+        roundUsage = mergeUsage(roundUsage, ev.message?.usage)
+        onUsage?.(sumUsage(turnUsage, roundUsage))
       } else if (ev.type === 'content_block_start') {
         const cb = ev.content_block || {}
         blocks[ev.index] =
@@ -180,14 +189,15 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
       } else if (ev.type === 'message_delta') {
         if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason
         if (ev.usage) {
-          usageAcc = mergeUsage(usageAcc, ev.usage)
-          onUsage?.(usageAcc)
+          roundUsage = mergeUsage(roundUsage, ev.usage)
+          onUsage?.(sumUsage(turnUsage, roundUsage))
         }
       } else if (ev.type === 'error') {
         err = new Error(ev.error?.message || '流式响应出错')
       }
     })
     if (err) throw err
+    turnUsage = sumUsage(turnUsage, roundUsage) // 本轮结束，累加进整轮总量（供下一轮叠加）
 
     const toolUses = blocks
       .filter((b) => b && b.type === 'tool_use')
