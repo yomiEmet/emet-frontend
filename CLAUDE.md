@@ -1,9 +1,9 @@
-# Emet 前端项目协作规矩
+# Emet Frontend — Collaboration Rules
 
-- **自主执行授权**：只要确定改动可回滚（独立 commit + revert 路径清晰），就直接动手做，不再逐项列清单让静怡勾选。遇到"重要的事"才停下问授权——重要 = 涉及钱（订阅/订阅 ToS 灰区）、涉及数据丢失、涉及对外暴露/隐私、要花长时间还看不到效果。
-- 旧代码迁移必须原样照搬，只做 DOM→React 的必要转换，禁止"理解后重写"。"搬 / 复刻 / 照原版" 这种字面明确指令 = 直接复制粘贴，不要"参考思路"。
-- worker.js 全面授权直接编辑部署，做好回滚即可（旧规已废）。
-- 每完成一个独立步骤，先 git commit 再继续下一步。每个 commit 要独立可 revert。
-- 部署方式：Cloudflare Pages，推 master 自动部署。Build: npm run build，Output: dist。
-- 后端地址：emet-memoty-v66.aandxiaobao.workers.dev（拼写就是 memoty，不是 typo）。
-- 不要把任何密钥硬编码进代码或提交进仓库。
+- **Autonomous-execution authorization**: As long as a change is clearly reversible (standalone commit + a clear revert path), just go ahead and do it — don't itemize a checklist for Jingyi to tick through anymore. Only stop to ask for authorization on "important things" — important = involves money (subscriptions / subscription ToS gray areas), involves data loss, involves external exposure / privacy, or takes a long time with no visible result along the way.
+- Legacy-code migration must be copied over verbatim — do only the DOM→React conversions that are strictly necessary; rewriting "after understanding it" is forbidden. Literal, explicit instructions like "port it / replicate / follow the original" = copy-paste directly, do NOT "take it as a reference for ideas."
+- worker.js is fully authorized for direct editing and deployment — just keep a revert path ready (the old rule is retired).
+- After finishing each independent step, git commit first, then move on to the next step. Every commit must be independently revertable.
+- Deployment: Cloudflare Pages — pushing to master auto-deploys. Build: npm run build, Output: dist.
+- Backend address: emet-memoty-v66.aandxiaobao.workers.dev (the spelling really is "memoty" — not a typo).
+- Never hardcode any secret/key into the code or commit it into the repo.
