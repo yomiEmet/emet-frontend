@@ -414,18 +414,13 @@ export async function chatSystemPrompt() {
     .map((x) => `- ${x.title || x.diary_date || ''}：${(x.content || '').replace(/\s+/g, ' ').slice(0, 100)}…`)
     .join('\n')
 
-  // 人设头取自助手设置（可在设置页/聊天页编辑）；以下记忆/日记/时间/身体状态动态追加
-  return [
-    loadAssistant().systemPrompt,
-    `当前时间（东八区）：${timeStr}`,
-    '',
-    '【最近的记忆】',
-    memLines || '（暂无）',
-    '',
-    '【最近的日记摘要】',
-    diaryLines || '（暂无）',
-    ...(healthLine ? ['', '【身体状态】', healthLine] : []),
-  ].join('\n')
+  // 分段供 prompt caching：稳定段（人设）+ 准静态段（记忆/日记）可打缓存断点；
+  // 易变段（时间/身体状态）放最后、绝不缓存，否则每轮变动会作废整个缓存前缀。
+  // 返回对象，由 streamAnthropic 据此拼 cache_control 块；旧的纯字符串用法仍兼容。
+  const stable = loadAssistant().systemPrompt
+  const semi = ['【最近的记忆】', memLines || '（暂无）', '', '【最近的日记摘要】', diaryLines || '（暂无）'].join('\n')
+  const volatile = [`当前时间（东八区）：${timeStr}`, ...(healthLine ? ['', '【身体状态】', healthLine] : [])].join('\n')
+  return { stable, semi, volatile }
 }
 
 // ── 健康数据（Apple Watch via iOS 快捷指令上报）─────────

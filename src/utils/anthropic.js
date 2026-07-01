@@ -90,8 +90,23 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
   let full = '' // 跨轮累计的正文，最终返回
   let usageAcc = null // 用量累计（缓存命中探针：读 usage 显示到前端，不改请求）
 
+  // system 归一成 block 数组（只构造一次，跨轮不变）：
+  //   对象 { stable, semi, volatile } → 稳定段(人设)+准静态段(记忆/日记)各打一个 cache_control 断点，
+  //   易变段(时间/身体状态)放最后、不打断点；工具在 system 之前，断点会连工具一起缓存。
+  //   字符串（对话沉淀 DISTILL_SYSTEM）→ 原样单块、不缓存。默认 5 分钟 TTL（先证明命中，再升 1h）。
+  let systemBlocks
+  if (system && typeof system === 'object') {
+    systemBlocks = []
+    if (system.stable) systemBlocks.push({ type: 'text', text: system.stable, cache_control: { type: 'ephemeral' } })
+    if (system.semi) systemBlocks.push({ type: 'text', text: system.semi, cache_control: { type: 'ephemeral' } })
+    if (system.volatile) systemBlocks.push({ type: 'text', text: system.volatile })
+  } else if (typeof system === 'string' && system) {
+    systemBlocks = [{ type: 'text', text: system }]
+  }
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const body = { model, max_tokens: maxTokens || 4096, stream: true, system, messages: apiMessages }
+    const body = { model, max_tokens: maxTokens || 4096, stream: true, messages: apiMessages }
+    if (systemBlocks) body.system = systemBlocks
     if (tools && tools.length) body.tools = tools
 
     const res = await fetch(endpoint(provider.baseUrl, '/messages'), {
@@ -208,6 +223,8 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
 async function streamClaudeCli({ provider, model, system, messages, signal, onDelta }) {
   const base = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
+  // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去
+  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.volatile].filter(Boolean).join('\n') : system
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 启动时的 CC_BRIDGE_TOKEN 环境变量
   const headers = { 'content-type': 'application/json' }
   if (provider.apiKey) headers.authorization = 'Bearer ' + provider.apiKey
@@ -219,7 +236,7 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
     res = await fetch(base + '/chat', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ system, messages, model: payloadModel }),
+      body: JSON.stringify({ system: sys, messages, model: payloadModel }),
       signal,
     })
   } catch (e) {
@@ -271,8 +288,10 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
 
 // ── OpenAI 兼容（中转站常见格式）─────────────────────────
 async function streamOpenAI({ provider, model, system, messages, temperature, maxTokens, onDelta, onThinking, signal }) {
+  // system 可能是分段对象（见 chatSystemPrompt）；OpenAI 兼容格式只吃字符串，拼回去
+  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.volatile].filter(Boolean).join('\n') : system
   const oaiMessages = [
-    ...(system ? [{ role: 'system', content: system }] : []),
+    ...(sys ? [{ role: 'system', content: sys }] : []),
     ...messages.map((m) => ({ role: m.role, content: m.content })),
   ]
   const body = { model, stream: true, max_tokens: maxTokens || 4096, messages: oaiMessages }
