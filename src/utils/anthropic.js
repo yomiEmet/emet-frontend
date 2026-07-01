@@ -24,7 +24,7 @@ function endpoint(base, path) {
 //   runTool(name, input)            —— 执行一个工具，返回结果文本（Promise）
 //   onToolUse({phase,id,name,input,result}) —— 工具调用/结果回调，供 UI 渲染
 // 返回完整正文。
-export async function streamChat({ system, messages, temperature, maxTokens, tools, runTool, onDelta, onThinking, onToolUse, signal }) {
+export async function streamChat({ system, messages, temperature, maxTokens, tools, runTool, onDelta, onThinking, onToolUse, onUsage, signal }) {
   const target = getActiveTarget()
   if (!target) throw new Error('NO_PROVIDER')
   const { provider, model } = target
@@ -36,7 +36,7 @@ export async function streamChat({ system, messages, temperature, maxTokens, too
     // 第一版工具调用只在 Anthropic 原生启用；OpenAI 兼容照旧纯文本聊天
     return streamOpenAI({ provider, model, system, messages, temperature, maxTokens, onDelta, onThinking, signal })
   }
-  return streamAnthropic({ provider, model, system, messages, maxTokens, tools, runTool, onDelta, onThinking, onToolUse, signal })
+  return streamAnthropic({ provider, model, system, messages, maxTokens, tools, runTool, onDelta, onThinking, onToolUse, onUsage, signal })
 }
 
 async function readSSE(res, onLine) {
@@ -68,6 +68,14 @@ async function throwHttpError(res) {
   throw new Error(msg)
 }
 
+// 合并 usage：message_start 带 input/cache 字段，message_delta 带最终 output_tokens，
+// 逐字段并入（只覆盖非空值），避免后到的事件把缓存字段冲成 undefined。
+function mergeUsage(acc, u) {
+  const out = { ...(acc || {}) }
+  if (u) for (const k in u) if (u[k] != null) out[k] = u[k]
+  return out
+}
+
 // ── Anthropic 原生 ───────────────────────────────────────
 // 注意：Fable 5 / Opus 4.8 不接受 temperature / budget_tokens，
 // 一律不传采样参数、不主动请求 thinking（thinking 只解析返回里已有的块）。
@@ -76,10 +84,11 @@ async function throwHttpError(res) {
 // tool_result → 再请求，直到正常收尾或达轮数上限。正文跨轮累计。
 const MAX_TOOL_ROUNDS = 5
 
-async function streamAnthropic({ provider, model, system, messages, maxTokens, tools, runTool, onDelta, onThinking, onToolUse, signal }) {
+async function streamAnthropic({ provider, model, system, messages, maxTokens, tools, runTool, onDelta, onThinking, onToolUse, onUsage, signal }) {
   // 内部 API 消息数组（可含 tool_use / tool_result 内容块），从 UI 的纯文本消息起步
   const apiMessages = messages.map((m) => ({ role: m.role, content: m.content }))
   let full = '' // 跨轮累计的正文，最终返回
+  let usageAcc = null // 用量累计（缓存命中探针：读 usage 显示到前端，不改请求）
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const body = { model, max_tokens: maxTokens || 4096, stream: true, system, messages: apiMessages }
@@ -110,7 +119,10 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
       } catch {
         return
       }
-      if (ev.type === 'content_block_start') {
+      if (ev.type === 'message_start') {
+        usageAcc = mergeUsage(usageAcc, ev.message?.usage)
+        onUsage?.(usageAcc)
+      } else if (ev.type === 'content_block_start') {
         const cb = ev.content_block || {}
         blocks[ev.index] =
           cb.type === 'tool_use'
@@ -133,6 +145,10 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
         }
       } else if (ev.type === 'message_delta') {
         if (ev.delta?.stop_reason) stopReason = ev.delta.stop_reason
+        if (ev.usage) {
+          usageAcc = mergeUsage(usageAcc, ev.usage)
+          onUsage?.(usageAcc)
+        }
       } else if (ev.type === 'error') {
         err = new Error(ev.error?.message || '流式响应出错')
       }

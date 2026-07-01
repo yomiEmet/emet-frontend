@@ -142,6 +142,8 @@ export default function Chat() {
       onDelta: (_d, ft) => mutateLast((m) => ({ ...m, role: 'assistant', content: ft })),
       onThinking: (_d, ft) => mutateLast((m) => ({ ...m, role: 'assistant', thinking: ft })),
       onToolUse,
+      // 缓存命中探针：把每轮 token 用量挂到该条 assistant 消息（仅 Anthropic 原生会回传）
+      onUsage: (u) => mutateLast((m) => ({ ...m, role: 'assistant', usage: u })),
     })
   }
 
@@ -380,6 +382,17 @@ export default function Chat() {
                     (streaming && i === messages.length - 1 ? '<span class="chat-cursor">▍</span>' : ''),
                 }}
               />
+              {m.usage && (
+                <div
+                  style={{ fontSize: 11, color: '#9a948c', marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}
+                >
+                  {m.usage.cache_read_input_tokens > 0 && <span>⚡ 缓存命中 {m.usage.cache_read_input_tokens}</span>}
+                  {m.usage.cache_creation_input_tokens > 0 && <span>📝 写入缓存 {m.usage.cache_creation_input_tokens}</span>}
+                  <span>
+                    输入 {m.usage.input_tokens ?? '—'} · 输出 {m.usage.output_tokens ?? '—'}
+                  </span>
+                </div>
+              )}
             </div>
           ),
         )}
