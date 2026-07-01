@@ -191,7 +191,14 @@ export default function Chat() {
       const full = (loadSessions().find((s) => s.id === sid)?.messages || [])
         .filter((m) => m.content !== '' && !m.distill)
         .map((m) => ({ role: m.role, content: m.content }))
-      const history = full.slice(-a.contextCount)
+      // Step 2 锚定窗口：原 slice(-N) 每轮滑动，历史前缀逐轮变、永远 miss。
+      // 改成把起点锚在 STEP 的整数倍，只每 STEP 条前移一次 → 前缀稳定可命中，窗口大小在 [N, N+STEP)。
+      // 再把起点吸附到最近的 user 消息（Anthropic 要求首条为 user）。
+      const CTX = a.contextCount
+      const STEP = 20
+      let start = full.length > CTX ? Math.floor((full.length - CTX) / STEP) * STEP : 0
+      while (start < full.length && full[start].role !== 'user') start++
+      const history = full.slice(start)
 
       // 工具仅 Anthropic 原生协议启用（拍板①A）；拉取失败则降级为无工具纯聊天
       let tools = null

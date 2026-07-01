@@ -90,18 +90,37 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
   let full = '' // 跨轮累计的正文，最终返回
   let usageAcc = null // 用量累计（缓存命中探针：读 usage 显示到前端，不改请求）
 
-  // system 归一成 block 数组（只构造一次，跨轮不变）：
-  //   对象 { stable, semi, volatile } → 稳定段(人设)+准静态段(记忆/日记)各打一个 cache_control 断点，
-  //   易变段(时间/身体状态)放最后、不打断点；工具在 system 之前，断点会连工具一起缓存。
-  //   字符串（对话沉淀 DISTILL_SYSTEM）→ 原样单块、不缓存。1 小时 TTL（跨聊天间隔也保命中，命中会免费续期）。
+  // ── prompt caching 前缀布局（Anthropic 顺序：tools → system → messages）──
+  // system 只放稳定段(人设)+准静态段(记忆/日记)，各打一个 cache_control 断点（1h TTL，命中免费续期）；
+  // 易变段(时间/身体)不放 system，而是注入到"最后一条消息"里（在所有断点之后），
+  //   否则它每轮变动会毁掉后面(历史)的缓存前缀。字符串(对话沉淀 DISTILL_SYSTEM)→ 原样单块、不缓存。
   let systemBlocks
+  let volatile = ''
   if (system && typeof system === 'object') {
     systemBlocks = []
     if (system.stable) systemBlocks.push({ type: 'text', text: system.stable, cache_control: { type: 'ephemeral', ttl: '1h' } })
     if (system.semi) systemBlocks.push({ type: 'text', text: system.semi, cache_control: { type: 'ephemeral', ttl: '1h' } })
-    if (system.volatile) systemBlocks.push({ type: 'text', text: system.volatile })
+    volatile = system.volatile || ''
   } else if (typeof system === 'string' && system) {
     systemBlocks = [{ type: 'text', text: system }]
+  }
+
+  // 历史断点（BP4）：给倒数第二条消息打 cache_control，缓存"到上一轮为止"的对话历史。
+  // 前缀里已无易变内容 → 逐轮命中、层层接力（read 会越叠越高）。工具循环追加的块 ≤10 条，在 20 条回溯窗口内，不影响。
+  if (apiMessages.length >= 2) {
+    const i = apiMessages.length - 2
+    const p = apiMessages[i]
+    if (typeof p.content === 'string') {
+      apiMessages[i] = { role: p.role, content: [{ type: 'text', text: p.content, cache_control: { type: 'ephemeral', ttl: '1h' } }] }
+    }
+  }
+
+  // 易变上下文(时间/身体)注入到最后一条消息，位于所有断点之后 → 不进缓存前缀。
+  // 只改本次请求副本；存储里的消息保持干净，故它下一轮作为历史时仍是干净版、可稳定命中。
+  if (volatile && apiMessages.length) {
+    const last = apiMessages[apiMessages.length - 1]
+    const t = typeof last.content === 'string' ? last.content : ''
+    apiMessages[apiMessages.length - 1] = { role: last.role, content: `［实时上下文，非用户输入］\n${volatile}\n［以下是用户消息］\n${t}` }
   }
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
