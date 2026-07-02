@@ -20,6 +20,9 @@ export const ENABLED_TOOLS = [
   // 第二批（只读浏览 + 织藤候选 + 统计）
   'memory_list', 'memory_get', 'moment_list', 'diary_list', 'diary_get',
   'weave_candidates', 'current_status', 'stats',
+  // 第三批（Paramecium 移植）：recall——vault+聊天原文存档按需回忆
+  // 注意：工具定义在缓存前缀里，白名单/描述一变全部缓存作废一次（预期内一次性成本）
+  'recall',
 ]
 
 let _rpcId = 0

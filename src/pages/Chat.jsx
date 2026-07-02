@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { Send, Plus, History, X, Square, ChevronDown, Check, Wrench, Sparkles } from 'lucide-react'
 import { marked } from 'marked'
-import { chatSystemPrompt } from '../api.js'
+import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
 import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from '../utils/providers.js'
@@ -242,6 +242,14 @@ export default function Chat() {
       const sess0 = loadSessions().find((s) => s.id === sid)
       if (sess0?.summary) system.summary = sess0.summary
 
+      // Paramecium 目录注入：按当前话题检索记忆标题目录（用户道=最近3条user消息，
+      // echo道=上条回复的余味）。5s 超时降级为不注入，绝不拦聊天。
+      // 注入结果并进 volatile → 落在末条消息里、全部缓存断点之后（唯一缓存安全位）。
+      const injPromise = memInject(
+        full.filter((m) => m.role === 'user').slice(-3).map((m) => m.content).join('\n'),
+        [...full].reverse().find((m) => m.role === 'assistant')?.content?.slice(0, 500) || '',
+      ).catch(() => null)
+
       // 工具仅 Anthropic 原生协议启用（拍板①A）；拉取失败则降级为无工具纯聊天
       let tools = null
       if (target?.provider?.protocol !== 'openai') {
@@ -251,6 +259,9 @@ export default function Chat() {
           tools = null
         }
       }
+
+      const inj = await injPromise
+      if (inj?.injection) system.volatile = (system.volatile ? system.volatile + '\n' : '') + inj.injection
 
       await streamAssistant({ sid, system, messages: history, tools, temperature: a.temperature, maxTokens: a.maxTokens, signal: ctrl.signal })
       schedulePush(sid) // 防抖推送到云端

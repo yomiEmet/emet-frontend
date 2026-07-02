@@ -14,7 +14,7 @@
 import { nowCST } from './utils/time.js'
 import { loadAssistant } from './utils/assistant.js'
 import { smartSearch } from './utils/search.js'
-import { BASE_URL, request } from './api/client.js'
+import { BASE_URL, request, getAdminKey } from './api/client.js'
 
 // BASE_URL 现在定义在统一请求模块 client.js，这里再导出一次，兼容旧引用
 export { BASE_URL }
@@ -488,6 +488,22 @@ export function keepaliveConfigSet(cfg) {
 }
 export function keepaliveStatusGet() {
   return getJSON('/api/keepalive/status') // { config, paused, lastBeat, snapshot, today, recent }
+}
+
+// ── Paramecium 记忆网关（L0 原文存档 + L1 摘录 + 目录注入）──
+// 注入走独立 fetch 不走 request()：要 5 秒硬超时，失败降级为不注入、绝不拦聊天
+export async function memInject(context, echo) {
+  const res = await fetch(BASE_URL + '/api/mem2/inject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Admin-Key': getAdminKey() },
+    body: JSON.stringify({ context, echo }),
+    signal: AbortSignal.timeout(5000),
+  })
+  if (!res.ok) throw new Error('inject ' + res.status)
+  return res.json() // { injection, hits, echo_hits, token_estimate }
+}
+export function mem2StatusGet() {
+  return getJSON('/api/mem2/status') // { windows, raw_rows, l1_memories, dirty_pending, archived_convs, last_run }
 }
 
 // ── 自动笔记（每天 22:30 cron 兜底写一篇当日观察）──
