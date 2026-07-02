@@ -8,6 +8,7 @@ import PushToggle from '../components/PushToggle.jsx'
 import HeartbeatToggle from '../components/HeartbeatToggle.jsx'
 import DailyToggle from '../components/DailyToggle.jsx'
 import NightGuardToggle from '../components/NightGuardToggle.jsx'
+import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
@@ -216,6 +217,7 @@ export default function Settings() {
         <HeartbeatToggle />
         <NightGuardToggle />
         <DailyToggle />
+        <KeepaliveToggle />
       </section>
 
       {/* ── 供应商管理（多供应商，聊天页用）────── */}
