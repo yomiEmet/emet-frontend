@@ -505,6 +505,18 @@ export async function memInject(context, echo) {
 export function mem2StatusGet() {
   return getJSON('/api/mem2/status') // { windows, raw_rows, l1_memories, dirty_pending, archived_convs, last_run }
 }
+export function extractionConfigGet() {
+  return getJSON('/api/config/extraction') // { config: { enabled, model } }
+}
+export function extractionConfigSet(cfg) {
+  return request('/api/config/extraction', { method: 'POST', body: cfg })
+}
+export function mem2ExtractsGet(limit = 20) {
+  return getJSON('/api/mem2/extracts', { limit }) // { extracts: [{ id, content, quote, date, conv_id, ... }] }
+}
+export function mem2ExtractBackfill() {
+  return request('/api/mem2/extract-backfill', { method: 'POST' })
+}
 
 // ── 自动笔记（每天 22:30 cron 兜底写一篇当日观察）──
 export function dailyConfigGet() {

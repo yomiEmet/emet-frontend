@@ -9,6 +9,7 @@ import HeartbeatToggle from '../components/HeartbeatToggle.jsx'
 import DailyToggle from '../components/DailyToggle.jsx'
 import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
+import MemArchiveCard from '../components/MemArchiveCard.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
@@ -218,6 +219,12 @@ export default function Settings() {
         <NightGuardToggle />
         <DailyToggle />
         <KeepaliveToggle />
+      </section>
+
+      {/* ── 记忆存档（Paramecium：L0 原文存档状态 + L1 自动摘录开关）── */}
+      <section className="set-group">
+        <div className="section-label">记忆存档</div>
+        <MemArchiveCard />
       </section>
 
       {/* ── 供应商管理（多供应商，聊天页用）────── */}
