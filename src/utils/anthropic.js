@@ -6,6 +6,7 @@
 // - 本机 claude-cli：POST {baseUrl}/chat，把对话+system 交给本机 chat-server.cjs，
 //   后端 spawn `claude -p` 把订阅额度当聊天用，文字流 SSE 吐回（无 [DONE]，靠 done/error 事件）
 import { getActiveTarget } from './providers.js'
+import { request } from '../api/client.js'
 
 // baseUrl 归一：去尾斜杠；没带 /v1 的补上
 function endpoint(base, path) {
@@ -131,6 +132,19 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
     apiMessages[apiMessages.length - 1] = { role: last.role, content: `［实时上下文，非用户输入］\n${volatile}\n［以下是用户消息］\n${t}` }
   }
 
+  // 缓存保活快照：round-0 请求体的深拷贝（不含 apiKey）。整轮成功且确有缓存活动时上报给
+  // worker，由它按拍原样重放来续期缓存（见 worker runKeepalive）。仅正常聊天（分段 system）参与，
+  // 对话沉淀等字符串 system 不上报，避免覆盖正经聊天的快照。
+  const snapBody =
+    system && typeof system === 'object'
+      ? JSON.parse(JSON.stringify({ providerId: provider.id, model, tools: tools && tools.length ? tools : undefined, system: systemBlocks, messages: apiMessages }))
+      : null
+  const pushSnapshot = () => {
+    if (!snapBody) return
+    const act = (turnUsage?.cache_read_input_tokens || 0) + (turnUsage?.cache_creation_input_tokens || 0)
+    if (act > 0) request('/api/keepalive/snapshot', { method: 'POST', body: { ...snapBody, savedAt: new Date().toISOString() } }).catch(() => {})
+  }
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const body = { model, max_tokens: maxTokens || 4096, stream: true, messages: apiMessages }
     if (systemBlocks) body.system = systemBlocks
@@ -212,7 +226,10 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
       })
 
     // 没有工具调用 → 正常结束
-    if (stopReason !== 'tool_use' || !toolUses.length) return full
+    if (stopReason !== 'tool_use' || !toolUses.length) {
+      pushSnapshot()
+      return full
+    }
 
     // 回放本轮 assistant 内容块（只保留 text + tool_use；不回 thinking，避免签名要求）
     const assistantContent = []
@@ -243,6 +260,7 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
     // 进入下一轮
   }
 
+  pushSnapshot()
   return full // 达到轮数上限兜底
 }
 

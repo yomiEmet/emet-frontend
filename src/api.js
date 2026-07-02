@@ -478,6 +478,18 @@ export function heartbeatConfigSet(cfg) {
   return writeJSON('POST', '/api/config/heartbeat', cfg)
 }
 
+// ── 缓存保活（worker 定时重放请求快照，续期 prompt cache）──
+// 不走 writeJSON：与 /api/data 无关，别清它的缓存
+export function keepaliveConfigGet() {
+  return getJSON('/api/config/keepalive') // { config: { enabled } }
+}
+export function keepaliveConfigSet(cfg) {
+  return request('/api/config/keepalive', { method: 'POST', body: cfg })
+}
+export function keepaliveStatusGet() {
+  return getJSON('/api/keepalive/status') // { config, paused, lastBeat, snapshot, today, recent }
+}
+
 // ── 自动笔记（每天 22:30 cron 兜底写一篇当日观察）──
 export function dailyConfigGet() {
   return getJSON('/api/config/daily') // { config: { enabled } }
