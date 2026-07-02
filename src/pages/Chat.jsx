@@ -25,6 +25,20 @@ const DISTILL_PROMPT =
   '（每条的分类 category、重要度 importance、标签 tags 由你判断）；如果其中有适合记成「当下状态」的，' +
   '可以再用 moment_save 另存一条瞬记。全部保存完成后，用一两句话向静怡汇报你存了什么。'
 
+// ── 缓存锚定窗口（Step2）：起点取 STEP 整数倍、只每 STEP 条前移一次（防滑动毁缓存前缀），
+//    再吸附到 user 消息（Anthropic 要求首条为 user）。发送与压缩共用，避免两处算法漂移。──
+const ANCHOR_STEP = 20
+function anchorStart(full, ctx) {
+  let start = full.length > ctx ? Math.floor((full.length - ctx) / ANCHOR_STEP) * ANCHOR_STEP : 0
+  while (start < full.length && full[start].role !== 'user') start++
+  return start
+}
+
+// ── 对话压缩（Step3b）：滑出锚定窗口的旧消息 → 覆盖式滚动摘要，Emet 记性不断档 ──
+const SUMMARY_SYSTEM =
+  '你是对话记忆压缩器。把「旧摘要」与「新滑出窗口的对话」合并成一份接续摘要，500 字以内：' +
+  '保留正在进行的话题、未完成的约定、重要事实与决定、情绪基调；用第三人称白描，不评论。只输出摘要正文。'
+
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
   const [curId, setCurId] = useState(() => loadSessions().find((s) => !s.deleted)?.id || null)
@@ -147,6 +161,36 @@ export default function Chat() {
     })
   }
 
+  // 对话压缩（Step3b）：锚点前移后，把新滑出窗口的消息并进滚动摘要（覆盖式、封顶）。
+  // 异步跑、失败静默（summaryUpTo 不动，下次锚点自动重试）；约每 10 轮才触发一次。
+  const maybeCompress = async (sid) => {
+    try {
+      const s = loadSessions().find((x) => x.id === sid)
+      if (!s) return
+      const full = (s.messages || []).filter((m) => m.content !== '' && !m.distill)
+      const start = anchorStart(full, loadAssistant().contextCount)
+      const upTo = s.summaryUpTo || 0
+      if (start <= upTo) return // 没有新滑出的消息
+      const aName = loadAssistant().name || 'Emet'
+      const lines = full
+        .slice(upTo, start)
+        .map((m) => `${m.role === 'user' ? '静怡' : aName}：${(m.content || '').trim()}`)
+        .join('\n')
+      const prompt = (s.summary ? `【旧摘要】\n${s.summary}\n\n` : '') + `【新滑出窗口的对话】\n${lines}`
+      // 单条 user 消息 + 字符串 system：不打缓存断点、不上报保活快照，纯一次性调用
+      const text = (await streamChat({ system: SUMMARY_SYSTEM, messages: [{ role: 'user', content: prompt }], maxTokens: 1000 })).trim()
+      if (!text) return
+      update((prev) =>
+        prev.map((x) =>
+          x.id === sid ? { ...x, summary: text.slice(0, 1200), summaryUpTo: start, updated_at: new Date().toISOString() } : x,
+        ),
+      )
+      schedulePush(sid)
+    } catch {
+      /* 摘要失败不影响聊天 */
+    }
+  }
+
   const send = async () => {
     const text = input.trim()
     if (!text || streaming) return
@@ -191,14 +235,12 @@ export default function Chat() {
       const full = (loadSessions().find((s) => s.id === sid)?.messages || [])
         .filter((m) => m.content !== '' && !m.distill)
         .map((m) => ({ role: m.role, content: m.content }))
-      // Step 2 锚定窗口：原 slice(-N) 每轮滑动，历史前缀逐轮变、永远 miss。
-      // 改成把起点锚在 STEP 的整数倍，只每 STEP 条前移一次 → 前缀稳定可命中，窗口大小在 [N, N+STEP)。
-      // 再把起点吸附到最近的 user 消息（Anthropic 要求首条为 user）。
-      const CTX = a.contextCount
-      const STEP = 20
-      let start = full.length > CTX ? Math.floor((full.length - CTX) / STEP) * STEP : 0
-      while (start < full.length && full[start].role !== 'user') start++
-      const history = full.slice(start)
+      // 锚定窗口（算法见顶部 anchorStart）；窗口外的旧对话由滚动摘要兜着（见 maybeCompress）
+      const history = full.slice(anchorStart(full, a.contextCount))
+
+      // 本会话的滚动摘要垫进 system（第 4 个缓存断点；无摘要则不占）
+      const sess0 = loadSessions().find((s) => s.id === sid)
+      if (sess0?.summary) system.summary = sess0.summary
 
       // 工具仅 Anthropic 原生协议启用（拍板①A）；拉取失败则降级为无工具纯聊天
       let tools = null
@@ -212,6 +254,7 @@ export default function Chat() {
 
       await streamAssistant({ sid, system, messages: history, tools, temperature: a.temperature, maxTokens: a.maxTokens, signal: ctrl.signal })
       schedulePush(sid) // 防抖推送到云端
+      maybeCompress(sid) // 不 await：锚点前移时异步更新滚动摘要
     } catch (e) {
       if (e.name === 'AbortError') {
         showToast('已停止')

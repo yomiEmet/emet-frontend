@@ -109,6 +109,9 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
     systemBlocks = []
     if (system.stable) systemBlocks.push({ type: 'text', text: system.stable, cache_control: { type: 'ephemeral', ttl: '1h' } })
     if (system.semi) systemBlocks.push({ type: 'text', text: system.semi, cache_control: { type: 'ephemeral', ttl: '1h' } })
+    // 滚动摘要（Step3b）：只在锚点前移时更新（约每 10 轮），与窗口重建同拍，缓存代价顺带摊掉。
+    // 断点用量：stable + semi + summary + BP4 = 4，正好顶满上限。
+    if (system.summary) systemBlocks.push({ type: 'text', text: '【本次对话此前内容的摘要】\n' + system.summary, cache_control: { type: 'ephemeral', ttl: '1h' } })
     volatile = system.volatile || ''
   } else if (typeof system === 'string' && system) {
     systemBlocks = [{ type: 'text', text: system }]
@@ -271,7 +274,7 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 async function streamClaudeCli({ provider, model, system, messages, signal, onDelta }) {
   const base = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
   // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去
-  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.volatile].filter(Boolean).join('\n') : system
+  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 启动时的 CC_BRIDGE_TOKEN 环境变量
   const headers = { 'content-type': 'application/json' }
   if (provider.apiKey) headers.authorization = 'Bearer ' + provider.apiKey
@@ -336,7 +339,7 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
 // ── OpenAI 兼容（中转站常见格式）─────────────────────────
 async function streamOpenAI({ provider, model, system, messages, temperature, maxTokens, onDelta, onThinking, signal }) {
   // system 可能是分段对象（见 chatSystemPrompt）；OpenAI 兼容格式只吃字符串，拼回去
-  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.volatile].filter(Boolean).join('\n') : system
+  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   const oaiMessages = [
     ...(sys ? [{ role: 'system', content: sys }] : []),
     ...messages.map((m) => ({ role: m.role, content: m.content })),
