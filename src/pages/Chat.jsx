@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -38,6 +38,42 @@ function anchorStart(full, ctx) {
 const SUMMARY_SYSTEM =
   '你是对话记忆压缩器。把「旧摘要」与「新滑出窗口的对话」合并成一份接续摘要，500 字以内：' +
   '保留正在进行的话题、未完成的约定、重要事实与决定、情绪基调；用第三人称白描，不评论。只输出摘要正文。'
+
+// 复制到剪贴板 + toast（气泡操作条用）
+function copyText(t) {
+  if (!t) return
+  navigator.clipboard.writeText(t).then(
+    () => showToast('已复制'),
+    () => showToast('复制失败'),
+  )
+}
+
+// 用户消息：点药丸展开 meta 行（时间 + 复制）——档案室的交互
+// 必须定义在 Chat 组件外，否则父组件每次渲染都重建组件、metaOpen 状态会丢
+function UserMsg({ m }) {
+  const [metaOpen, setMetaOpen] = useState(false)
+  return (
+    <div className="chat-msg chat-msg--user">
+      <div className="chatx-usercol">
+        <button
+          type="button"
+          className="chat-bubble chat-bubble--user chatx-userbtn"
+          onClick={() => setMetaOpen((v) => !v)}
+        >
+          {m.content}
+        </button>
+        {metaOpen && (
+          <div className="chatx-meta">
+            <span>{formatCardTime(m.ts)}</span>
+            <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
+              <Copy size={13} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
@@ -118,7 +154,9 @@ export default function Chat() {
         const msgs = [...s.messages]
         const last = msgs[msgs.length - 1]
         if (last?.role === 'assistant' && !last.content) {
-          msgs[msgs.length - 1] = { ...last, role: 'assistant', content: '（' + msg + '）' }
+          // error 标记：这条不进后续 API 上下文（否则「（请求失败）」会被当成
+          // Emet 的正式发言反复发回给模型，长期污染对话）
+          msgs[msgs.length - 1] = { ...last, role: 'assistant', content: '（' + msg + '）', error: true }
         }
         return { ...s, messages: msgs }
       }),
@@ -173,7 +211,7 @@ export default function Chat() {
     try {
       const s = loadSessions().find((x) => x.id === sid)
       if (!s) return
-      const full = (s.messages || []).filter((m) => m.content !== '' && !m.distill)
+      const full = (s.messages || []).filter((m) => m.content !== '' && !m.distill && !m.error)
       const start = anchorStart(full, loadAssistant().contextCount)
       const upTo = s.summaryUpTo || 0
       if (start <= upTo) return // 没有新滑出的消息
@@ -209,7 +247,7 @@ export default function Chat() {
       // API 的 messages：去掉空占位与沉淀汇报，再按上下文条数 N 截断
       //（只截断发送，界面与存储里的历史消息不动）
       const full = (loadSessions().find((s) => s.id === sid)?.messages || [])
-        .filter((m) => m.content !== '' && !m.distill)
+        .filter((m) => m.content !== '' && !m.distill && !m.error)
         .map((m) => ({ role: m.role, content: m.content }))
       // 锚定窗口（算法见顶部 anchorStart）；窗口外的旧对话由滚动摘要兜着（见 maybeCompress）
       const history = full.slice(anchorStart(full, a.contextCount))
@@ -306,7 +344,7 @@ export default function Chat() {
       showToast('对话沉淀需要工具调用，请在顶栏切换到 Anthropic 原生供应商')
       return
     }
-    const conv = session.messages.filter((m) => m.content !== '' && !m.distill)
+    const conv = session.messages.filter((m) => m.content !== '' && !m.distill && !m.error)
     if (!conv.length) {
       showToast('这段对话还没有内容可沉淀')
       return
@@ -477,9 +515,7 @@ export default function Chat() {
         )}
         {messages.map((m, i) =>
           m.role === 'user' ? (
-            <div key={m.mid || i} className="chat-msg chat-msg--user">
-              <div className="chat-bubble chat-bubble--user">{m.content}</div>
-            </div>
+            <UserMsg key={m.mid || i} m={m} />
           ) : (
             <div key={m.mid || i} className="chat-msg chat-msg--emet">
               <div className="chat-emet-head">
@@ -547,6 +583,14 @@ export default function Chat() {
                     </div>
                   )
                 })()}
+              {/* 操作条：复制（流式中的最后一条不给，防复制半截；重roll/收藏后续步骤接）*/}
+              {m.content && !(streaming && i === messages.length - 1) && (
+                <div className="chatx-actions">
+                  <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
+                    <Copy size={15} />
+                  </button>
+                </div>
+              )}
             </div>
           ),
         )}

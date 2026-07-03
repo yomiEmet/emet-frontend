@@ -4274,3 +4274,54 @@
     display: none;
   }
 }
+
+/* ── 聊天气泡操作条 ── */
+.chatx-usercol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 100%;
+}
+.chatx-userbtn {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14.5px;
+  color: inherit;
+  text-align: left;
+}
+.chatx-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-faint);
+  animation: chatx-fadein 0.18s ease;
+}
+.chatx-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.chatx-act {
+  background: transparent;
+  border: none;
+  padding: 2px;
+  color: var(--text-faint);
+  cursor: pointer;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+}
+.chatx-act:hover {
+  color: var(--text);
+}
+.chatx-act.is-on {
+  color: var(--accent);
+}
+@keyframes chatx-fadein {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
