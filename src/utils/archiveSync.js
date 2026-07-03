@@ -95,13 +95,34 @@ export function schedulePushArchive(blob, delay = 1200) {
   }, delay)
 }
 
+// ── 轻量化：blob 里的对话只留目录条目（uuid/标题/时间/条数），本体走分片通道 ──
+// 103MB 事故的修复：对话本体按场存 D1 分片（uploadOfficialConvs），
+// archive:data 只存目录+maps+memories/user/projects（几百 KB），彻底躲开 25MB 上限。
+function stripConversations(data) {
+  if (!data?.conversations) return data
+  return {
+    ...data,
+    conversations: data.conversations.map(c => ({
+      uuid: c.uuid,
+      name: c.name,
+      summary: c.summary || null,
+      project_uuid: c.project_uuid || null,
+      _candidates: c._candidates || {},
+      created_at: c.created_at || null,
+      updated_at: c.updated_at || null,
+      msg_count: c.messages?.length ?? c.msg_count ?? 0,
+      // 不带 messages：阅读时按需从云端取（fetchOfficialConv）
+    })),
+  }
+}
+
 export async function pushArchive(blob) {
   if (!getAdminKey()) {
     console.warn('[archiveSync] pushArchive 跳过：未设置访问密钥，无法保存到云端（刷新后本地数据会丢失）')
     showToast('未设置访问密钥，档案没存到云端')
     return
   }
-  const body = { ...blob, updated_at: new Date().toISOString() }
+  const body = { ...blob, data: stripConversations(blob.data), updated_at: new Date().toISOString() }
   const convCount = body.data?.conversations?.length ?? 0
   // 体积自检：KV 单值上限 25MB，超了 PUT 必失败，提前给出可读提示
   let sizeMB = 0
@@ -123,4 +144,49 @@ export async function pushArchive(blob) {
     console.error('[archiveSync] pushArchive 失败：', e)
     showToast('档案云端保存失败：' + (e?.message || e))
   }
+}
+
+// ── 对话本体分批上云（D1 分片存储，每批 ≤15 场且 ≤3MB）──
+// onProgress(done, total) 给上传界面报进度；worker 逐场比对水位线，没变的跳过不重写。
+export async function uploadOfficialConvs(convs, onProgress) {
+  const withMsgs = (convs || []).filter(c => c && c.uuid && Array.isArray(c.messages) && c.messages.length)
+  if (!withMsgs.length) return { stored: 0, skipped: 0 }
+  if (!getAdminKey()) {
+    showToast('未设置访问密钥，对话本体没存到云端')
+    return { stored: 0, skipped: 0 }
+  }
+  const batches = []
+  let cur = [], curSize = 0
+  for (const c of withMsgs) {
+    const size = JSON.stringify(c).length
+    if (cur.length && (cur.length >= 15 || curSize + size > 3_000_000)) {
+      batches.push(cur)
+      cur = []
+      curSize = 0
+    }
+    cur.push(c)
+    curSize += size
+  }
+  if (cur.length) batches.push(cur)
+  let stored = 0, skipped = 0, done = 0
+  for (const batch of batches) {
+    try {
+      const r = await request('/api/mem2/official-upload', { method: 'POST', body: { convs: batch } })
+      stored += r?.stored || 0
+      skipped += r?.skipped || 0
+    } catch (e) {
+      console.error('[archiveSync] official-upload 批次失败：', e)
+      showToast('部分对话上云失败，重新上传同一个包可续传')
+    }
+    done += batch.length
+    if (onProgress) onProgress(done, withMsgs.length)
+  }
+  console.log(`[archiveSync] uploadOfficialConvs 完成：新存 ${stored} 场、未变跳过 ${skipped} 场`)
+  return { stored, skipped }
+}
+
+// ── 按需取单场对话本体（档案室懒加载阅读）──
+export async function fetchOfficialConv(uuid) {
+  const res = await request('/api/mem2/official-conv', { params: { uuid } })
+  return res?.conv || null
 }

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { MessageSquare, Search, X, FileJson, Menu, ChevronRight, ChevronLeft, Wrench, Copy, Upload, Play, ThumbsUp, ThumbsDown, RotateCcw, Pencil, Folder, FileText, User, Sparkles, BookOpen, ArrowLeft, Plus, Star, Trash2 } from 'lucide-react';
-import { pullArchive, schedulePushArchive, mergeConversations, loadVersion, saveVersion, formatVersionDate } from '../utils/archiveSync.js';
+import { pullArchive, schedulePushArchive, mergeConversations, loadVersion, saveVersion, formatVersionDate, uploadOfficialConvs, fetchOfficialConv } from '../utils/archiveSync.js';
+import { showToast } from '../utils/toast.js';
 
 // ============================================================
 // localStorage hook
@@ -771,6 +772,16 @@ export default function Archive() {
         };
       });
 
+      // 对话本体分批上云（D1 分片）：与目录 blob 分开走，103MB 级导出也装得下。
+      // 不 await 阻塞界面；worker 按水位线跳过没变的场次，重传同一个包=断点续传。
+      if (result.conversations && result.conversations.length > 0) {
+        uploadOfficialConvs(result.conversations, (done, total) => {
+          if (done === total || done % 60 === 0) showToast(`对话上云 ${done}/${total} 场`);
+        }).then(({ stored, skipped }) => {
+          showToast(`档案已存云端：新增/更新 ${stored} 场，未变 ${skipped} 场`);
+        }).catch(() => {});
+      }
+
       // view 只在首次(currentView 为空)时设默认值
       setView(currentView => {
         if (currentView) return currentView;
@@ -817,8 +828,9 @@ export default function Archive() {
     return list.filter(c => {
       const displayName = renamedMap[c.uuid] || c.name;
       if (displayName.toLowerCase().includes(q)) return true;
-      return c.messages.some(m =>
-        m.blocks.some(b => b.text && b.text.toLowerCase().includes(q))
+      // 目录条目（本体在云端未加载）只按标题搜；正文全文检索走后端 recall
+      return (c.messages || []).some(m =>
+        (m.blocks || []).some(b => b.text && b.text.toLowerCase().includes(q))
       );
     });
   }, [conversations, search, hiddenMap, renamedMap]);
@@ -1048,6 +1060,13 @@ export default function Archive() {
             renamedMap={renamedMap}
             onOpenPicker={(convUuid) => setPickerForConv(convUuid)}
             onRemoveFromProject={removeConvFromProject}
+            onHydrateConv={(uuid, full) => {
+              // 懒加载回填：云端取回的本体并进内存，二次打开不再请求
+              setData(prev => prev ? {
+                ...prev,
+                conversations: (prev.conversations || []).map(c => c.uuid === uuid ? { ...c, ...full, uuid } : c),
+              } : prev);
+            }}
           />
         </main>
       </div>
@@ -1162,7 +1181,7 @@ function getViewTitle(view, data, renamedMap) {
   return 'archive';
 }
 
-function MainView({ view, data, navigate, manualMap, renamedMap, onOpenPicker, onRemoveFromProject }) {
+function MainView({ view, data, navigate, manualMap, renamedMap, onOpenPicker, onRemoveFromProject, onHydrateConv }) {
   if (!view) return <EmptyMain />;
   const allConvs = data.conversations || [];
   const allProjects = data.projects || [];
@@ -1170,6 +1189,10 @@ function MainView({ view, data, navigate, manualMap, renamedMap, onOpenPicker, o
   if (view.kind === 'conv') {
     const c = allConvs.find(x => x.uuid === view.id);
     if (!c) return <EmptyMain />;
+    // 目录条目（本体在云端）：先取回再渲染
+    if (!Array.isArray(c.messages) || (c.messages.length === 0 && (c.msg_count || 0) > 0)) {
+      return <LazyConvLoader conv={c} onHydrateConv={onHydrateConv} />;
+    }
     return <ConversationView conv={c} displayName={renamedMap?.[c.uuid] || c.name} />;
   }
 
@@ -1341,7 +1364,7 @@ function ProjectView({ project, conversations, renamedMap, memory, navigate }) {
                   <div className="project-conv-info">
                     <div className="project-conv-title">{renamedMap?.[c.uuid] || c.name}</div>
                     <div className="project-conv-meta">
-                      {formatDateShort(c.updated_at)} · {c.messages.length} 条
+                      {formatDateShort(c.updated_at)} · {c.messages?.length ?? c.msg_count ?? 0} 条
                     </div>
                   </div>
                   <ChevronRight size={14} className="project-conv-chev" />
@@ -1511,7 +1534,7 @@ function ConvItem({ conv, displayName, starred, active, onClick, onLongPress }) 
       <div className="conv-meta">
         <span>{formatDateShort(conv.updated_at)}</span>
         <span className="dot">·</span>
-        <span>{conv.messages.length} 条</span>
+        <span>{conv.messages?.length ?? conv.msg_count ?? 0} 条</span>
       </div>
     </div>
   );
@@ -1657,6 +1680,33 @@ function DeleteConfirmSheet({ convName, onClose, onConfirm }) {
 // ============================================================
 // 对话视图
 // ============================================================
+
+// 懒加载占位：从云端取回对话本体后回填内存，再交给 ConversationView 正常渲染
+function LazyConvLoader({ conv, onHydrateConv }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setFailed(false);
+    fetchOfficialConv(conv.uuid)
+      .then(full => {
+        if (!alive) return;
+        if (full) onHydrateConv?.(conv.uuid, full);
+        else setFailed(true);
+      })
+      .catch(() => alive && setFailed(true));
+    return () => { alive = false; };
+  }, [conv.uuid]);
+  return (
+    <div className="conv-view">
+      <header className="conv-header">
+        <h1 className="conv-h1">{conv.name}</h1>
+        <div className="conv-header-meta">
+          <span>{failed ? '这场对话的本体还没上云——重新上传一次导出包即可补全' : '正在从云端取回这场对话…'}</span>
+        </div>
+      </header>
+    </div>
+  );
+}
 
 function ConversationView({ conv, displayName }) {
   const scrollRef = useRef(null);
