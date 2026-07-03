@@ -556,13 +556,13 @@ export async function homeSummary() {
   // whisper：moments 里带 #whisper 标签的最新一条；没有则空（前端用占位文案）
   const whisperM = moments.find((m) => (m.tags || []).includes('whisper'))
 
-  // 睡眠：moments 里带 #睡眠 标签的最新一条，解析"X 小时/h"；解析不出就原文截断
+  // 睡眠：moments 里带 #睡眠 标签的最新一条，解析"X 小时/h"只取小时数字；
+  // 解析不出算无数据（原文截断塞进大字号会被挤断，宁可显示"暂无数据"）
   const sleepM = moments.find((m) => (m.tags || []).includes('睡眠'))
   let sleep = null
   if (sleepM) {
-    const t = sleepM.content || ''
-    const hm = t.match(/(\d+(?:\.\d+)?)\s*(?:个?小时|h)/i)
-    sleep = hm ? `${hm[1]} 小时` : t.replace(/\s+/g, ' ').slice(0, 10)
+    const hm = (sleepM.content || '').match(/(\d+(?:\.\d+)?)\s*(?:个?小时|h)/i)
+    sleep = hm ? hm[1] : null
   }
 
   return {

@@ -50,10 +50,10 @@ export default function Home() {
   const counts = summary?.counts || {}
 
   // 睡眠：Apple Watch 数据优先；没数据时兜底用 moments #睡眠 标签解析（旧路径）
-  const sleepFromHealth = health?.sleep_duration_min
-    ? `${(health.sleep_duration_min / 60).toFixed(1)} 小时`
-    : null
-  const sleepDisplay = sleepFromHealth || summary?.sleep
+  // 只留小时数字，"小时"走 unit 小字，和心率卡的 bpm 一致，窄屏不换行
+  const sleepHours = health?.sleep_duration_min
+    ? (health.sleep_duration_min / 60).toFixed(1)
+    : summary?.sleep || null
 
   return (
     <div className="page stack">
@@ -88,15 +88,16 @@ export default function Home() {
           <TodayCard
             icon={<Heart size={15} />}
             label="心率"
-            value={health?.heart_rate}
+            value={health?.heart_rate ? Math.round(health.heart_rate) : null}
             unit=" bpm"
             muted={!health?.heart_rate}
           />
           <TodayCard
             icon={<Moon size={15} />}
             label="睡眠"
-            value={sleepDisplay}
-            muted={!sleepDisplay}
+            value={sleepHours}
+            unit=" 小时"
+            muted={!sleepHours}
           />
         </div>
       </section>

@@ -182,6 +182,7 @@
   font-weight: 500;
   color: var(--text);
   margin-top: 8px;
+  white-space: nowrap; /* 三等分窄卡里"7.5 小时"不许折行，小数被挤到第二行的旧病根 */
 }
 .today-card__value .today-card__unit,
 .today-card__unit {
