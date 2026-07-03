@@ -873,40 +873,6 @@
   color: var(--accent);
 }
 
-/* ── 作品入口卡片 ───────────────────── */
-.works-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.work-card {
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
-}
-.work-card:active {
-  transform: scale(0.97);
-  border-color: var(--accent-soft);
-}
-
-.work-card__icon {
-  color: var(--accent);
-}
-.work-card__count {
-  font-family: var(--font-serif);
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--text);
-}
-.work-card__name {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
 /* ── 统计摘要 ───────────────────────── */
 .stats-bar {
   display: flex;
