@@ -2233,12 +2233,99 @@
   color: var(--text-faint);
 }
 
+/* ── 卡片内联编辑态（留言/灵感通用）───── */
+.inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inline-edit textarea {
+  resize: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.inline-edit textarea:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+.inline-edit__tags {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text);
+}
+.inline-edit__tags:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+
 /* ════════════════════════════════════════
    信件（迁回 v6.8.2 顶部信件 tab 美学）
    赤陶衬线 + 信封气质，区分交接信/日常信
    ════════════════════════════════════════ */
 .letter-wrap {
   padding-top: 4px;
+}
+
+/* 新建信件表单 + 卡内编辑 */
+.letter-compose__kinds {
+  display: flex;
+  gap: 8px;
+}
+.letter-compose__title {
+  width: 100%;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.letter-compose__title:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+.letter-card__edit {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px;
+  color: var(--text-faint);
+}
+.letter-card__edit:hover {
+  color: var(--accent);
+}
+.letter-card__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  cursor: auto;
+}
+.letter-card__editarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 8px 10px;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text);
+}
+.letter-card__editarea:focus {
+  outline: none;
+  border-color: var(--accent-soft);
 }
 
 /* ── 信件筛选条（衬线 chip）── */
