@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, History, X, Square, ChevronDown, Check, Wrench, Sparkles } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -44,7 +44,8 @@ export default function Chat() {
   const [curId, setCurId] = useState(() => loadSessions().find((s) => !s.deleted)?.id || null)
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [sideOpen, setSideOpen] = useState(false) // 移动端侧栏抽屉；桌面常驻
+  const [sideQuery, setSideQuery] = useState('')
   const [modelOpen, setModelOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistant, setAssistant] = useState(loadAssistant)
@@ -89,8 +90,13 @@ export default function Chat() {
   const newSession = () => {
     if (streaming) return
     setCurId(null)
-    setHistoryOpen(false)
+    setSideOpen(false)
   }
+
+  // 侧栏会话列表：标题过滤（简单包含匹配就够）
+  const sideList = sideQuery.trim()
+    ? visibleSessions.filter((s) => (s.title || '').toLowerCase().includes(sideQuery.trim().toLowerCase()))
+    : visibleSessions
 
   const deleteSession = (id) => {
     if (!window.confirm('删除这段对话？')) return
@@ -309,7 +315,7 @@ export default function Chat() {
     if (session.distilled && !window.confirm('这段对话已经沉淀过，确定要再来一次吗？')) return
 
     setCurId(id)
-    setHistoryOpen(false)
+    setSideOpen(false)
     // 沉淀汇报作为一条独立 assistant 消息（distill 标记：不进后续聊天上下文）
     update((prev) =>
       prev.map((s) =>
@@ -364,13 +370,78 @@ export default function Chat() {
   }
 
   return (
-    <div className="chat-page">
-      {/* 顶栏：当前供应商 · 模型，点击切换 */}
-      <header className="chat-bar">
-        <button className="chat-bar__btn" onClick={() => setHistoryOpen(true)} aria-label="历史对话">
-          <History size={19} />
-        </button>
-        <div className="chat-bar__center">
+    <div className="chatx-root">
+      {/* 移动端侧栏遮罩 */}
+      {sideOpen && <div className="chatx-mask" onClick={() => setSideOpen(false)} />}
+
+      {/* 侧边栏：会话列表（档案室骨架——桌面常驻 300px，移动端抽屉）*/}
+      <aside className={'chatx-side' + (sideOpen ? ' open' : '')}>
+        <div className="chatx-side__head">
+          <span className="chatx-brand">对话</span>
+          <button className="chatx-icon" onClick={newSession} title="新对话" aria-label="新对话">
+            <Plus size={17} />
+          </button>
+        </div>
+        <div className="chatx-side__search">
+          <Search size={14} />
+          <input
+            placeholder="搜索对话"
+            value={sideQuery}
+            onChange={(e) => setSideQuery(e.target.value)}
+          />
+        </div>
+        <div className="chatx-side__list">
+          {sideList.length === 0 ? (
+            <p className="faint chatx-side__empty">{sideQuery ? '没有匹配的对话' : '还没有对话'}</p>
+          ) : (
+            sideList.map((s) => (
+              <div
+                key={s.id}
+                className={'chatx-conv' + (s.id === curId ? ' is-active' : '')}
+                onClick={() => {
+                  setCurId(s.id)
+                  setSideOpen(false)
+                }}
+              >
+                <div className="chatx-conv__title">{s.title || '未命名对话'}</div>
+                <div className="chatx-conv__meta">
+                  <span>{formatCardTime(s.updated_at || s.created_at)} · {(s.messages || []).length} 条</span>
+                  <span className="chatx-conv__acts">
+                    <button
+                      className={s.distilled ? 'is-done' : ''}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        distill(s.id)
+                      }}
+                      aria-label="沉淀此对话"
+                      title={s.distilled ? '已沉淀过，点击可再沉淀' : '沉淀此对话'}
+                    >
+                      <Sparkles size={13} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteSession(s.id)
+                      }}
+                      aria-label="删除"
+                      title="删除"
+                    >
+                      <X size={13} />
+                    </button>
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <main className="chatx-main">
+        {/* 细顶栏：移动端汉堡 + 助手/模型入口 */}
+        <header className="chatx-top">
+          <button className="chatx-icon chatx-menu" onClick={() => setSideOpen(true)} aria-label="会话列表">
+            <Menu size={18} />
+          </button>
           <button className="chat-assistant" onClick={() => setAssistantOpen(true)} aria-label="助手设置">
             <AssistantAvatar avatar={assistant.avatar} size={20} />
             <span className="chat-assistant__name">{assistant.name}</span>
@@ -387,14 +458,15 @@ export default function Chat() {
             )}
             <ChevronDown size={12} />
           </button>
-        </div>
-        <button className="chat-bar__btn" onClick={newSession} aria-label="新对话">
-          <Plus size={20} />
-        </button>
-      </header>
+          <span className="chatx-top__spacer" />
+          <button className="chatx-icon chatx-menu" onClick={newSession} aria-label="新对话">
+            <Plus size={18} />
+          </button>
+        </header>
 
-      {/* 消息区 */}
-      <div className="chat-scroll">
+        {/* 消息区 */}
+        <div className="chat-scroll chatx-scroll">
+          <div className="chatx-thread">
         {!target && (
           <div className="card chat-hint">
             还没有可用的供应商。去 <Link to="/settings">设置页</Link> 添加一个就能开聊。
@@ -478,28 +550,32 @@ export default function Chat() {
             </div>
           ),
         )}
-        <div ref={bottomRef} />
-      </div>
+            <div ref={bottomRef} />
+          </div>
+        </div>
 
-      {/* 输入区 */}
-      <div className="chat-input">
-        <textarea
-          rows={1}
-          value={input}
-          placeholder="说点什么…"
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKey}
-        />
-        {streaming ? (
-          <button className="chat-send chat-send--stop" onClick={stop} aria-label="停止">
-            <Square size={15} fill="currentColor" />
-          </button>
-        ) : (
-          <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
-            <Send size={17} />
-          </button>
-        )}
-      </div>
+        {/* 输入区 */}
+        <div className="chatx-inputwrap">
+          <div className="chat-input chatx-input">
+            <textarea
+              rows={1}
+              value={input}
+              placeholder="说点什么…"
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKey}
+            />
+            {streaming ? (
+              <button className="chat-send chat-send--stop" onClick={stop} aria-label="停止">
+                <Square size={15} fill="currentColor" />
+              </button>
+            ) : (
+              <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
+                <Send size={17} />
+              </button>
+            )}
+          </div>
+        </div>
+      </main>
 
       {/* 供应商/模型切换面板 */}
       {modelOpen && (
@@ -548,61 +624,6 @@ export default function Chat() {
                   ))
               )}
             </div>
-          </div>
-        </>
-      )}
-
-      {/* 历史对话抽屉 */}
-      {historyOpen && (
-        <>
-          <div className="ts-scrim" onClick={() => setHistoryOpen(false)} />
-          <div className="chat-history card">
-            <div className="ts-head">
-              <span className="ts-title">历史对话</span>
-              <button className="ts-close" onClick={() => setHistoryOpen(false)} aria-label="关闭">
-                <X size={16} />
-              </button>
-            </div>
-            {visibleSessions.length === 0 ? (
-              <p className="faint ts-empty">还没有对话</p>
-            ) : (
-              <div className="chat-history__list">
-                {visibleSessions.map((s) => (
-                  <div
-                    key={s.id}
-                    className={'chat-history__item' + (s.id === curId ? ' is-active' : '')}
-                    onClick={() => {
-                      setCurId(s.id)
-                      setHistoryOpen(false)
-                    }}
-                  >
-                    <span className="chat-history__title">{s.title}</span>
-                    <span className="faint chat-history__time">{formatCardTime(s.created_at)}</span>
-                    <button
-                      className={'chat-history__act' + (s.distilled ? ' is-done' : '')}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        distill(s.id)
-                      }}
-                      aria-label="沉淀此对话"
-                      title={s.distilled ? '已沉淀过，点击可再沉淀' : '沉淀此对话'}
-                    >
-                      <Sparkles size={14} />
-                    </button>
-                    <button
-                      className="faint"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        deleteSession(s.id)
-                      }}
-                      aria-label="删除"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </>
       )}
