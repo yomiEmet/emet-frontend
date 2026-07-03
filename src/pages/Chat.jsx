@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy, RotateCcw } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -96,8 +96,14 @@ export default function Chat() {
   }
 
   const cur = sessions.find((s) => s.id === curId && !s.deleted) || null
-  const messages = cur?.messages || []
+  // hiddenMids：被重roll掉的旧回复。只藏不删——消息级合并是「内容长者胜」，
+  // 物理删除会被云端并回来（复活）；会话级字段按 updated_at 新者胜，能可靠同步。
+  const hiddenSet = new Set(cur?.hiddenMids || [])
+  const messages = (cur?.messages || []).filter((m) => !hiddenSet.has(m.mid))
   const visibleSessions = sessions.filter((s) => !s.deleted) // 墓碑不进列表
+  // 重roll只开放给最后一条 Emet 回复（含失败占位，兼当重试）；中间任意点重发
+  // 会跟滚动摘要打架（摘要里已含被丢弃分支），v1 不做
+  const lastAssistMid = [...messages].reverse().find((m) => m.role === 'assistant' && !m.distill)?.mid || null
 
   // 流式期间持续滚到底
   useEffect(() => {
@@ -211,7 +217,8 @@ export default function Chat() {
     try {
       const s = loadSessions().find((x) => x.id === sid)
       if (!s) return
-      const full = (s.messages || []).filter((m) => m.content !== '' && !m.distill && !m.error)
+      const hid = new Set(s.hiddenMids || [])
+      const full = (s.messages || []).filter((m) => m.content !== '' && !m.distill && !m.error && !hid.has(m.mid))
       const start = anchorStart(full, loadAssistant().contextCount)
       const upTo = s.summaryUpTo || 0
       if (start <= upTo) return // 没有新滑出的消息
@@ -246,15 +253,16 @@ export default function Chat() {
       const system = await chatSystemPrompt()
       // API 的 messages：去掉空占位与沉淀汇报，再按上下文条数 N 截断
       //（只截断发送，界面与存储里的历史消息不动）
-      const full = (loadSessions().find((s) => s.id === sid)?.messages || [])
-        .filter((m) => m.content !== '' && !m.distill && !m.error)
+      const sess = loadSessions().find((s) => s.id === sid)
+      const hidden = new Set(sess?.hiddenMids || [])
+      const full = (sess?.messages || [])
+        .filter((m) => m.content !== '' && !m.distill && !m.error && !hidden.has(m.mid))
         .map((m) => ({ role: m.role, content: m.content }))
       // 锚定窗口（算法见顶部 anchorStart）；窗口外的旧对话由滚动摘要兜着（见 maybeCompress）
       const history = full.slice(anchorStart(full, a.contextCount))
 
       // 本会话的滚动摘要垫进 system（第 4 个缓存断点；无摘要则不占）
-      const sess0 = loadSessions().find((s) => s.id === sid)
-      if (sess0?.summary) system.summary = sess0.summary
+      if (sess?.summary) system.summary = sess.summary
 
       // Paramecium 目录注入：按当前话题检索记忆标题目录（用户道=最近3条user消息，
       // echo道=上条回复的余味）。5s 超时降级为不注入，绝不拦聊天。
@@ -292,6 +300,30 @@ export default function Chat() {
       setStreaming(false)
       abortRef.current = null
     }
+  }
+
+  // 重roll：把旧回复记进 hiddenMids（只藏不删）+ 追加新占位 + 重跑一轮。
+  // 过滤后请求的 messages 数组和上一轮完全一致 → 缓存基本纯命中，重roll反而便宜。
+  const regen = async (mid) => {
+    if (streaming || !mid || !curId) return
+    if (!target) {
+      showToast('请先在设置页添加供应商')
+      return
+    }
+    const sid = curId
+    update((prev) =>
+      prev.map((s) =>
+        s.id === sid
+          ? {
+              ...s,
+              hiddenMids: [...(s.hiddenMids || []), mid],
+              updated_at: new Date().toISOString(),
+              messages: [...s.messages, newMessage('assistant', { content: '', thinking: '', tools: [] })],
+            }
+          : s,
+      ),
+    )
+    await runTurn(sid)
   }
 
   const send = async () => {
@@ -344,7 +376,8 @@ export default function Chat() {
       showToast('对话沉淀需要工具调用，请在顶栏切换到 Anthropic 原生供应商')
       return
     }
-    const conv = session.messages.filter((m) => m.content !== '' && !m.distill && !m.error)
+    const hid = new Set(session.hiddenMids || [])
+    const conv = session.messages.filter((m) => m.content !== '' && !m.distill && !m.error && !hid.has(m.mid))
     if (!conv.length) {
       showToast('这段对话还没有内容可沉淀')
       return
@@ -443,7 +476,10 @@ export default function Chat() {
               >
                 <div className="chatx-conv__title">{s.title || '未命名对话'}</div>
                 <div className="chatx-conv__meta">
-                  <span>{formatCardTime(s.updated_at || s.created_at)} · {(s.messages || []).length} 条</span>
+                  <span>
+                    {formatCardTime(s.updated_at || s.created_at)} ·{' '}
+                    {Math.max(0, (s.messages || []).length - (s.hiddenMids || []).length)} 条
+                  </span>
                   <span className="chatx-conv__acts">
                     <button
                       className={s.distilled ? 'is-done' : ''}
@@ -583,12 +619,22 @@ export default function Chat() {
                     </div>
                   )
                 })()}
-              {/* 操作条：复制（流式中的最后一条不给，防复制半截；重roll/收藏后续步骤接）*/}
+              {/* 操作条：复制 + 重roll（只给最后一条 Emet 回复；流式中的末条整条不给）*/}
               {m.content && !(streaming && i === messages.length - 1) && (
                 <div className="chatx-actions">
                   <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
                     <Copy size={15} />
                   </button>
+                  {m.mid && m.mid === lastAssistMid && (
+                    <button
+                      className="chatx-act"
+                      onClick={() => regen(m.mid)}
+                      title={m.error ? '重试' : '重新生成'}
+                      aria-label="重新生成"
+                    >
+                      <RotateCcw size={15} />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
