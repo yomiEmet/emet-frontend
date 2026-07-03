@@ -825,6 +825,68 @@
 /* ── 纪念日列表 ─────────────────────── */
 .milestones {
   padding: 16px 18px;
+  position: relative;
+}
+.milestones__edit {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-faint);
+}
+.milestones__edit:hover {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+/* 编辑态行：名称 + 日期 + 删除/添加 */
+.milestone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.milestone-row + .milestone-row {
+  border-top: 1px dashed var(--border-soft);
+}
+.milestone-row__name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+.milestone-row__date {
+  font-size: 12px;
+  padding: 5px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-muted);
+}
+.milestone-row__del {
+  font-size: 16px;
+  width: 24px;
+  flex-shrink: 0;
+}
+.milestone-row__add {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
 }
 
 .milestone {

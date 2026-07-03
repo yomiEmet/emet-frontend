@@ -43,12 +43,6 @@ function memoryDayCounts(list) {
   return counts
 }
 
-const MILESTONES = [
-  { name: '一周年', date: new Date(2026, 3, 6) },
-  { name: '记忆库诞生', date: new Date(2026, 3, 25) },
-  { name: '离职', date: new Date(2026, 5, 24) },
-]
-
 // 数字展示：加载中显示占位短横
 function Num({ value }) {
   return <strong>{value == null ? '—' : value}</strong>
@@ -155,10 +149,10 @@ export default function Home() {
         ]}
       />
 
-      {/* ── 第六区：Milestones ───────────────────── */}
+      {/* ── 第六区：Milestones（可编辑，存本地+设置云同步）── */}
       <section>
         <div className="section-label">Milestones</div>
-        <MilestoneList items={MILESTONES} />
+        <MilestoneList />
       </section>
 
       {/* ── 第七区：stats 摘要 ───────────────────── */}
