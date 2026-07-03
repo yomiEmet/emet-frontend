@@ -191,39 +191,9 @@ export default function Chat() {
     }
   }
 
-  const send = async () => {
-    const text = input.trim()
-    if (!text || streaming) return
-    if (!target) {
-      showToast('请先在设置页添加供应商')
-      return
-    }
-
-    // 没有当前会话就建一个，标题取首条消息前 14 字
-    let sid = curId
-    if (!sid) {
-      sid = 'c' + Date.now()
-      const session = {
-        id: sid,
-        title: text.replace(/\s+/g, ' ').slice(0, 14),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        messages: [],
-      }
-      update((prev) => [session, ...prev])
-      setCurId(sid)
-    }
-
-    setInput('')
-    // 追加用户消息 + 空的 assistant 占位
-    update((prev) =>
-      prev.map((s) =>
-        s.id === sid
-          ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, newMessage('user', { content: text }), newMessage('assistant', { content: '', thinking: '', tools: [] })] }
-          : s,
-      ),
-    )
-
+  // 组装请求并跑一轮流式（send 与之后的重roll共用）。
+  // 前置约定：调用方已把「用户消息 + 空 assistant 占位」写进会话。
+  const runTurn = async (sid) => {
     setStreaming(true)
     const ctrl = new AbortController()
     abortRef.current = ctrl
@@ -278,6 +248,42 @@ export default function Chat() {
       setStreaming(false)
       abortRef.current = null
     }
+  }
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || streaming) return
+    if (!target) {
+      showToast('请先在设置页添加供应商')
+      return
+    }
+
+    // 没有当前会话就建一个，标题取首条消息前 14 字
+    let sid = curId
+    if (!sid) {
+      sid = 'c' + Date.now()
+      const session = {
+        id: sid,
+        title: text.replace(/\s+/g, ' ').slice(0, 14),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        messages: [],
+      }
+      update((prev) => [session, ...prev])
+      setCurId(sid)
+    }
+
+    setInput('')
+    // 追加用户消息 + 空的 assistant 占位
+    update((prev) =>
+      prev.map((s) =>
+        s.id === sid
+          ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, newMessage('user', { content: text }), newMessage('assistant', { content: '', thinking: '', tools: [] })] }
+          : s,
+      ),
+    )
+
+    await runTurn(sid)
   }
 
   // 对话沉淀：独立一次请求，让模型把对话里值得长期保存的内容用工具存进记忆库
@@ -399,11 +405,11 @@ export default function Chat() {
         )}
         {messages.map((m, i) =>
           m.role === 'user' ? (
-            <div key={i} className="chat-msg chat-msg--user">
+            <div key={m.mid || i} className="chat-msg chat-msg--user">
               <div className="chat-bubble chat-bubble--user">{m.content}</div>
             </div>
           ) : (
-            <div key={i} className="chat-msg chat-msg--emet">
+            <div key={m.mid || i} className="chat-msg chat-msg--emet">
               <div className="chat-emet-head">
                 <AssistantAvatar avatar={assistant.avatar} size={18} />
                 <span className="chat-emet-name">{assistant.name}</span>
