@@ -611,7 +611,7 @@ async function processFiles(fileList) {
 // 主组件
 // ============================================================
 
-export default function Archive() {
+export default function Archive({ onExit }) {
   const [data, setData] = useState(null); // {conversations, memories, user, projects}
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -846,6 +846,12 @@ export default function Archive() {
       <>
         <Styles />
         <div className="archive-root archive-empty">
+          {/* 空状态也要能退出——没上传数据时侧栏/顶栏都不存在，漏了这里会被困住 */}
+          {onExit && (
+            <button className="icon-btn archive-exit-float" title="退出档案室" onClick={onExit}>
+              <ArrowLeft size={18} />
+            </button>
+          )}
           <div className="empty-inner">
             <div className="empty-mark">ARCHIVE</div>
             <h1 className="empty-title">Claude 对话档案</h1>
@@ -887,7 +893,15 @@ export default function Archive() {
 
         <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="sidebar-head">
-            <div className="brand">ARCHIVE</div>
+            <div className="sidebar-head-left">
+              {/* 退出用 ArrowLeft——右侧 X 已是「清空重新上传」，撞语义会误伤 */}
+              {onExit && (
+                <button className="icon-btn" title="退出档案室" onClick={onExit}>
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+              <div className="brand">ARCHIVE</div>
+            </div>
             <div className="sidebar-head-actions">
               <label className="icon-btn" title="追加上传">
                 <input
@@ -1050,7 +1064,13 @@ export default function Archive() {
               <Menu size={18} />
             </button>
             <div className="mobile-title">{getViewTitle(view, data, renamedMap)}</div>
-            <div style={{ width: 28 }} />
+            {onExit ? (
+              <button className="icon-btn" title="退出档案室" onClick={onExit}>
+                <ArrowLeft size={18} />
+              </button>
+            ) : (
+              <div style={{ width: 28 }} />
+            )}
           </div>
           <MainView
             view={view}
@@ -1800,9 +1820,12 @@ function MessageBubble({ message }) {
           {metaOpen && (
             <div className="msg-human-meta">
               <span className="msg-human-date">{formatDate(message.created_at)}</span>
-              <span className="msg-action msg-action-sm"><RotateCcw size={15} strokeWidth={2} /></span>
-              <span className="msg-action msg-action-sm"><Pencil size={15} strokeWidth={2} /></span>
-              <span className="msg-action msg-action-sm"><Copy size={15} strokeWidth={2} /></span>
+              <span className="msg-action msg-action-sm" aria-hidden="true"><RotateCcw size={15} strokeWidth={2} /></span>
+              <span className="msg-action msg-action-sm" aria-hidden="true"><Pencil size={15} strokeWidth={2} /></span>
+              <button className="msg-action msg-action-sm msg-action-live" title="复制"
+                onClick={() => copyMessage(message)}>
+                <Copy size={15} strokeWidth={2} />
+              </button>
             </div>
           )}
         </div>
@@ -1828,7 +1851,7 @@ function MessageBubble({ message }) {
           }
           return null;
         })}
-        <MessageActions />
+        <MessageActions message={message} />
         {message.model && (
           <div className="msg-model">{shortModel(message.model)}</div>
         )}
@@ -1837,15 +1860,35 @@ function MessageBubble({ message }) {
   );
 }
 
-function MessageActions() {
+// 取一条消息的全部文本块（复制用）
+function extractMessageText(message) {
+  return (message?.blocks || [])
+    .filter((b) => b.type === 'text' && b.text)
+    .map((b) => b.text)
+    .join('\n\n');
+}
+
+function copyMessage(message) {
+  const t = extractMessageText(message);
+  if (!t) { showToast('这条消息没有可复制的文本'); return; }
+  navigator.clipboard.writeText(t).then(
+    () => showToast('已复制'),
+    () => showToast('复制失败'),
+  );
+}
+
+// 复制是真按钮；其余仍是装饰（视觉稿保留，功能等聊天页那套做完再看要不要接）
+function MessageActions({ message }) {
   return (
-    <div className="msg-actions" aria-hidden="true">
-      <span className="msg-action"><Copy size={15.5} strokeWidth={2} /></span>
-      <span className="msg-action"><Upload size={15.5} strokeWidth={2} /></span>
-      <span className="msg-action"><Play size={15.5} strokeWidth={2} /></span>
-      <span className="msg-action"><ThumbsUp size={15.5} strokeWidth={2} /></span>
-      <span className="msg-action"><ThumbsDown size={15.5} strokeWidth={2} /></span>
-      <span className="msg-action"><RotateCcw size={15.5} strokeWidth={2} /></span>
+    <div className="msg-actions">
+      <button className="msg-action msg-action-live" title="复制全文" onClick={() => copyMessage(message)}>
+        <Copy size={15.5} strokeWidth={2} />
+      </button>
+      <span className="msg-action" aria-hidden="true"><Upload size={15.5} strokeWidth={2} /></span>
+      <span className="msg-action" aria-hidden="true"><Play size={15.5} strokeWidth={2} /></span>
+      <span className="msg-action" aria-hidden="true"><ThumbsUp size={15.5} strokeWidth={2} /></span>
+      <span className="msg-action" aria-hidden="true"><ThumbsDown size={15.5} strokeWidth={2} /></span>
+      <span className="msg-action" aria-hidden="true"><RotateCcw size={15.5} strokeWidth={2} /></span>
     </div>
   );
 }
@@ -2122,7 +2165,14 @@ function Styles() {
         z-index: 30;
       }
       .sidebar-head { padding: 14px 18px 8px; display: flex; align-items: center; justify-content: space-between; }
+      .sidebar-head-left { display: flex; align-items: center; gap: 4px; }
       .sidebar-head-actions { display: flex; gap: 2px; align-items: center; }
+      .archive-exit-float {
+        position: fixed;
+        top: calc(env(safe-area-inset-top, 0px) + 14px);
+        left: 14px;
+        z-index: 10;
+      }
       .brand { font-size: 11px; letter-spacing: 0.35em; color: var(--text-muted); font-weight: 500; }
 
       .status-bar {
@@ -3046,6 +3096,10 @@ function Styles() {
         display: inline-flex; align-items: center; justify-content: center;
         cursor: default; color: var(--text-muted);
       }
+      .msg-action-live {
+        background: transparent; border: none; padding: 0; cursor: pointer;
+      }
+      .msg-action-live:hover { color: var(--text); }
 
       .thinking-bar {
         display: flex; align-items: center; gap: 8px;
