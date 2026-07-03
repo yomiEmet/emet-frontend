@@ -481,6 +481,8 @@ function MomentTimeline() {
   const navigate = useNavigate()
   const [list, setList] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const q = query.trim()
 
   useEffect(() => {
     let alive = true
@@ -492,9 +494,12 @@ function MomentTimeline() {
     }
   }, [])
 
+  // 搜索：smartSearch 按相关性排（与记忆 tab 同一引擎），此时不按月分组
+  const searched = useMemo(() => (list && q ? smartSearch(list, q) : null), [list, q])
+
   // 按东八区月份分组（list 已按时间倒序）
   const groups = useMemo(() => {
-    if (!list) return []
+    if (!list || q) return []
     const out = []
     let cur = null
     list.forEach((m) => {
@@ -506,7 +511,7 @@ function MomentTimeline() {
       cur.items.push(m)
     })
     return out
-  }, [list])
+  }, [list, q])
 
   // 时间线抽屉的"年→月"分组
   const monthsByYear = useMemo(() => {
@@ -541,10 +546,56 @@ function MomentTimeline() {
     )
   }
 
+  // 瞬记条目渲染（分组视图与搜索视图共用）
+  const renderItem = (m) => (
+    <div
+      key={m.id}
+      className="tl-item"
+      role="button"
+      tabIndex={0}
+      onClick={() => navigate(`/moment/${m.id}`)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          navigate(`/moment/${m.id}`)
+        }
+      }}
+      style={{ cursor: 'pointer' }}
+    >
+      <div className="tl-item__head">
+        <span className="tl-item__date">{shortDateZh(m.created_at)}</span>
+        <span className="faint tl-item__tod">{timeOfDayZh(m.created_at)}</span>
+      </div>
+      <p className="tl-item__content">{m.content}</p>
+      {m.tags?.length > 0 && (
+        <div className="mem-card__tags">
+          {m.tags.map((t) => (
+            <span key={t} className="mem-hashtag">
+              #{t}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <>
+      {/* 搜索（与记忆 tab 同款搜索框 + smartSearch）*/}
+      <div className="mem-controls">
+        <div className="search-box">
+          <Search size={16} className="search-box__icon" />
+          <input
+            className="search-box__input"
+            placeholder="搜索瞬记…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* sticky 月份跳转按钮 */}
-      {groups.length > 1 && (
+      {!q && groups.length > 1 && (
         <div className="month-bar">
           <span className="month-bar__label faint">{groups.length} 个月</span>
           <button
@@ -588,44 +639,25 @@ function MomentTimeline() {
         </>
       )}
 
-      <div className="timeline">
-        {groups.map((g) => (
-          <div key={g.ym} className="tl-month" data-moment-month={g.ym}>
-            <div className="tl-month__label">{monthLabel(g.ym)}</div>
-            {g.items.map((m) => (
-              <div
-                key={m.id}
-                className="tl-item"
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate(`/moment/${m.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    navigate(`/moment/${m.id}`)
-                  }
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="tl-item__head">
-                  <span className="tl-item__date">{shortDateZh(m.created_at)}</span>
-                  <span className="faint tl-item__tod">{timeOfDayZh(m.created_at)}</span>
-                </div>
-                <p className="tl-item__content">{m.content}</p>
-                {m.tags?.length > 0 && (
-                  <div className="mem-card__tags">
-                    {m.tags.map((t) => (
-                      <span key={t} className="mem-hashtag">
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+      {q ? (
+        /* 搜索结果：按相关性平铺，不分月 */
+        <div className="timeline">
+          {searched?.length ? (
+            <div className="tl-month">{searched.map(renderItem)}</div>
+          ) : (
+            <p className="faint list-hint">没有匹配的瞬记</p>
+          )}
+        </div>
+      ) : (
+        <div className="timeline">
+          {groups.map((g) => (
+            <div key={g.ym} className="tl-month" data-moment-month={g.ym}>
+              <div className="tl-month__label">{monthLabel(g.ym)}</div>
+              {g.items.map(renderItem)}
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         className="fab"
