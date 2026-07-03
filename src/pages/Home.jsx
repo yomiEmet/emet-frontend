@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { MessageSquare, Heart, Moon, BarChart3 } from 'lucide-react'
 import WhisperCard from '../components/WhisperCard.jsx'
-import WeatherCard from '../components/WeatherCard.jsx'
 import TodayCard from '../components/TodayCard.jsx'
 import MoodPicker from '../components/MoodPicker.jsx'
 import TodoList from '../components/TodoList.jsx'
@@ -65,18 +64,15 @@ export default function Home() {
       </header>
       <WhisperCard text={summary?.whisper || WHISPER_FALLBACK} />
 
-      {/* ── 第二区：Emet Memory（slogan 收小 + 天气）── */}
-      <section className="emet-row">
-        <div className="card emet-brand">
-          <div className="emet-brand__name">EMET MEMORY</div>
-          <p className="emet-brand__slogan">When we see each other, we exist.</p>
-          <div className="emet-brand__counter">
-            <strong>{daysTogether(now)}</strong> days together
-            <span className="faint"> · since {sinceLabel()}</span>
-          </div>
+      {/* ── 第二区：Emet Memory（slogan 收小）── */}
+      <div className="card emet-brand">
+        <div className="emet-brand__name">EMET MEMORY</div>
+        <p className="emet-brand__slogan">When we see each other, we exist.</p>
+        <div className="emet-brand__counter">
+          <strong>{daysTogether(now)}</strong> days together
+          <span className="faint"> · since {sinceLabel()}</span>
         </div>
-        <WeatherCard />
-      </section>
+      </div>
 
       {/* ── 第三区：今日数据 ─────────────────────── */}
       <section>
