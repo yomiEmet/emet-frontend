@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy, RotateCcw } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy, RotateCcw, Star } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -48,9 +48,9 @@ function copyText(t) {
   )
 }
 
-// 用户消息：点药丸展开 meta 行（时间 + 复制）——档案室的交互
+// 用户消息：点药丸展开 meta 行（时间 + 复制 + 收藏）——档案室的交互
 // 必须定义在 Chat 组件外，否则父组件每次渲染都重建组件、metaOpen 状态会丢
-function UserMsg({ m }) {
+function UserMsg({ m, favOn, onFav }) {
   const [metaOpen, setMetaOpen] = useState(false)
   return (
     <div className="chat-msg chat-msg--user">
@@ -68,11 +68,46 @@ function UserMsg({ m }) {
             <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
               <Copy size={13} />
             </button>
+            {m.mid && (
+              <button
+                className={'chatx-act' + (favOn ? ' is-on' : '')}
+                onClick={() => onFav(m.mid)}
+                title={favOn ? '取消收藏' : '收藏'}
+                aria-label="收藏"
+              >
+                <Star size={13} fill={favOn ? 'currentColor' : 'none'} />
+              </button>
+            )}
           </div>
         )}
       </div>
     </div>
   )
+}
+
+// 长按进入多选（触屏+鼠标通吃，480ms；档案室同款交互）
+function longPressProps(fn) {
+  let t = null
+  const clear = () => {
+    if (t) {
+      clearTimeout(t)
+      t = null
+    }
+  }
+  return {
+    onTouchStart: () => {
+      clear()
+      t = setTimeout(fn, 480)
+    },
+    onTouchEnd: clear,
+    onTouchMove: clear,
+    onMouseDown: () => {
+      clear()
+      t = setTimeout(fn, 480)
+    },
+    onMouseUp: clear,
+    onMouseLeave: clear,
+  }
 }
 
 export default function Chat() {
@@ -82,6 +117,10 @@ export default function Chat() {
   const [streaming, setStreaming] = useState(false)
   const [sideOpen, setSideOpen] = useState(false) // 移动端侧栏抽屉；桌面常驻
   const [sideQuery, setSideQuery] = useState('')
+  const [favOpen, setFavOpen] = useState(false) // 收藏面板
+  const [selectMode, setSelectMode] = useState(false) // 长按进入的多选态
+  const [selected, setSelected] = useState(() => new Set())
+  const suppressClickRef = useRef(false) // 长按松手的尾随click不当成选择切换
   const [modelOpen, setModelOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistant, setAssistant] = useState(loadAssistant)
@@ -104,6 +143,127 @@ export default function Chat() {
   // 重roll只开放给最后一条 Emet 回复（含失败占位，兼当重试）；中间任意点重发
   // 会跟滚动摘要打架（摘要里已含被丢弃分支），v1 不做
   const lastAssistMid = [...messages].reverse().find((m) => m.role === 'assistant' && !m.distill)?.mid || null
+
+  // 收藏：存会话级 favs = [{gid, mids, at}]（一次多选=一组），搭 /api/chat 同步顺风车。
+  // 已知局限（拍板认可先上低成本版）：删除会话后其收藏一并消失。
+  const favMids = new Set((cur?.favs || []).flatMap((g) => g.mids))
+  const favItems = (() => {
+    const out = []
+    for (const s of sessions) {
+      if (s.deleted) continue
+      const byMid = new Map((s.messages || []).map((m) => [m.mid, m]))
+      for (const g of s.favs || []) {
+        const first = byMid.get(g.mids?.[0])
+        out.push({
+          gid: g.gid,
+          sid: s.id,
+          title: s.title || '未命名对话',
+          at: g.at || '',
+          count: g.mids?.length || 0,
+          firstMid: g.mids?.[0],
+          excerpt: (first?.content || '').replace(/\s+/g, ' ').slice(0, 80) || '（消息已不存在）',
+        })
+      }
+    }
+    return out.sort((a, b) => (a.at < b.at ? 1 : -1))
+  })()
+
+  const toggleFav = (mid) => {
+    if (!curId || !mid) return
+    const had = favMids.has(mid)
+    update((prev) =>
+      prev.map((s) => {
+        if (s.id !== curId) return s
+        const favs = [...(s.favs || [])]
+        const next = had
+          ? favs.map((g) => ({ ...g, mids: g.mids.filter((x) => x !== mid) })).filter((g) => g.mids.length)
+          : [...favs, { gid: 'f' + Date.now(), mids: [mid], at: new Date().toISOString() }]
+        return { ...s, favs: next, updated_at: new Date().toISOString() }
+      }),
+    )
+    schedulePush(curId)
+    showToast(had ? '已取消收藏' : '已收藏')
+  }
+
+  const removeFavGroup = (sid, gid) => {
+    update((prev) =>
+      prev.map((s) =>
+        s.id === sid
+          ? { ...s, favs: (s.favs || []).filter((g) => g.gid !== gid), updated_at: new Date().toISOString() }
+          : s,
+      ),
+    )
+    schedulePush(sid)
+  }
+
+  const jumpToFav = (sid, mid) => {
+    setFavOpen(false)
+    setSideOpen(false)
+    setCurId(sid)
+    setTimeout(() => {
+      document.querySelector(`[data-mid="${mid}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 150)
+  }
+
+  // ── 多选 ──
+  const enterSelect = (mid) => {
+    if (!mid || selectMode) return
+    // 吃掉长按松手的尾随 click；触屏可能根本不产生这个 click，600ms 后自动清除
+    suppressClickRef.current = true
+    setTimeout(() => {
+      suppressClickRef.current = false
+    }, 600)
+    setSelectMode(true)
+    setSelected(new Set([mid]))
+  }
+  const exitSelect = () => {
+    setSelectMode(false)
+    setSelected(new Set())
+  }
+  const toggleSelect = (mid) => {
+    if (!mid) return
+    setSelected((prev) => {
+      const n = new Set(prev)
+      if (n.has(mid)) n.delete(mid)
+      else n.add(mid)
+      return n
+    })
+  }
+  const onRowClickCapture = (mid) => (e) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    toggleSelect(mid)
+  }
+  const favSelected = () => {
+    if (!curId || !selected.size) return
+    const mids = messages.filter((m) => selected.has(m.mid)).map((m) => m.mid) // 按消息顺序存
+    update((prev) =>
+      prev.map((s) =>
+        s.id === curId
+          ? {
+              ...s,
+              favs: [...(s.favs || []), { gid: 'f' + Date.now(), mids, at: new Date().toISOString() }],
+              updated_at: new Date().toISOString(),
+            }
+          : s,
+      ),
+    )
+    schedulePush(curId)
+    showToast(`已收藏 ${mids.length} 条`)
+    exitSelect()
+  }
+  const copySelected = () => {
+    const aName = assistant.name || 'Emet'
+    const parts = messages
+      .filter((m) => selected.has(m.mid))
+      .map((m) => `${m.role === 'user' ? '静怡' : aName}：${m.content || ''}`)
+    copyText(parts.join('\n\n'))
+    exitSelect()
+  }
 
   // 流式期间持续滚到底
   useEffect(() => {
@@ -461,6 +621,11 @@ export default function Chat() {
             onChange={(e) => setSideQuery(e.target.value)}
           />
         </div>
+        <button className="chatx-side__fav" onClick={() => setFavOpen(true)}>
+          <Star size={14} />
+          <span>收藏</span>
+          {favItems.length > 0 && <em className="chatx-side__favcount">{favItems.length}</em>}
+        </button>
         <div className="chatx-side__list">
           {sideList.length === 0 ? (
             <p className="faint chatx-side__empty">{sideQuery ? '没有匹配的对话' : '还没有对话'}</p>
@@ -472,6 +637,7 @@ export default function Chat() {
                 onClick={() => {
                   setCurId(s.id)
                   setSideOpen(false)
+                  exitSelect()
                 }}
               >
                 <div className="chatx-conv__title">{s.title || '未命名对话'}</div>
@@ -549,11 +715,22 @@ export default function Chat() {
         {messages.length === 0 && target && (
           <p className="faint chat-empty">说点什么吧。</p>
         )}
-        {messages.map((m, i) =>
-          m.role === 'user' ? (
-            <UserMsg key={m.mid || i} m={m} />
+        {messages.map((m, i) => (
+          <div
+            key={m.mid || i}
+            className={
+              'chatx-mrow' +
+              (selectMode ? ' is-selecting' : '') +
+              (selectMode && selected.has(m.mid) ? ' is-selected' : '')
+            }
+            data-mid={m.mid}
+            onClickCapture={selectMode ? onRowClickCapture(m.mid) : undefined}
+            {...(!selectMode && m.mid ? longPressProps(() => enterSelect(m.mid)) : {})}
+          >
+          {m.role === 'user' ? (
+            <UserMsg m={m} favOn={favMids.has(m.mid)} onFav={toggleFav} />
           ) : (
-            <div key={m.mid || i} className="chat-msg chat-msg--emet">
+            <div className="chat-msg chat-msg--emet">
               <div className="chat-emet-head">
                 <AssistantAvatar avatar={assistant.avatar} size={18} />
                 <span className="chat-emet-name">{assistant.name}</span>
@@ -619,12 +796,22 @@ export default function Chat() {
                     </div>
                   )
                 })()}
-              {/* 操作条：复制 + 重roll（只给最后一条 Emet 回复；流式中的末条整条不给）*/}
+              {/* 操作条：复制 + 收藏 + 重roll（只给最后一条 Emet 回复；流式中的末条整条不给）*/}
               {m.content && !(streaming && i === messages.length - 1) && (
                 <div className="chatx-actions">
                   <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
                     <Copy size={15} />
                   </button>
+                  {m.mid && !m.error && (
+                    <button
+                      className={'chatx-act' + (favMids.has(m.mid) ? ' is-on' : '')}
+                      onClick={() => toggleFav(m.mid)}
+                      title={favMids.has(m.mid) ? '取消收藏' : '收藏'}
+                      aria-label="收藏"
+                    >
+                      <Star size={15} fill={favMids.has(m.mid) ? 'currentColor' : 'none'} />
+                    </button>
+                  )}
                   {m.mid && m.mid === lastAssistMid && (
                     <button
                       className="chatx-act"
@@ -638,34 +825,93 @@ export default function Chat() {
                 </div>
               )}
             </div>
-          ),
-        )}
+          )}
+          </div>
+        ))}
             <div ref={bottomRef} />
           </div>
         </div>
 
-        {/* 输入区 */}
+        {/* 输入区（多选态换成操作条）*/}
         <div className="chatx-inputwrap">
-          <div className="chat-input chatx-input">
-            <textarea
-              rows={1}
-              value={input}
-              placeholder="说点什么…"
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKey}
-            />
-            {streaming ? (
-              <button className="chat-send chat-send--stop" onClick={stop} aria-label="停止">
-                <Square size={15} fill="currentColor" />
+          {selectMode ? (
+            <div className="chatx-selbar">
+              <span className="faint">已选 {selected.size} 条</span>
+              <span className="chatx-top__spacer" />
+              <button className="mini-btn" disabled={!selected.size} onClick={copySelected}>
+                复制
               </button>
-            ) : (
-              <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
-                <Send size={17} />
+              <button className="mini-btn mini-btn--accent" disabled={!selected.size} onClick={favSelected}>
+                收藏
               </button>
-            )}
-          </div>
+              <button className="mini-btn" onClick={exitSelect}>
+                取消
+              </button>
+            </div>
+          ) : (
+            <div className="chat-input chatx-input">
+              <textarea
+                rows={1}
+                value={input}
+                placeholder="说点什么…"
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKey}
+              />
+              {streaming ? (
+                <button className="chat-send chat-send--stop" onClick={stop} aria-label="停止">
+                  <Square size={15} fill="currentColor" />
+                </button>
+              ) : (
+                <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
+                  <Send size={17} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </main>
+
+      {/* 收藏面板 */}
+      {favOpen && (
+        <>
+          <div className="ts-scrim" onClick={() => setFavOpen(false)} />
+          <div className="ts-panel card chatx-favpanel">
+            <div className="ts-head">
+              <span className="ts-title">收藏</span>
+              <button className="ts-close" onClick={() => setFavOpen(false)} aria-label="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="chatx-favlist">
+              {favItems.length === 0 ? (
+                <p className="faint ts-empty">还没有收藏。点消息下的 ☆，或长按消息多选收藏。</p>
+              ) : (
+                favItems.map((f) => (
+                  <div key={f.gid} className="chatx-favitem" onClick={() => jumpToFav(f.sid, f.firstMid)}>
+                    <div className="chatx-favitem__ex">{f.excerpt}</div>
+                    <div className="chatx-favitem__meta">
+                      <span>
+                        {f.title} · {formatCardTime(f.at)}
+                        {f.count > 1 ? ` · ${f.count} 条` : ''}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeFavGroup(f.sid, f.gid)
+                        }}
+                        aria-label="取消收藏"
+                        title="取消收藏"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 供应商/模型切换面板 */}
       {modelOpen && (
