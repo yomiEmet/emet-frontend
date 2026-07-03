@@ -746,6 +746,24 @@
 .heatmap__sub {
   font-size: 11px;
 }
+.heatmap__tabs {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 10px;
+}
+.heatmap__tab {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: transparent;
+}
+.heatmap__tab.is-active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
 .heatmap__months {
   display: grid;
   gap: 3px;

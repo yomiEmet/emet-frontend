@@ -6,13 +6,42 @@ import MoodPicker from '../components/MoodPicker.jsx'
 import TodoList from '../components/TodoList.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
-import { greeting, longDate, daysTogether, sinceLabel, nowCST } from '../utils/time.js'
-import { homeSummary, healthLatest, subscribeData } from '../api.js'
+import { greeting, longDate, daysTogether, sinceLabel, nowCST, nowLogical, dayKey, logicalDayKey } from '../utils/time.js'
+import { homeSummary, healthLatest, subscribeData, memoryAll } from '../api.js'
+import { loadSessions } from '../utils/sessions.js'
+import { pull as chatPull } from '../utils/sync.js'
 
-// ── 仍是占位的部分 ──────────────────────────────────────
 // whisper 数据源：moments 里 #whisper 最新一条；都没有时用这句占位
 const WHISPER_FALLBACK = '今天的番茄又红了一点。'
-const TODAY_MESSAGES = 12 // 占位：今日互动条数，接 chat API 前先写死
+
+// ── 热力图数据（真数据，按逻辑日归属：凌晨4点换天）─────────
+// 色阶阈值分开定：记忆每天 0-6 条，互动动辄几十轮
+const levelMemory = (c) => (c <= 0 ? 0 : c <= 1 ? 1 : c <= 3 ? 2 : c <= 6 ? 3 : 4)
+const levelChat = (c) => (c <= 0 ? 0 : c <= 5 ? 1 : c <= 15 ? 2 : c <= 30 ? 3 : 4)
+
+// 每日互动计数：只数静怡发的消息（拍板口径），今日互动卡与热力图共用
+function chatDayCounts() {
+  const counts = new Map()
+  for (const s of loadSessions()) {
+    if (!s || s.deleted) continue
+    for (const m of s.messages || []) {
+      if (m?.role !== 'user' || !m.ts) continue // 老数据无 ts 的消息跳过
+      const k = logicalDayKey(m.ts)
+      counts.set(k, (counts.get(k) || 0) + 1)
+    }
+  }
+  return counts
+}
+
+// 每日记忆计数：normMemory 的 date 已是逻辑日 key，直接用
+function memoryDayCounts(list) {
+  const counts = new Map()
+  for (const m of list || []) {
+    if (!m?.date) continue
+    counts.set(m.date, (counts.get(m.date) || 0) + 1)
+  }
+  return counts
+}
 
 const MILESTONES = [
   { name: '一周年', date: new Date(2026, 3, 6) },
@@ -29,6 +58,8 @@ export default function Home() {
   const now = nowCST()
   const [summary, setSummary] = useState(null)
   const [health, setHealth] = useState(null) // Apple Watch 数据，无则 null
+  const [memCounts, setMemCounts] = useState(() => new Map())
+  const [chatCounts, setChatCounts] = useState(() => chatDayCounts())
 
   useEffect(() => {
     let alive = true
@@ -37,8 +68,16 @@ export default function Home() {
         .then((s) => alive && setSummary(s))
         .catch(() => alive && setSummary(null))
       healthLatest().then((h) => alive && setHealth(h))
+      memoryAll()
+        .then((list) => alive && setMemCounts(memoryDayCounts(list)))
+        .catch(() => {})
+      setChatCounts(chatDayCounts())
     }
     load()
+    // 拉一次云端聊天增量再重数（刚在别的设备聊过也准）；失败静默，本地数据够用
+    chatPull()
+      .then((n) => n && alive && setChatCounts(chatDayCounts()))
+      .catch(() => {})
     // 后台刷新落地后自动重载首页数据（不用切页）
     const unsub = subscribeData(load)
     return () => {
@@ -46,6 +85,9 @@ export default function Home() {
       unsub()
     }
   }, [])
+
+  // 今日互动 = 互动热力里"逻辑日今天"这格，同一口径同一来源
+  const todayMessages = chatCounts.get(dayKey(nowLogical())) || 0
 
   const counts = summary?.counts || {}
 
@@ -82,7 +124,7 @@ export default function Home() {
           <TodayCard
             icon={<MessageSquare size={15} />}
             label="今日互动"
-            value={TODAY_MESSAGES}
+            value={todayMessages}
             unit=" 条"
           />
           <TodayCard
@@ -105,8 +147,13 @@ export default function Home() {
       {/* ── 第四区：待办 ─────────────────────────── */}
       <TodoList />
 
-      {/* ── 第五区：记忆热力图 ───────────────────── */}
-      <Heatmap />
+      {/* ── 第五区：热力图（记忆/互动 双tab，真数据）── */}
+      <Heatmap
+        datasets={[
+          { key: 'memory', label: '记忆', unit: '条', counts: memCounts, level: levelMemory },
+          { key: 'chat', label: '互动', unit: '轮', counts: chatCounts, level: levelChat },
+        ]}
+      />
 
       {/* ── 第六区：Milestones ───────────────────── */}
       <section>

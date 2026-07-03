@@ -58,6 +58,25 @@ export function dayKey(date = nowCST()) {
   return `${y}-${m}-${d}`
 }
 
+// ── 逻辑日：凌晨 4 点才换天 ─────────────────────────────
+// 静怡凌晨活动多，1 点的记录心理上属于"今晚"；按自然日 0 点切会系统性错位。
+// 一切"按天归属"的聚合（热力图、今日互动、记忆页日期归属）统一走这里。
+export const LOGICAL_DAY_SHIFT_H = 4
+
+// ISO 时间戳 → 东八区逻辑日 "YYYY-MM-DD"
+export function logicalDayKey(iso) {
+  const d = toCST(iso)
+  d.setHours(d.getHours() - LOGICAL_DAY_SHIFT_H)
+  return dayKey(d)
+}
+
+// "逻辑日的现在"：东八区当前时间回拨 4 小时的 Date（取年月日即逻辑日的今天）
+export function nowLogical() {
+  const d = nowCST()
+  d.setHours(d.getHours() - LOGICAL_DAY_SHIFT_H)
+  return d
+}
+
 function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
 }

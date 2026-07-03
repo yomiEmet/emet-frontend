@@ -11,7 +11,7 @@
 // 实际请求统一经 ./api/client.js 发出（自动附加密钥 + 统一 401 处理）。
 // ════════════════════════════════════════════════════════
 
-import { nowCST } from './utils/time.js'
+import { nowCST, logicalDayKey } from './utils/time.js'
 import { loadAssistant } from './utils/assistant.js'
 import { smartSearch } from './utils/search.js'
 import { BASE_URL, request, getAdminKey } from './api/client.js'
@@ -162,7 +162,9 @@ export function normMemory(m) {
     linkRel: m.link_rel || {},
     pinned: !!m.pinned,
     locked: !!m.locked,
-    date: (m.created_at || '').slice(0, 10),
+    // 逻辑日归属：凌晨 0-4 点写的记忆算前一天，且修掉旧 slice(0,10) 按 UTC 切、
+    // 东八区 0-8 点整体偏一天的老毛病
+    date: m.created_at ? logicalDayKey(m.created_at) : '',
     activations: m.activations || 0,
     created_at: m.created_at || '',
     updated_at: m.updated_at || m.created_at || '',
