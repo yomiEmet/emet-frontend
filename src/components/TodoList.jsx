@@ -11,9 +11,10 @@ export default function TodoList() {
   const add = () => {
     const text = draft.trim()
     if (!text) return
+    // created_at 可选字段（老数据没有照常渲染），注入对话时用来算"已挂几天"
     setState((s) => ({
       seq: s.seq + 1,
-      items: [...s.items, { id: s.seq + 1, text, done: false }],
+      items: [...s.items, { id: s.seq + 1, text, done: false, created_at: new Date().toISOString() }],
     }))
     setDraft('')
   }

@@ -421,8 +421,35 @@ export async function chatSystemPrompt() {
   // 返回对象，由 streamAnthropic 据此拼 cache_control 块；旧的纯字符串用法仍兼容。
   const stable = loadAssistant().systemPrompt
   const semi = ['【最近的记忆】', memLines || '（暂无）', '', '【最近的日记摘要】', diaryLines || '（暂无）'].join('\n')
-  const volatile = [`当前时间（东八区）：${timeStr}`, ...(healthLine ? ['', '【身体状态】', healthLine] : [])].join('\n')
+  const volatile = [
+    `当前时间（东八区）：${timeStr}`,
+    ...(healthLine ? ['', '【身体状态】', healthLine] : []),
+    ...todoLines(),
+  ].join('\n')
   return { stable, semi, volatile }
+}
+
+// 待办注入（只读）：主页待办的未完成项，最多 10 条。
+// 必须待在 volatile 段——它在全部缓存断点之后，勾选/增删待办不会作废任何缓存前缀；
+// 千万别挪进 semi（会连坐作废 semi/summary/BP4 三段缓存）。
+// 模型没有写权限：提醒靠看见，增删改仍全部由静怡手动操作（拍板决定）。
+function todoLines() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('emet.todos') || 'null')
+    const open = (saved?.items || []).filter((t) => t && t.text && !t.done).slice(0, 10)
+    if (!open.length) return []
+    const lines = open.map((t) => {
+      let age = ''
+      if (t.created_at) {
+        const days = Math.floor((Date.now() - new Date(t.created_at).getTime()) / 86400000)
+        if (days >= 1) age = `（已挂 ${days} 天）`
+      }
+      return `- ${t.text}${age}`
+    })
+    return ['', '【静怡的待办清单】', ...lines, '（话题合适时可以自然提醒她，不必每轮都提；你没有修改待办的权限。）']
+  } catch {
+    return []
+  }
 }
 
 // ── 健康数据（Apple Watch via iOS 快捷指令上报）─────────
