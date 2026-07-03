@@ -394,6 +394,31 @@ export function ideaDelete(id) {
   return writeJSON('DELETE', `/api/idea/${id}`)
 }
 
+// ── 留言/灵感/信件的编辑与删除（worker 路由早已就绪，纯前端补齐）──
+// restPut 白名单外的字段会被忽略；423 = 已锁定，writeJSON 统一提示
+export function messageUpdate(id, patch) {
+  return writeJSON('PUT', `/api/message/${id}`, patch)
+}
+
+export function messageDelete(id) {
+  return writeJSON('DELETE', `/api/message/${id}`)
+}
+
+// PUT /api/idea 的 tags 传数组或逗号串都行（restPut 两种都归一化）
+export function ideaUpdate(id, patch) {
+  return writeJSON('PUT', `/api/idea/${id}`, patch)
+}
+
+// 新建信件——旧版 v6.8.2 信件 tab FAB 的功能，React 迁移时漏掉的补齐
+export function letterCreate({ title, content, kind = 'daily' }) {
+  return writeJSON('POST', '/api/letter', { title, content, kind })
+}
+
+// 信件编辑走 handoff 路由（与旧版一致，信件存 handoffs 表）
+export function letterUpdate(id, patch) {
+  return writeJSON('PUT', `/api/handoff/${id}`, patch)
+}
+
 // ── 聊天（三期）：简单版 system prompt ────────────────────
 // 最近 10 条记忆 + 最近 3 篇日记摘要 + 当前东八区时间。
 export async function chatSystemPrompt() {
