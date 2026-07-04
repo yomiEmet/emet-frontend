@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy, RotateCcw, Star } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -48,25 +48,126 @@ function copyText(t) {
   )
 }
 
-// 用户消息：点药丸展开 meta 行（时间 + 复制 + 收藏）——档案室的交互
-// 必须定义在 Chat 组件外，否则父组件每次渲染都重建组件、metaOpen 状态会丢
-function UserMsg({ m, favOn, onFav }) {
+// ── 版本组（slot）：同一条消息位置的多个版本。编辑我的消息 / 重roll 都往对应 slot 追加一个
+//    新版本，用 < i/n > 独立切换（各 slot 互不影响，不是树状分支）。──
+// slot 缺省时（旧数据）每条消息自成一组，行为与从前完全一致。
+const slotOf = (m) => m.slot || m.mid
+
+// 把会话消息按 slot 分组，每组挑出当前激活的变体，按首次出现顺序排。
+// 变体候选 = 有内容且非 error，或正在流式生成的那条；无 variantSel 记录时默认显示最新的一条。
+// 整组只有失败/空占位时兜底显示最后一条并标 dead（渲染重试入口）。
+function buildRows(session, streamingMid) {
+  const messages = session?.messages || []
+  const hidden = new Set(session?.hiddenMids || []) // 旧版重roll隐藏的消息，继续隐藏
+  const sel = session?.variantSel || {}
+  const order = []
+  const groups = new Map()
+  for (const m of messages) {
+    if (hidden.has(m.mid)) continue
+    const s = slotOf(m)
+    if (!groups.has(s)) {
+      groups.set(s, [])
+      order.push(s)
+    }
+    groups.get(s).push(m)
+  }
+  const rows = []
+  for (const s of order) {
+    const all = groups.get(s)
+    const variants = all.filter((m) => (m.content && !m.error) || m.mid === streamingMid)
+    if (!variants.length) {
+      rows.push({ slot: s, m: all[all.length - 1], idx: 0, count: 1, variantMids: [], dead: true })
+      continue
+    }
+    const selMid = sel[s]
+    let idx = selMid ? variants.findIndex((m) => m.mid === selMid) : -1
+    if (idx < 0) idx = variants.length - 1 // 默认最新
+    rows.push({ slot: s, m: variants[idx], idx, count: variants.length, variantMids: variants.map((v) => v.mid) })
+  }
+  return rows
+}
+
+// 版本切换器 < i/n >：只在同一位置有多个版本时出现
+function VariantSwitcher({ idx, count, onPrev, onNext, align }) {
+  if (count <= 1) return null
+  return (
+    <div className={'chatx-vsw' + (align === 'right' ? ' chatx-vsw--right' : '')}>
+      <button onClick={onPrev} disabled={idx <= 0} aria-label="上一版本">
+        <ChevronLeft size={14} />
+      </button>
+      <span>
+        {idx + 1}/{count}
+      </span>
+      <button onClick={onNext} disabled={idx >= count - 1} aria-label="下一版本">
+        <ChevronRight size={14} />
+      </button>
+    </div>
+  )
+}
+
+// 用户消息：点药丸展开 meta 行（时间/复制/编辑重发/收藏）+ 版本切换（编辑过就有多版本）
+// 必须定义在 Chat 组件外，否则父组件每次渲染都重建组件、局部状态会丢
+function UserMsg({ m, favOn, onFav, idx, count, onSwitch, onEdit }) {
   const [metaOpen, setMetaOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const startEdit = () => {
+    setDraft(m.content || '')
+    setEditing(true)
+    setMetaOpen(false)
+  }
+  const save = () => {
+    const t = draft.trim()
+    if (!t) return
+    setEditing(false)
+    onEdit(t)
+  }
   return (
     <div className="chat-msg chat-msg--user">
       <div className="chatx-usercol">
-        <button
-          type="button"
-          className="chat-bubble chat-bubble--user chatx-userbtn"
-          onClick={() => setMetaOpen((v) => !v)}
-        >
-          {m.content}
-        </button>
-        {metaOpen && (
+        {editing ? (
+          <div className="chatx-useredit">
+            <textarea
+              autoFocus
+              value={draft}
+              rows={2}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  save()
+                }
+              }}
+            />
+            <div className="chatx-useredit__foot">
+              <button className="mini-btn" onClick={() => setEditing(false)}>
+                取消
+              </button>
+              <button className="mini-btn mini-btn--accent" disabled={!draft.trim()} onClick={save}>
+                发送
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="chat-bubble chat-bubble--user chatx-userbtn"
+            onClick={() => setMetaOpen((v) => !v)}
+          >
+            {m.content}
+          </button>
+        )}
+        {!editing && (
+          <VariantSwitcher idx={idx} count={count} align="right" onPrev={() => onSwitch(idx - 1)} onNext={() => onSwitch(idx + 1)} />
+        )}
+        {!editing && metaOpen && (
           <div className="chatx-meta">
             <span>{formatCardTime(m.ts)}</span>
             <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
               <Copy size={13} />
+            </button>
+            <button className="chatx-act" onClick={startEdit} title="编辑重发" aria-label="编辑重发">
+              <Pencil size={13} />
             </button>
             {m.mid && (
               <button
@@ -100,6 +201,7 @@ export default function Chat() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistant, setAssistant] = useState(loadAssistant)
   const [target, setTarget] = useState(getActiveTarget)
+  const [streamingMid, setStreamingMid] = useState(null) // 正在生成的占位 mid（渲染光标 + 组上下文）
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
 
@@ -110,21 +212,11 @@ export default function Chat() {
   }
 
   const cur = sessions.find((s) => s.id === curId && !s.deleted) || null
-  // hiddenMids：被重roll掉的旧回复。只藏不删——消息级合并是「内容长者胜」，
-  // 物理删除会被云端并回来（复活）；会话级字段的合并规则见 sessions.js mergeSession。
-  // useMemo：messages 引用只随 cur 变——否则每次输入敲字都会生成新数组，
-  // 触发下面的滚动 effect 把消息区强行拽到底
-  const messages = useMemo(
-    () => {
-      const hidden = new Set(cur?.hiddenMids || [])
-      return (cur?.messages || []).filter((m) => !hidden.has(m.mid))
-    },
-    [cur],
-  )
+  // rows：按 slot 分组后的激活变体序列（见 buildRows）。每行带 { m, slot, idx, count, variantMids }。
+  // useMemo：引用只随 cur / streamingMid 变——否则每次输入敲字都新建数组、触发滚动 effect 拽到底。
+  const rows = useMemo(() => buildRows(cur, streamingMid), [cur, streamingMid])
+  const rowMsgs = rows.map((r) => r.m) // 当前可见的消息（收藏/多选用）
   const visibleSessions = sessions.filter((s) => !s.deleted) // 墓碑不进列表
-  // 重roll只开放给最后一条 Emet 回复（含失败占位，兼当重试）；中间任意点重发
-  // 会跟滚动摘要打架（摘要里已含被丢弃分支），v1 不做
-  const lastAssistMid = [...messages].reverse().find((m) => m.role === 'assistant' && !m.distill)?.mid || null
 
   // 收藏：存会话级 favs = [{gid, mids, at}]（一次多选=一组），搭 /api/chat 同步顺风车。
   // 已知局限（拍板认可先上低成本版）：删除会话后其收藏一并消失。
@@ -247,7 +339,7 @@ export default function Chat() {
   }
   const favSelected = () => {
     if (!curId || !selected.size) return
-    const mids = messages.filter((m) => selected.has(m.mid)).map((m) => m.mid) // 按消息顺序存
+    const mids = rowMsgs.filter((m) => selected.has(m.mid)).map((m) => m.mid) // 按消息顺序存
     if (!mids.length) {
       // 选中项已不在当前会话（比如中途切了会话），别写空收藏组
       exitSelect()
@@ -271,17 +363,19 @@ export default function Chat() {
   }
   const copySelected = () => {
     const aName = assistant.name || 'Emet'
-    const parts = messages
+    const parts = rowMsgs
       .filter((m) => selected.has(m.mid))
       .map((m) => `${m.role === 'user' ? '静怡' : aName}：${m.content || ''}`)
     copyText(parts.join('\n\n'))
     exitSelect()
   }
 
-  // 流式期间持续滚到底
+  // 滚到底：只在新消息追加、流式开关、流式增量时触发——不随版本切换滚动
+  const msgCount = cur?.messages?.length || 0
+  const streamLen = streaming ? rows[rows.length - 1]?.m?.content?.length || 0 : 0
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [messages, streaming])
+  }, [msgCount, streaming, streamLen])
 
   // 挂载时从云端拉增量并入本地（多设备同步）；失败（离线/无密钥）静默
   useEffect(() => {
@@ -391,8 +485,8 @@ export default function Chat() {
     try {
       const s = loadSessions().find((x) => x.id === sid)
       if (!s) return
-      const hid = new Set(s.hiddenMids || [])
-      const full = (s.messages || []).filter((m) => m.content !== '' && !m.distill && !m.error && !hid.has(m.mid))
+      // 只压缩当前激活的变体序列（切走的旧版本不进摘要）
+      const full = buildRows(s, null).map((r) => r.m).filter((m) => m.content && !m.distill && !m.error)
       const start = anchorStart(full, loadAssistant().contextCount)
       const upTo = s.summaryUpTo || 0
       if (start <= upTo) return // 没有新滑出的消息
@@ -416,21 +510,25 @@ export default function Chat() {
     }
   }
 
-  // 组装请求并跑一轮流式（send 与之后的重roll共用）。
-  // 前置约定：调用方已把「用户消息 + 空 assistant 占位」写进会话。
-  const runTurn = async (sid) => {
+  // 组装请求并跑一轮流式。genMid = 要生成的那条 assistant 占位 mid。
+  // 前置约定：调用方已把占位（和必要的用户变体）写进会话。
+  // 上下文 = genMid 之前的激活变体序列（切走的旧版本、genMid 之后的 slot 都不进）。
+  const runTurn = async (sid, genMid) => {
     setStreaming(true)
+    setStreamingMid(genMid)
     const ctrl = new AbortController()
     abortRef.current = ctrl
     try {
       const a = loadAssistant()
       const system = await chatSystemPrompt()
-      // API 的 messages：去掉空占位与沉淀汇报，再按上下文条数 N 截断
+      // API 的 messages：激活变体序列里 genMid 之前的部分，去掉空/沉淀/error，再按上下文条数截断
       //（只截断发送，界面与存储里的历史消息不动）
       const sess = loadSessions().find((s) => s.id === sid)
-      const hidden = new Set(sess?.hiddenMids || [])
-      const full = (sess?.messages || [])
-        .filter((m) => m.content !== '' && !m.distill && !m.error && !hidden.has(m.mid))
+      const seq = buildRows(sess, genMid).map((r) => r.m)
+      const genIdx = seq.findIndex((m) => m.mid === genMid)
+      const before = genIdx >= 0 ? seq.slice(0, genIdx) : seq
+      const full = before
+        .filter((m) => m.content && !m.distill && !m.error)
         .map((m) => ({ role: m.role, content: m.content }))
       // 锚定窗口（算法见顶部 anchorStart）；窗口外的旧对话由滚动摘要兜着（见 maybeCompress）
       const history = full.slice(anchorStart(full, a.contextCount))
@@ -465,6 +563,14 @@ export default function Chat() {
     } catch (e) {
       if (e.name === 'AbortError') {
         showToast('已停止')
+        // 首 token 前就停 → 空占位标 error，从变体里剔除、slot 自动回退到旧版本
+        update((prev) =>
+          prev.map((s) =>
+            s.id === sid
+              ? { ...s, messages: s.messages.map((m) => (m.mid === genMid && !m.content ? { ...m, error: true } : m)) }
+              : s,
+          ),
+        )
       } else {
         const msg = e.message === 'NO_PROVIDER' ? '请先在设置页添加供应商' : e.message || '请求失败'
         showToast(msg)
@@ -472,50 +578,71 @@ export default function Chat() {
       }
     } finally {
       setStreaming(false)
+      setStreamingMid(null)
       abortRef.current = null
     }
   }
 
-  // 重roll：把旧回复记进 hiddenMids（只藏不删）+ 追加新占位 + 重跑一轮。
-  // 过滤后请求的 messages 数组和上一轮完全一致 → 缓存基本纯命中，重roll反而便宜。
-  const regen = async (mid) => {
-    if (streaming || !mid || !curId) return
+  // 往某个 slot 追加一个新 assistant 变体并生成（重roll / 编辑重发共用）。
+  // 不设 variantSel：默认显示最新变体，旧版本留着可 < i/n > 切回。失败的空占位会自动从变体里剔除。
+  const startTurnInSlot = async (sid, targetSlot) => {
+    const ph = newMessage('assistant', { content: '', thinking: '', tools: [] })
+    ph.slot = targetSlot || ph.mid // 无目标 slot（编辑的是末条用户消息）→ 自成新 slot
+    update((prev) =>
+      prev.map((s) => (s.id === sid ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, ph] } : s)),
+    )
+    await runTurn(sid, ph.mid)
+  }
+
+  // 重roll：往同一 assistant slot 追加一个新版本（旧的保留为可切换变体）
+  const regen = (slot) => {
+    if (streaming || !slot || !curId) return
+    if (!target) {
+      showToast('请先在设置页添加供应商')
+      return
+    }
+    startTurnInSlot(curId, slot)
+  }
+
+  // 编辑我的消息重发：往用户 slot 追加新变体 c，再往「紧随其后的 assistant slot」生成新版本。
+  // 切回旧的用户消息不影响 assistant 版本（各 slot 独立，不是树状分支）——按静怡的规格。
+  const editUser = async (userSlot, newText) => {
+    if (streaming || !curId) return
     if (!target) {
       showToast('请先在设置页添加供应商')
       return
     }
     const sid = curId
+    const uv = newMessage('user', { content: newText })
+    uv.slot = userSlot
+    update((prev) =>
+      prev.map((s) => (s.id === sid ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, uv] } : s)),
+    )
+    // 追加用户变体后重算行序，找紧随其后的 assistant slot（没有则新建一个 slot）
+    const sess = loadSessions().find((s) => s.id === sid)
+    const rws = buildRows(sess, null)
+    const uIdx = rws.findIndex((r) => r.slot === userSlot)
+    const nextAsst = uIdx >= 0 ? rws.slice(uIdx + 1).find((r) => r.m.role === 'assistant' && !r.m.distill) : null
+    await startTurnInSlot(sid, nextAsst ? nextAsst.slot : null)
+  }
+
+  // 切换某 slot 显示的版本（同步为偏好，走 variantRev 合并保护）
+  const switchVariant = (slot, targetIdx, variantMids) => {
+    const mid = variantMids[targetIdx]
+    if (!mid || !curId) return
     update((prev) =>
       prev.map((s) =>
-        s.id === sid
+        s.id === curId
           ? {
               ...s,
-              hiddenMids: [...(s.hiddenMids || []), mid],
-              hidRev: (s.hidRev || 0) + 1, // 隐藏名单自己的版本号，合并按它取高者
+              variantSel: { ...(s.variantSel || {}), [slot]: mid },
+              variantRev: (s.variantRev || 0) + 1,
               updated_at: new Date().toISOString(),
-              messages: [...s.messages, newMessage('assistant', { content: '', thinking: '', tools: [] })],
             }
           : s,
       ),
     )
-    await runTurn(sid)
-
-    // 兜底：这一轮没产出内容（中止/失败）→ 恢复旧回复、把失败占位藏掉。
-    // 不然旧的藏了、新的是空的/错误气泡，两头空还没有重试入口。
-    const after = loadSessions().find((x) => x.id === sid)
-    const last = after?.messages?.[after.messages.length - 1]
-    if (last?.role === 'assistant' && (!last.content || last.error)) {
-      update((prev) =>
-        prev.map((x) => {
-          if (x.id !== sid) return x
-          const nextHidden = (x.hiddenMids || []).filter((h) => h !== mid)
-          if (last.mid) nextHidden.push(last.mid)
-          return { ...x, hiddenMids: nextHidden, hidRev: (x.hidRev || 0) + 1, updated_at: new Date().toISOString() }
-        }),
-      )
-      schedulePush(sid)
-      showToast('这次没成功，已恢复原来的回复')
-    }
+    schedulePush(curId)
   }
 
   const send = async () => {
@@ -542,16 +669,18 @@ export default function Chat() {
     }
 
     setInput('')
-    // 追加用户消息 + 空的 assistant 占位
+    // 追加用户消息 + 空的 assistant 占位，各自成一个新 slot
+    const uMsg = newMessage('user', { content: text })
+    uMsg.slot = uMsg.mid
+    const ph = newMessage('assistant', { content: '', thinking: '', tools: [] })
+    ph.slot = ph.mid
     update((prev) =>
       prev.map((s) =>
-        s.id === sid
-          ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, newMessage('user', { content: text }), newMessage('assistant', { content: '', thinking: '', tools: [] })] }
-          : s,
+        s.id === sid ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, uMsg, ph] } : s,
       ),
     )
 
-    await runTurn(sid)
+    await runTurn(sid, ph.mid)
   }
 
   // 对话沉淀：独立一次请求，让模型把对话里值得长期保存的内容用工具存进记忆库
@@ -744,12 +873,15 @@ export default function Chat() {
             还没有可用的供应商。去 <Link to="/settings">设置页</Link> 添加一个就能开聊。
           </div>
         )}
-        {messages.length === 0 && target && (
+        {rows.length === 0 && target && (
           <p className="faint chat-empty">说点什么吧。</p>
         )}
-        {messages.map((m, i) => (
+        {rows.map((row, i) => {
+          const m = row.m
+          const isStreamingRow = m.mid === streamingMid
+          return (
           <div
-            key={m.mid || i}
+            key={row.slot || i}
             className={
               'chatx-mrow' +
               (selectMode ? ' is-selecting' : '') +
@@ -760,7 +892,15 @@ export default function Chat() {
             {...(!selectMode && m.mid ? lpHandlers(m.mid) : {})}
           >
           {m.role === 'user' ? (
-            <UserMsg m={m} favOn={favMids.has(m.mid)} onFav={toggleFav} />
+            <UserMsg
+              m={m}
+              favOn={favMids.has(m.mid)}
+              onFav={toggleFav}
+              idx={row.idx}
+              count={row.count}
+              onSwitch={(ti) => switchVariant(row.slot, ti, row.variantMids)}
+              onEdit={(text) => editUser(row.slot, text)}
+            />
           ) : (
             <div className="chat-msg chat-msg--emet">
               <div className="chat-emet-head">
@@ -799,7 +939,7 @@ export default function Chat() {
                 dangerouslySetInnerHTML={{
                   __html:
                     marked.parse(m.content || '') +
-                    (streaming && i === messages.length - 1 ? '<span class="chat-cursor">▍</span>' : ''),
+                    (streaming && isStreamingRow ? '<span class="chat-cursor">▍</span>' : ''),
                 }}
               />
               {m.usage &&
@@ -828,13 +968,21 @@ export default function Chat() {
                     </div>
                   )
                 })()}
-              {/* 操作条：复制 + 收藏 + 重roll（只给最后一条 Emet 回复；流式中的末条整条不给）*/}
-              {m.content && !(streaming && i === messages.length - 1) && (
+              {/* 失败/空占位兜底：只显示重试入口（往同一 slot 再生成一次）*/}
+              {row.dead && !(streaming && isStreamingRow) && !m.distill && (
+                <div className="chatx-actions">
+                  <button className="chatx-act" onClick={() => regen(row.slot)} title="重试" aria-label="重试">
+                    <RotateCcw size={15} />
+                  </button>
+                </div>
+              )}
+              {/* 操作条：复制 + 收藏 + 重roll + 版本切换（流式中的当前生成条整条不给）*/}
+              {!row.dead && m.content && !m.distill && !(streaming && isStreamingRow) && (
                 <div className="chatx-actions">
                   <button className="chatx-act" onClick={() => copyText(m.content)} title="复制" aria-label="复制">
                     <Copy size={15} />
                   </button>
-                  {m.mid && !m.error && (
+                  {m.mid && (
                     <button
                       className={'chatx-act' + (favMids.has(m.mid) ? ' is-on' : '')}
                       onClick={() => toggleFav(m.mid)}
@@ -844,22 +992,22 @@ export default function Chat() {
                       <Star size={15} fill={favMids.has(m.mid) ? 'currentColor' : 'none'} />
                     </button>
                   )}
-                  {m.mid && m.mid === lastAssistMid && (
-                    <button
-                      className="chatx-act"
-                      onClick={() => regen(m.mid)}
-                      title={m.error ? '重试' : '重新生成'}
-                      aria-label="重新生成"
-                    >
-                      <RotateCcw size={15} />
-                    </button>
-                  )}
+                  <button className="chatx-act" onClick={() => regen(row.slot)} title="重新生成" aria-label="重新生成">
+                    <RotateCcw size={15} />
+                  </button>
+                  <VariantSwitcher
+                    idx={row.idx}
+                    count={row.count}
+                    onPrev={() => switchVariant(row.slot, row.idx - 1, row.variantMids)}
+                    onNext={() => switchVariant(row.slot, row.idx + 1, row.variantMids)}
+                  />
                 </div>
               )}
             </div>
           )}
           </div>
-        ))}
+          )
+        })}
             <div ref={bottomRef} />
           </div>
         </div>

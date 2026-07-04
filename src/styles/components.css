@@ -4332,6 +4332,66 @@
 .chatx-act.is-on {
   color: var(--accent);
 }
+
+/* 版本切换器 < i/n > */
+.chatx-vsw {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.chatx-vsw--right {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.chatx-vsw button {
+  background: transparent;
+  border: none;
+  padding: 1px;
+  color: var(--text-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+.chatx-vsw button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--border-soft);
+}
+.chatx-vsw button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* 用户消息内联编辑（编辑重发） */
+.chatx-useredit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(78vw, 460px);
+}
+.chatx-useredit textarea {
+  resize: none;
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-bubble);
+  background: var(--bg-card);
+  padding: 10px 14px;
+  font-family: inherit;
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.chatx-useredit textarea:focus {
+  outline: none;
+}
+.chatx-useredit__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @keyframes chatx-fadein {
   from { opacity: 0; transform: translateY(2px); }
   to { opacity: 1; transform: none; }
