@@ -165,7 +165,8 @@ function LetterBoard() {
   const load = () =>
     letterAll()
       .then(setList)
-      .catch(() => setList([]))
+      // 刷新失败保留旧列表（首载失败才落空态），别把已显示的内容清掉
+      .catch(() => setList((prev) => prev || []))
 
   useEffect(() => {
     let alive = true
@@ -449,7 +450,7 @@ function MessageBoard() {
   const load = () =>
     messageAll()
       .then(setList)
-      .catch(() => setList([]))
+      .catch(() => setList((prev) => prev || []))
 
   useEffect(() => {
     let alive = true
@@ -624,7 +625,7 @@ function IdeaBoard() {
   const load = () =>
     ideaAll()
       .then(setList)
-      .catch(() => setList([]))
+      .catch(() => setList((prev) => prev || []))
 
   useEffect(() => {
     let alive = true
