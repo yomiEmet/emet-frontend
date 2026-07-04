@@ -139,7 +139,8 @@ function MemoryManage({ mode = 'memory' }) {
   // 时间线抽屉的月份（按当前列表算，跳转目标一定存在）
   const monthsByYear = useMemo(() => {
     const set = new Set()
-    list.forEach((m) => set.add(monthKeyOf(m.created_at)))
+    // 月份取逻辑日 date 的前7位，与卡面日期同一口径（月初凌晨0-4点的记忆不再两处归属不同月）
+    list.forEach((m) => set.add(m.date ? m.date.slice(0, 7) : monthKeyOf(m.created_at)))
     const months = Array.from(set).sort().reverse()
     const groups = []
     let cur = null

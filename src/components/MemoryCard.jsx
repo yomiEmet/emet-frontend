@@ -45,7 +45,7 @@ export default function MemoryCard({ memory, onClick, query = '', compact = fals
       className={'card mem-card' + (compact ? ' mem-card--compact' : '') + (memory.locked ? ' is-locked' : '')}
       role="button"
       tabIndex={0}
-      data-month={monthKeyOf(memory.created_at)}
+      data-month={memory.date ? memory.date.slice(0, 7) : monthKeyOf(memory.created_at)}
       onClick={onClick}
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
     >
