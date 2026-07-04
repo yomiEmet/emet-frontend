@@ -9,9 +9,10 @@ const TABS = [
   { to: '/settings', label: '设置', Icon: Settings },
 ]
 
-export default function TabBar() {
+// wide=true：铺满全宽（聊天页是全宽布局，680px 居中的 TabBar 会在宽屏底部两侧露出空带）
+export default function TabBar({ wide = false }) {
   return (
-    <nav className="tabbar">
+    <nav className={'tabbar' + (wide ? ' tabbar--wide' : '')}>
       {TABS.map(({ to, label, Icon, end }) => (
         <NavLink
           key={to}

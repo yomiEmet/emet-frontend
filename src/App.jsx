@@ -46,7 +46,7 @@ export default function App() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />
       </Routes>
-      {!hideTabBar && <TabBar />}
+      {!hideTabBar && <TabBar wide={location.pathname === '/chat'} />}
     </div>
   )
 }
