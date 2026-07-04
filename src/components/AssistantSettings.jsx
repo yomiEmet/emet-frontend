@@ -86,22 +86,22 @@ export default function AssistantSettings({ onChange }) {
         </div>
       </div>
 
-      {/* 气泡观察模式 */}
+      {/* 分气泡模式 */}
       <div className="asst-field asst-field--col">
         <div className="asst-field" style={{ width: '100%' }}>
-          <span className="asst-label">气泡观察模式</span>
+          <span className="asst-label">分气泡模式</span>
           <button
             type="button"
             role="switch"
-            aria-checked={!!a.observeMode}
-            className={'chatx-switch' + (a.observeMode ? ' is-on' : '')}
-            onClick={() => apply({ observeMode: !a.observeMode })}
+            aria-checked={!!a.bubbleMode}
+            className={'chatx-switch' + (a.bubbleMode ? ' is-on' : '')}
+            onClick={() => apply({ bubbleMode: !a.bubbleMode })}
           >
             <span className="chatx-switch__dot" />
           </button>
         </div>
         <p className="asst-hint faint">
-          关闭时聊天气泡保持干净、不显示思考过程；开启后有思考的气泡会带标记，点一下弹出思考。也可以在聊天页双击空白处快速切换。
+          开启后回复按段落拆成聊天气泡（Telegram 式），思考过程不再单独占位——在聊天页双击空白处进入观察模式，有思考的气泡带一圈淡色光圈，点击气泡查看。关闭则保持原版排版，思考过程折叠条照常显示。
         </p>
       </div>
 

@@ -34,8 +34,10 @@ export const DEFAULT_ASSISTANT = {
   temperature: 0.7,
   contextCount: 20,
   maxTokens: 4096,
-  // 气泡观察模式：平时(关)气泡干净不显示思考；开启后有思考的气泡加标记、点击弹出
-  observeMode: false,
+  // 分气泡模式（Telegram式）：开启后 Emet 的回复按段拆成聊天气泡、thinking 不内联占位
+  //（在聊天页双击空白进观察态：有思考的气泡带淡色光圈，点击弹出）。
+  // 关闭(默认)=原版排版：全宽回复 + 思考过程折叠条外显。
+  bubbleMode: false,
 }
 
 export function loadAssistant() {

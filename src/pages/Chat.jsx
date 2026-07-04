@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil, Brain } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
 import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from '../utils/providers.js'
-import { loadAssistant, saveAssistant } from '../utils/assistant.js'
+import { loadAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
@@ -46,6 +46,28 @@ function copyText(t) {
     () => showToast('已复制'),
     () => showToast('复制失败'),
   )
+}
+
+// 分气泡模式：按空行把回复拆成段（一段一个气泡，Telegram 式）。
+// ``` 代码块内的空行不算分段，代码块整块留在同一个气泡里。
+function splitBubbles(text) {
+  if (!text) return []
+  const parts = []
+  let buf = []
+  let inCode = false
+  for (const line of text.split('\n')) {
+    if (/^\s*```/.test(line)) inCode = !inCode
+    if (!inCode && line.trim() === '') {
+      if (buf.length) {
+        parts.push(buf.join('\n'))
+        buf = []
+      }
+    } else {
+      buf.push(line)
+    }
+  }
+  if (buf.length) parts.push(buf.join('\n'))
+  return parts
 }
 
 // ── 版本组（slot）：同一条消息位置的多个版本。编辑我的消息 / 重roll 都往对应 slot 追加一个
@@ -283,20 +305,27 @@ export default function Chat() {
     }, 150)
   }
 
-  // ── 观察模式（气泡分模式）：平时气泡干净不显思考；开启后有思考的气泡加标记、点击弹出 ──
-  const observeMode = !!assistant.observeMode
+  // ── 分气泡模式（Telegram式，assistant.bubbleMode 持久开关）──
+  // 观察态 observing 是气泡模式内的临时视图状态（双击空白切换，不持久化、无横幅）：
+  // 有思考的气泡外围一圈淡色光圈，点击气泡弹出思考。原版排版下思考折叠条外显，不需要观察态。
+  const bubbleMode = !!assistant.bubbleMode
+  const [observing, setObserving] = useState(false)
   const observeMsg = observeMid ? rowMsgs.find((m) => m.mid === observeMid) : null
-  const toggleObserve = () => {
-    const next = !assistant.observeMode
-    setAssistant(saveAssistant({ observeMode: next }))
-    if (!next) setObserveMid(null)
-    showToast(next ? '观察模式：点带标记的气泡看思考' : '已退出观察模式')
-  }
-  // 双击聊天区空白处切换观察模式（双击气泡/输入等交互元素不触发）
   const onThreadDblClick = (e) => {
+    if (!bubbleMode) return
     if (e.target.closest('.chatx-mrow') || e.target.closest('a') || e.target.closest('button')) return
-    toggleObserve()
+    setObserving((v) => {
+      if (v) setObserveMid(null)
+      return !v
+    })
   }
+  // 在设置里关掉分气泡模式时，顺带退出观察态
+  useEffect(() => {
+    if (!bubbleMode) {
+      setObserving(false)
+      setObserveMid(null)
+    }
+  }, [bubbleMode])
 
   // 滚到底：只在新消息追加、流式开关、流式增量时触发——不随版本切换滚动
   const msgCount = cur?.messages?.length || 0
@@ -791,12 +820,9 @@ export default function Chat() {
           </button>
         </header>
 
-        {/* 消息区（双击空白切换观察模式）*/}
+        {/* 消息区（分气泡模式下双击空白静默切换观察态）*/}
         <div className="chat-scroll chatx-scroll" onDoubleClick={onThreadDblClick}>
           <div className="chatx-thread">
-        {observeMode && (
-          <div className="chatx-observebar">观察模式 · 点带 <Brain size={11} /> 的气泡看思考，双击空白退出</div>
-        )}
         {!target && (
           <div className="card chat-hint">
             还没有可用的供应商。去 <Link to="/settings">设置页</Link> 添加一个就能开聊。
@@ -828,22 +854,69 @@ export default function Chat() {
                 <span className="chat-emet-name">{assistant.name}</span>
                 {m.distill && <span className="chat-distill-tag">对话沉淀</span>}
               </div>
-              {/* 思考/工具默认收起（气泡干净）；观察模式下有思考的气泡带标记，点击弹出 */}
-              {observeMode && hasThink && (
-                <button className="chatx-think-chip" onClick={() => setObserveMid(m.mid)}>
-                  <Brain size={12} />
-                  <span>思考{m.tools && m.tools.length ? ` · ${m.tools.length} 次工具` : ''}</span>
-                </button>
+              {/* 原版排版（默认）：思考/工具折叠条外显，回复整块渲染——与改造前一字不差 */}
+              {!bubbleMode && m.thinking ? (
+                <details className="chat-think">
+                  <summary className="chat-think__summary">思考过程</summary>
+                  <div className="chat-think__body">{m.thinking}</div>
+                </details>
+              ) : null}
+              {!bubbleMode &&
+                (m.tools || []).map((t) => (
+                  <details key={t.id} className="chat-tool">
+                    <summary className="chat-tool__summary">
+                      <Wrench size={12} />
+                      <span className="chat-tool__name">{t.name}</span>
+                      {t.status === 'running' && <span className="chat-tool__spin">调用中…</span>}
+                    </summary>
+                    <div className="chat-tool__body">
+                      <div className="chat-tool__label">参数</div>
+                      <pre className="chat-tool__pre">{JSON.stringify(t.input || {}, null, 2)}</pre>
+                      {t.result != null && (
+                        <>
+                          <div className="chat-tool__label">结果</div>
+                          <pre className="chat-tool__pre">{t.result}</pre>
+                        </>
+                      )}
+                    </div>
+                  </details>
+                ))}
+              {bubbleMode ? (
+                /* 分气泡（Telegram式）：按段拆成小气泡；观察态下有思考的气泡带淡色光圈，点击弹思考 */
+                <div
+                  className={'chatx-tg' + (observing && hasThink ? ' is-glow' : '')}
+                  onClick={observing && hasThink ? () => setObserveMid(m.mid) : undefined}
+                  role={observing && hasThink ? 'button' : undefined}
+                >
+                  {(() => {
+                    const parts = splitBubbles(m.content || '')
+                    if (!parts.length && streaming && isStreamingRow) parts.push('')
+                    return parts.map((p, pi) => (
+                      <div
+                        key={pi}
+                        className="chat-bubble chat-bubble--emet chatx-tgbubble"
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            marked.parse(p) +
+                            (streaming && isStreamingRow && pi === parts.length - 1
+                              ? '<span class="chat-cursor">▍</span>'
+                              : ''),
+                        }}
+                      />
+                    ))
+                  })()}
+                </div>
+              ) : (
+                <div
+                  className="chat-bubble chat-bubble--emet"
+                  // Emet 的输出走 Markdown（自己人，信任渲染）
+                  dangerouslySetInnerHTML={{
+                    __html:
+                      marked.parse(m.content || '') +
+                      (streaming && isStreamingRow ? '<span class="chat-cursor">▍</span>' : ''),
+                  }}
+                />
               )}
-              <div
-                className="chat-bubble chat-bubble--emet"
-                // Emet 的输出走 Markdown（自己人，信任渲染）
-                dangerouslySetInnerHTML={{
-                  __html:
-                    marked.parse(m.content || '') +
-                    (streaming && isStreamingRow ? '<span class="chat-cursor">▍</span>' : ''),
-                }}
-              />
               {m.usage &&
                 (() => {
                   const inTok = m.usage.input_tokens || 0
