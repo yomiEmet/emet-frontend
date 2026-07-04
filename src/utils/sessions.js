@@ -62,16 +62,37 @@ export function mergeMessages(a = [], b = []) {
 }
 
 // 会话级字段（标题/删除标记）取 updated_at 较新的一方；messages 走并集。
+// 例外（防「陈旧设备一次写入整体清掉另一台的记录」——长开的旧标签页随手发条消息，
+// 它的 updated_at 最新、但 hiddenMids/favs/摘要还是老的，纯 LWW 会拿旧值覆盖云端）：
+//   hiddenMids/favs 各带自己的版本号 hidRev/favRev，合并取版本号高的一方（没动过的一方是 0，覆盖不了别人）；
+//   summary/summaryUpTo 成对取进度更远的一方（滚动摘要只会前进）；distilled 单向取或。
+// 改这里必须同步改后端 worker.js 的同构实现。
 export function mergeSession(a, b) {
   if (!a) return b
   if (!b) return a
   const newer = (a.updated_at || '') >= (b.updated_at || '') ? a : b
   const older = newer === a ? b : a
-  return {
+  const merged = {
     ...newer,
     created_at: older.created_at || newer.created_at,
     messages: mergeMessages(a.messages || [], b.messages || []),
   }
+  const byRev = (revKey, field) => {
+    const ra = a[revKey] || 0
+    const rb = b[revKey] || 0
+    const src = ra === rb ? newer : ra > rb ? a : b
+    if (src[field] !== undefined) merged[field] = src[field]
+    else delete merged[field]
+    if (ra || rb) merged[revKey] = Math.max(ra, rb)
+  }
+  byRev('hidRev', 'hiddenMids')
+  byRev('favRev', 'favs')
+  if ((older.summaryUpTo || 0) > (newer.summaryUpTo || 0)) {
+    merged.summary = older.summary
+    merged.summaryUpTo = older.summaryUpTo
+  }
+  if (a.distilled || b.distilled) merged.distilled = true
+  return merged
 }
 
 // 把 incoming 会话数组并入 local（按 id 用 mergeSession），按时间倒序返回。

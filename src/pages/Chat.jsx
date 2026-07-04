@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Send, Plus, Menu, Search, X, Square, ChevronDown, Check, Wrench, Sparkles, Copy, RotateCcw, Star } from 'lucide-react'
 import { marked } from 'marked'
@@ -85,31 +85,6 @@ function UserMsg({ m, favOn, onFav }) {
   )
 }
 
-// 长按进入多选（触屏+鼠标通吃，480ms；档案室同款交互）
-function longPressProps(fn) {
-  let t = null
-  const clear = () => {
-    if (t) {
-      clearTimeout(t)
-      t = null
-    }
-  }
-  return {
-    onTouchStart: () => {
-      clear()
-      t = setTimeout(fn, 480)
-    },
-    onTouchEnd: clear,
-    onTouchMove: clear,
-    onMouseDown: () => {
-      clear()
-      t = setTimeout(fn, 480)
-    },
-    onMouseUp: clear,
-    onMouseLeave: clear,
-  }
-}
-
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
   const [curId, setCurId] = useState(() => loadSessions().find((s) => !s.deleted)?.id || null)
@@ -136,9 +111,16 @@ export default function Chat() {
 
   const cur = sessions.find((s) => s.id === curId && !s.deleted) || null
   // hiddenMids：被重roll掉的旧回复。只藏不删——消息级合并是「内容长者胜」，
-  // 物理删除会被云端并回来（复活）；会话级字段按 updated_at 新者胜，能可靠同步。
-  const hiddenSet = new Set(cur?.hiddenMids || [])
-  const messages = (cur?.messages || []).filter((m) => !hiddenSet.has(m.mid))
+  // 物理删除会被云端并回来（复活）；会话级字段的合并规则见 sessions.js mergeSession。
+  // useMemo：messages 引用只随 cur 变——否则每次输入敲字都会生成新数组，
+  // 触发下面的滚动 effect 把消息区强行拽到底
+  const messages = useMemo(
+    () => {
+      const hidden = new Set(cur?.hiddenMids || [])
+      return (cur?.messages || []).filter((m) => !hidden.has(m.mid))
+    },
+    [cur],
+  )
   const visibleSessions = sessions.filter((s) => !s.deleted) // 墓碑不进列表
   // 重roll只开放给最后一条 Emet 回复（含失败占位，兼当重试）；中间任意点重发
   // 会跟滚动摘要打架（摘要里已含被丢弃分支），v1 不做
@@ -178,7 +160,8 @@ export default function Chat() {
         const next = had
           ? favs.map((g) => ({ ...g, mids: g.mids.filter((x) => x !== mid) })).filter((g) => g.mids.length)
           : [...favs, { gid: 'f' + Date.now(), mids: [mid], at: new Date().toISOString() }]
-        return { ...s, favs: next, updated_at: new Date().toISOString() }
+        // favRev：收藏字段自己的版本号，合并按它取高者（防陈旧设备整体覆盖，见 mergeSession）
+        return { ...s, favs: next, favRev: (s.favRev || 0) + 1, updated_at: new Date().toISOString() }
       }),
     )
     schedulePush(curId)
@@ -189,7 +172,12 @@ export default function Chat() {
     update((prev) =>
       prev.map((s) =>
         s.id === sid
-          ? { ...s, favs: (s.favs || []).filter((g) => g.gid !== gid), updated_at: new Date().toISOString() }
+          ? {
+              ...s,
+              favs: (s.favs || []).filter((g) => g.gid !== gid),
+              favRev: (s.favRev || 0) + 1,
+              updated_at: new Date().toISOString(),
+            }
           : s,
       ),
     )
@@ -206,8 +194,27 @@ export default function Chat() {
   }
 
   // ── 多选 ──
+  // 长按定时器挂 ref：流式期间每个增量都重渲染，闭包版定时器会变孤儿
+  //（touchstart 设的 t 被新一轮 handler 丢掉、touchmove 清不到，滑一下就误入多选）
+  const lpTimerRef = useRef(null)
+  const lpClear = () => clearTimeout(lpTimerRef.current)
+  const lpHandlers = (mid) => ({
+    onTouchStart: () => {
+      lpClear()
+      lpTimerRef.current = setTimeout(() => enterSelect(mid), 480)
+    },
+    onTouchEnd: lpClear,
+    onTouchMove: lpClear,
+    onMouseDown: () => {
+      lpClear()
+      lpTimerRef.current = setTimeout(() => enterSelect(mid), 480)
+    },
+    onMouseUp: lpClear,
+    onMouseLeave: lpClear,
+  })
   const enterSelect = (mid) => {
-    if (!mid || selectMode) return
+    // 流式中不进多选：底部操作条会顶掉停止按钮
+    if (!mid || selectMode || streaming) return
     // 吃掉长按松手的尾随 click；触屏可能根本不产生这个 click，600ms 后自动清除
     suppressClickRef.current = true
     setTimeout(() => {
@@ -241,12 +248,18 @@ export default function Chat() {
   const favSelected = () => {
     if (!curId || !selected.size) return
     const mids = messages.filter((m) => selected.has(m.mid)).map((m) => m.mid) // 按消息顺序存
+    if (!mids.length) {
+      // 选中项已不在当前会话（比如中途切了会话），别写空收藏组
+      exitSelect()
+      return
+    }
     update((prev) =>
       prev.map((s) =>
         s.id === curId
           ? {
               ...s,
               favs: [...(s.favs || []), { gid: 'f' + Date.now(), mids, at: new Date().toISOString() }],
+              favRev: (s.favRev || 0) + 1,
               updated_at: new Date().toISOString(),
             }
           : s,
@@ -293,6 +306,7 @@ export default function Chat() {
     if (streaming) return
     setCurId(null)
     setSideOpen(false)
+    exitSelect()
   }
 
   // 侧栏会话列表：标题过滤（简单包含匹配就够）
@@ -477,6 +491,7 @@ export default function Chat() {
           ? {
               ...s,
               hiddenMids: [...(s.hiddenMids || []), mid],
+              hidRev: (s.hidRev || 0) + 1, // 隐藏名单自己的版本号，合并按它取高者
               updated_at: new Date().toISOString(),
               messages: [...s.messages, newMessage('assistant', { content: '', thinking: '', tools: [] })],
             }
@@ -484,6 +499,23 @@ export default function Chat() {
       ),
     )
     await runTurn(sid)
+
+    // 兜底：这一轮没产出内容（中止/失败）→ 恢复旧回复、把失败占位藏掉。
+    // 不然旧的藏了、新的是空的/错误气泡，两头空还没有重试入口。
+    const after = loadSessions().find((x) => x.id === sid)
+    const last = after?.messages?.[after.messages.length - 1]
+    if (last?.role === 'assistant' && (!last.content || last.error)) {
+      update((prev) =>
+        prev.map((x) => {
+          if (x.id !== sid) return x
+          const nextHidden = (x.hiddenMids || []).filter((h) => h !== mid)
+          if (last.mid) nextHidden.push(last.mid)
+          return { ...x, hiddenMids: nextHidden, hidRev: (x.hidRev || 0) + 1, updated_at: new Date().toISOString() }
+        }),
+      )
+      schedulePush(sid)
+      showToast('这次没成功，已恢复原来的回复')
+    }
   }
 
   const send = async () => {
@@ -725,7 +757,7 @@ export default function Chat() {
             }
             data-mid={m.mid}
             onClickCapture={selectMode ? onRowClickCapture(m.mid) : undefined}
-            {...(!selectMode && m.mid ? longPressProps(() => enterSelect(m.mid)) : {})}
+            {...(!selectMode && m.mid ? lpHandlers(m.mid) : {})}
           >
           {m.role === 'user' ? (
             <UserMsg m={m} favOn={favMids.has(m.mid)} onFav={toggleFav} />
