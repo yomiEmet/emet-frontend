@@ -735,6 +735,15 @@ export default function Archive({ onExit }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // 移动端首次载出档案 → 落在「全部对话列表」（打开抽屉），而非空的"选一条对话"。
+  // 桌面端 sidebar 常驻，列表一直在，不需要。
+  const landedRef = useRef(false);
+  useEffect(() => {
+    if (booting || !data || !isMobile || landedRef.current) return;
+    landedRef.current = true;
+    if (!view) setSidebarOpen(true);
+  }, [booting, data, isMobile, view]);
+
   const handleFiles = useCallback(async (files) => {
     setLoading(true);
     setError(null);
@@ -840,7 +849,31 @@ export default function Archive({ onExit }) {
     if (isMobile) setSidebarOpen(false);
   }, [isMobile]);
 
-  // ===== 空状态(上传界面) =====
+  // ===== 启动加载态：正在从云端拉已保存的档案，先给轻量加载态，不闪"拖入 zip"引导页 =====
+  //（有 431 场存档的老用户，进来看到的是"正在打开"而非误导性的空上传页）
+  if (booting) {
+    return (
+      <>
+        <Styles />
+        <div className="archive-root archive-empty">
+          {onExit && (
+            <button className="icon-btn archive-exit-float" title="退出档案室" onClick={onExit}>
+              <ArrowLeft size={18} />
+            </button>
+          )}
+          <div className="empty-inner">
+            <div className="empty-mark">ARCHIVE</div>
+            <div className="archive-booting">
+              <span className="archive-spinner" />
+              <span className="drop-hint">正在打开档案室…</span>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ===== 空状态(上传界面)：确实没有已存档案（新用户 / 清空后）=====
   if (!data) {
     return (
       <>
@@ -856,7 +889,6 @@ export default function Archive({ onExit }) {
             <div className="empty-mark">ARCHIVE</div>
             <h1 className="empty-title">Claude 对话档案</h1>
             <p className="empty-sub">把 Anthropic 给你的导出 zip 直接拖进来——一步搞定。或者解压后的文件夹/json 也行,前端本地解析,文件不会离开你的设备。</p>
-            {booting && <div className="drop-hint" style={{ marginBottom: 12 }}>正在从云端加载已保存的档案…</div>}
             <label
               className={`drop-zone ${dragOver ? 'drag-over' : ''} ${loading ? 'loading' : ''}`}
               onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -1064,8 +1096,16 @@ export default function Archive({ onExit }) {
               <Menu size={18} />
             </button>
             <div className="mobile-title">{getViewTitle(view, data, renamedMap)}</div>
-            {onExit ? (
-              <button className="icon-btn" title="退出档案室" onClick={onExit}>
+            {/* 分层返回：看具体对话时 ← 先回全部列表；已在列表落点(view=null)时 ← 才退出档案室 */}
+            {(view || onExit) ? (
+              <button
+                className="icon-btn"
+                title={view ? '返回全部对话' : '退出档案室'}
+                onClick={() => {
+                  if (view) { setView(null); setSidebarOpen(true); }
+                  else onExit && onExit();
+                }}
+              >
                 <ArrowLeft size={18} />
               </button>
             ) : (
@@ -2549,6 +2589,13 @@ function Styles() {
         flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 10px; color: var(--text-faint); font-size: 14px;
       }
+      .archive-booting { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 4px; }
+      .archive-spinner {
+        width: 26px; height: 26px; border-radius: 50%;
+        border: 2px solid var(--border-soft); border-top-color: var(--text-muted);
+        animation: archiveSpin 0.7s linear infinite;
+      }
+      @keyframes archiveSpin { to { transform: rotate(360deg); } }
       .mobile-bar { display: none; }
 
       .conv-view { flex: 1; overflow-y: auto; }
