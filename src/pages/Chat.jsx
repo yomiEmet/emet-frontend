@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil, Brain } from 'lucide-react'
 import { marked } from 'marked'
 import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
 import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from '../utils/providers.js'
-import { loadAssistant } from '../utils/assistant.js'
+import { loadAssistant, saveAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
@@ -194,9 +194,7 @@ export default function Chat() {
   const [sideOpen, setSideOpen] = useState(false) // 移动端侧栏抽屉；桌面常驻
   const [sideQuery, setSideQuery] = useState('')
   const [favOpen, setFavOpen] = useState(false) // 收藏面板
-  const [selectMode, setSelectMode] = useState(false) // 长按进入的多选态
-  const [selected, setSelected] = useState(() => new Set())
-  const suppressClickRef = useRef(false) // 长按松手的尾随click不当成选择切换
+  const [observeMid, setObserveMid] = useState(null) // 观察模式下点开思考的消息 mid
   const [modelOpen, setModelOpen] = useState(false)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistant, setAssistant] = useState(loadAssistant)
@@ -285,89 +283,19 @@ export default function Chat() {
     }, 150)
   }
 
-  // ── 多选 ──
-  // 长按定时器挂 ref：流式期间每个增量都重渲染，闭包版定时器会变孤儿
-  //（touchstart 设的 t 被新一轮 handler 丢掉、touchmove 清不到，滑一下就误入多选）
-  const lpTimerRef = useRef(null)
-  const lpClear = () => clearTimeout(lpTimerRef.current)
-  const lpHandlers = (mid) => ({
-    onTouchStart: () => {
-      lpClear()
-      lpTimerRef.current = setTimeout(() => enterSelect(mid), 480)
-    },
-    onTouchEnd: lpClear,
-    onTouchMove: lpClear,
-    onMouseDown: () => {
-      lpClear()
-      lpTimerRef.current = setTimeout(() => enterSelect(mid), 480)
-    },
-    onMouseUp: lpClear,
-    onMouseLeave: lpClear,
-  })
-  const enterSelect = (mid) => {
-    // 流式中不进多选：底部操作条会顶掉停止按钮
-    if (!mid || selectMode || streaming) return
-    // 吃掉长按松手的尾随 click；触屏可能根本不产生这个 click，600ms 后自动清除
-    suppressClickRef.current = true
-    setTimeout(() => {
-      suppressClickRef.current = false
-    }, 600)
-    setSelectMode(true)
-    setSelected(new Set([mid]))
+  // ── 观察模式（气泡分模式）：平时气泡干净不显思考；开启后有思考的气泡加标记、点击弹出 ──
+  const observeMode = !!assistant.observeMode
+  const observeMsg = observeMid ? rowMsgs.find((m) => m.mid === observeMid) : null
+  const toggleObserve = () => {
+    const next = !assistant.observeMode
+    setAssistant(saveAssistant({ observeMode: next }))
+    if (!next) setObserveMid(null)
+    showToast(next ? '观察模式：点带标记的气泡看思考' : '已退出观察模式')
   }
-  const exitSelect = () => {
-    setSelectMode(false)
-    setSelected(new Set())
-  }
-  const toggleSelect = (mid) => {
-    if (!mid) return
-    setSelected((prev) => {
-      const n = new Set(prev)
-      if (n.has(mid)) n.delete(mid)
-      else n.add(mid)
-      return n
-    })
-  }
-  const onRowClickCapture = (mid) => (e) => {
-    e.stopPropagation()
-    e.preventDefault()
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false
-      return
-    }
-    toggleSelect(mid)
-  }
-  const favSelected = () => {
-    if (!curId || !selected.size) return
-    const mids = rowMsgs.filter((m) => selected.has(m.mid)).map((m) => m.mid) // 按消息顺序存
-    if (!mids.length) {
-      // 选中项已不在当前会话（比如中途切了会话），别写空收藏组
-      exitSelect()
-      return
-    }
-    update((prev) =>
-      prev.map((s) =>
-        s.id === curId
-          ? {
-              ...s,
-              favs: [...(s.favs || []), { gid: 'f' + Date.now(), mids, at: new Date().toISOString() }],
-              favRev: (s.favRev || 0) + 1,
-              updated_at: new Date().toISOString(),
-            }
-          : s,
-      ),
-    )
-    schedulePush(curId)
-    showToast(`已收藏 ${mids.length} 条`)
-    exitSelect()
-  }
-  const copySelected = () => {
-    const aName = assistant.name || 'Emet'
-    const parts = rowMsgs
-      .filter((m) => selected.has(m.mid))
-      .map((m) => `${m.role === 'user' ? '静怡' : aName}：${m.content || ''}`)
-    copyText(parts.join('\n\n'))
-    exitSelect()
+  // 双击聊天区空白处切换观察模式（双击气泡/输入等交互元素不触发）
+  const onThreadDblClick = (e) => {
+    if (e.target.closest('.chatx-mrow') || e.target.closest('a') || e.target.closest('button')) return
+    toggleObserve()
   }
 
   // 滚到底：只在新消息追加、流式开关、流式增量时触发——不随版本切换滚动
@@ -400,7 +328,6 @@ export default function Chat() {
     if (streaming) return
     setCurId(null)
     setSideOpen(false)
-    exitSelect()
   }
 
   // 侧栏会话列表：标题过滤（简单包含匹配就够）
@@ -798,7 +725,6 @@ export default function Chat() {
                 onClick={() => {
                   setCurId(s.id)
                   setSideOpen(false)
-                  exitSelect()
                 }}
               >
                 <div className="chatx-conv__title">{s.title || '未命名对话'}</div>
@@ -865,9 +791,12 @@ export default function Chat() {
           </button>
         </header>
 
-        {/* 消息区 */}
-        <div className="chat-scroll chatx-scroll">
+        {/* 消息区（双击空白切换观察模式）*/}
+        <div className="chat-scroll chatx-scroll" onDoubleClick={onThreadDblClick}>
           <div className="chatx-thread">
+        {observeMode && (
+          <div className="chatx-observebar">观察模式 · 点带 <Brain size={11} /> 的气泡看思考，双击空白退出</div>
+        )}
         {!target && (
           <div className="card chat-hint">
             还没有可用的供应商。去 <Link to="/settings">设置页</Link> 添加一个就能开聊。
@@ -879,18 +808,9 @@ export default function Chat() {
         {rows.map((row, i) => {
           const m = row.m
           const isStreamingRow = m.mid === streamingMid
+          const hasThink = !!(m.thinking || (m.tools && m.tools.length))
           return (
-          <div
-            key={row.slot || i}
-            className={
-              'chatx-mrow' +
-              (selectMode ? ' is-selecting' : '') +
-              (selectMode && selected.has(m.mid) ? ' is-selected' : '')
-            }
-            data-mid={m.mid}
-            onClickCapture={selectMode ? onRowClickCapture(m.mid) : undefined}
-            {...(!selectMode && m.mid ? lpHandlers(m.mid) : {})}
-          >
+          <div key={row.slot || i} className="chatx-mrow" data-mid={m.mid}>
           {m.role === 'user' ? (
             <UserMsg
               m={m}
@@ -908,31 +828,13 @@ export default function Chat() {
                 <span className="chat-emet-name">{assistant.name}</span>
                 {m.distill && <span className="chat-distill-tag">对话沉淀</span>}
               </div>
-              {m.thinking ? (
-                <details className="chat-think">
-                  <summary className="chat-think__summary">思考过程</summary>
-                  <div className="chat-think__body">{m.thinking}</div>
-                </details>
-              ) : null}
-              {(m.tools || []).map((t) => (
-                <details key={t.id} className="chat-tool">
-                  <summary className="chat-tool__summary">
-                    <Wrench size={12} />
-                    <span className="chat-tool__name">{t.name}</span>
-                    {t.status === 'running' && <span className="chat-tool__spin">调用中…</span>}
-                  </summary>
-                  <div className="chat-tool__body">
-                    <div className="chat-tool__label">参数</div>
-                    <pre className="chat-tool__pre">{JSON.stringify(t.input || {}, null, 2)}</pre>
-                    {t.result != null && (
-                      <>
-                        <div className="chat-tool__label">结果</div>
-                        <pre className="chat-tool__pre">{t.result}</pre>
-                      </>
-                    )}
-                  </div>
-                </details>
-              ))}
+              {/* 思考/工具默认收起（气泡干净）；观察模式下有思考的气泡带标记，点击弹出 */}
+              {observeMode && hasThink && (
+                <button className="chatx-think-chip" onClick={() => setObserveMid(m.mid)}>
+                  <Brain size={12} />
+                  <span>思考{m.tools && m.tools.length ? ` · ${m.tools.length} 次工具` : ''}</span>
+                </button>
+              )}
               <div
                 className="chat-bubble chat-bubble--emet"
                 // Emet 的输出走 Markdown（自己人，信任渲染）
@@ -1012,44 +914,69 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* 输入区（多选态换成操作条）*/}
+        {/* 输入区 */}
         <div className="chatx-inputwrap">
-          {selectMode ? (
-            <div className="chatx-selbar">
-              <span className="faint">已选 {selected.size} 条</span>
-              <span className="chatx-top__spacer" />
-              <button className="mini-btn" disabled={!selected.size} onClick={copySelected}>
-                复制
+          <div className="chat-input chatx-input">
+            <textarea
+              rows={1}
+              value={input}
+              placeholder="说点什么…"
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKey}
+            />
+            {streaming ? (
+              <button className="chat-send chat-send--stop" onClick={stop} aria-label="停止">
+                <Square size={15} fill="currentColor" />
               </button>
-              <button className="mini-btn mini-btn--accent" disabled={!selected.size} onClick={favSelected}>
-                收藏
+            ) : (
+              <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
+                <Send size={17} />
               </button>
-              <button className="mini-btn" onClick={exitSelect}>
-                取消
-              </button>
-            </div>
-          ) : (
-            <div className="chat-input chatx-input">
-              <textarea
-                rows={1}
-                value={input}
-                placeholder="说点什么…"
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={onKey}
-              />
-              {streaming ? (
-                <button className="chat-send chat-send--stop" onClick={stop} aria-label="停止">
-                  <Square size={15} fill="currentColor" />
-                </button>
-              ) : (
-                <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
-                  <Send size={17} />
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </main>
+
+      {/* 观察模式：思考/工具弹层 */}
+      {observeMsg && (
+        <>
+          <div className="ts-scrim" onClick={() => setObserveMid(null)} />
+          <div className="ts-panel card chatx-thinkpanel">
+            <div className="ts-head">
+              <span className="ts-title">思考过程</span>
+              <button className="ts-close" onClick={() => setObserveMid(null)} aria-label="关闭">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="chatx-thinkbody">
+              {observeMsg.thinking ? (
+                <div className="chatx-thinktext">{observeMsg.thinking}</div>
+              ) : (
+                !(observeMsg.tools && observeMsg.tools.length) && <p className="faint ts-empty">这条没有记录思考。</p>
+              )}
+              {(observeMsg.tools || []).map((t) => (
+                <details key={t.id} className="chat-tool" open>
+                  <summary className="chat-tool__summary">
+                    <Wrench size={12} />
+                    <span className="chat-tool__name">{t.name}</span>
+                    {t.status === 'running' && <span className="chat-tool__spin">调用中…</span>}
+                  </summary>
+                  <div className="chat-tool__body">
+                    <div className="chat-tool__label">参数</div>
+                    <pre className="chat-tool__pre">{JSON.stringify(t.input || {}, null, 2)}</pre>
+                    {t.result != null && (
+                      <>
+                        <div className="chat-tool__label">结果</div>
+                        <pre className="chat-tool__pre">{t.result}</pre>
+                      </>
+                    )}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* 收藏面板 */}
       {favOpen && (
@@ -1064,7 +991,7 @@ export default function Chat() {
             </div>
             <div className="chatx-favlist">
               {favItems.length === 0 ? (
-                <p className="faint ts-empty">还没有收藏。点消息下的 ☆，或长按消息多选收藏。</p>
+                <p className="faint ts-empty">还没有收藏。点消息下的 ☆ 收藏。</p>
               ) : (
                 favItems.map((f) => (
                   <div key={f.gid} className="chatx-favitem" onClick={() => jumpToFav(f.sid, f.firstMid)}>

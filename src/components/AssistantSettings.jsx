@@ -86,6 +86,25 @@ export default function AssistantSettings({ onChange }) {
         </div>
       </div>
 
+      {/* 气泡观察模式 */}
+      <div className="asst-field asst-field--col">
+        <div className="asst-field" style={{ width: '100%' }}>
+          <span className="asst-label">气泡观察模式</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!!a.observeMode}
+            className={'chatx-switch' + (a.observeMode ? ' is-on' : '')}
+            onClick={() => apply({ observeMode: !a.observeMode })}
+          >
+            <span className="chatx-switch__dot" />
+          </button>
+        </div>
+        <p className="asst-hint faint">
+          关闭时聊天气泡保持干净、不显示思考过程；开启后有思考的气泡会带标记，点一下弹出思考。也可以在聊天页双击空白处快速切换。
+        </p>
+      </div>
+
       {/* 系统提示词 */}
       <div className="asst-field asst-field--col">
         <span className="asst-label">系统提示词</span>

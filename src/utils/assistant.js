@@ -34,6 +34,8 @@ export const DEFAULT_ASSISTANT = {
   temperature: 0.7,
   contextCount: 20,
   maxTokens: 4096,
+  // 气泡观察模式：平时(关)气泡干净不显示思考；开启后有思考的气泡加标记、点击弹出
+  observeMode: false,
 }
 
 export function loadAssistant() {
