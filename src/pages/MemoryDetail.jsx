@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Star, Lock, X, Plus, Link2, Search,
@@ -58,6 +58,14 @@ export default function MemoryDetail() {
   const [dateOpen, setDateOpen] = useState(false)
   const [tagSpaceOpen, setTagSpaceOpen] = useState(false)
   const bodyRef = useRef(null)
+
+  // 正文自适应高度：内容多长就撑多高，不出内部滚动条（全部显示，不用手动拉伸）
+  useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [work?.content])
 
   // 自动保存管线：workRef 永远指向最新值，防抖 500ms 落库
   const workRef = useRef(null)

@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Send, Plus, X, Lock, MoreHorizontal, Pencil } from 'lucide-react'
+import { Send, Plus, X, Lock, MoreHorizontal } from 'lucide-react'
 import {
   messageAll,
   messageLeave,
@@ -19,6 +19,18 @@ import {
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
+
+// 自适应高度文本框：内容多长撑多高，不出内部滚动条/拉伸条（编辑态全部显示）
+function AutoTextarea({ value, className, ...rest }) {
+  const ref = useRef(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [value])
+  return <textarea ref={ref} className={'auto-ta ' + (className || '')} value={value} rows={1} {...rest} />
+}
 
 function MoveButton({ id, fromType, onMoved }) {
   const [open, setOpen] = useState(false)
@@ -159,7 +171,6 @@ const LETTER_FILTERS = [
 function LetterBoard() {
   const [list, setList] = useState(null)
   const [kind, setKind] = useState('all')
-  const [openId, setOpenId] = useState(null)
   const [composeOpen, setComposeOpen] = useState(false)
 
   const load = () =>
@@ -226,13 +237,7 @@ function LetterBoard() {
       ) : (
         <div className="letter-list">
           {filtered.map((l) => (
-            <LetterCard
-              key={l.id}
-              letter={l}
-              open={openId === l.id}
-              onToggle={() => setOpenId(openId === l.id ? null : l.id)}
-              onChanged={load}
-            />
+            <LetterCard key={l.id} letter={l} onChanged={load} />
           ))}
         </div>
       )}
@@ -311,8 +316,10 @@ function LetterCompose({ onDone }) {
   )
 }
 
-function LetterCard({ letter, open, onToggle, onChanged }) {
+// 信件卡：点击即编辑（与记忆一致，无铅笔）。锁定的信不可编辑，点击只展开阅读全文。
+function LetterCard({ letter, onChanged }) {
   const [editing, setEditing] = useState(false)
+  const [open, setOpen] = useState(false) // 锁定信的只读展开
   const [tTitle, setTTitle] = useState('')
   const [tContent, setTContent] = useState('')
   const [busy, setBusy] = useState(false)
@@ -321,14 +328,17 @@ function LetterCard({ letter, open, onToggle, onChanged }) {
   const dateStr = formatDateZh(letter.created_at)
   const preview = (letter.content || '').slice(0, 200)
 
-  const startEdit = (e) => {
-    e.stopPropagation()
+  const onCardClick = () => {
+    if (editing) return
+    if (letter.locked) {
+      setOpen((v) => !v) // 锁定=只读，点击展开/收起
+      return
+    }
     setTTitle(letter.title || '')
     setTContent(letter.content || '')
     setEditing(true)
   }
-  const save = async (e) => {
-    e.stopPropagation()
+  const save = async () => {
     if (!tContent.trim() || busy) return
     setBusy(true)
     try {
@@ -346,22 +356,13 @@ function LetterCard({ letter, open, onToggle, onChanged }) {
 
   return (
     <article
-      className={
-        'letter-card letter-card--' + letter.kind + (open ? ' is-open' : '')
-      }
-      onClick={editing ? undefined : onToggle}
+      className={'letter-card letter-card--' + letter.kind + (open || editing ? ' is-open' : '')}
+      onClick={editing ? undefined : onCardClick}
     >
-      {/* 角标：锁 / 编辑（锁定的信不给编辑入口，423 也会被后端拦） */}
-      {letter.locked ? (
+      {letter.locked && (
         <span className="letter-card__lock" aria-label="已锁定">
           <Lock size={12} />
         </span>
-      ) : (
-        !editing && (
-          <button className="letter-card__edit" onClick={startEdit} aria-label="编辑">
-            <Pencil size={13} />
-          </button>
-        )
       )}
 
       {/* 信封顶饰线 */}
@@ -382,42 +383,27 @@ function LetterCard({ letter, open, onToggle, onChanged }) {
             placeholder="标题（可空）"
             onChange={(e) => setTTitle(e.target.value)}
           />
-          <textarea
+          <AutoTextarea
             className="letter-card__editarea"
             autoFocus
             value={tContent}
-            rows={10}
             onChange={(e) => setTContent(e.target.value)}
           />
           <div className="idea-form__foot">
-            <button
-              className="mini-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                setEditing(false)
-              }}
-            >
+            <button className="mini-btn" onClick={() => setEditing(false)}>
               取消
             </button>
-            <button
-              className="mini-btn mini-btn--accent"
-              disabled={!tContent.trim() || busy}
-              onClick={save}
-            >
+            <button className="mini-btn mini-btn--accent" disabled={!tContent.trim() || busy} onClick={save}>
               {busy ? '保存中…' : '保存'}
             </button>
           </div>
         </div>
       ) : (
         <>
-          {/* 标题（衬线大字）*/}
-          {letter.title && (
-            <h3 className="letter-card__title">{letter.title}</h3>
-          )}
+          {letter.title && <h3 className="letter-card__title">{letter.title}</h3>}
 
-          {/* 正文（折叠/展开）*/}
           <div className="letter-card__body">
-            {open ? (
+            {letter.locked && open ? (
               <p className="letter-card__full">{letter.content}</p>
             ) : (
               <p className="letter-card__preview">
@@ -427,12 +413,9 @@ function LetterCard({ letter, open, onToggle, onChanged }) {
             )}
           </div>
 
-          {/* 底部签名 */}
           <div className="letter-card__foot">
             <span className="letter-card__sig">— Emet</span>
-            <span className="letter-card__expand">
-              {open ? '收起' : '展开全文'}
-            </span>
+            <span className="letter-card__expand">{letter.locked ? (open ? '收起' : '展开全文') : '点击编辑'}</span>
           </div>
         </>
       )}
@@ -563,17 +546,6 @@ function MsgCard({ m, onChanged }) {
     >
       {!m.locked && !editing && (
         <>
-          <button
-            className="idea-card__del"
-            style={{ right: 56 }}
-            onClick={() => {
-              setDraft(m.content || '')
-              setEditing(true)
-            }}
-            aria-label="编辑"
-          >
-            <Pencil size={13} />
-          </button>
           <MoveButton id={m.id} fromType="message" onMoved={onChanged} />
           <button className="idea-card__del" onClick={remove} aria-label="删除">
             <X size={14} />
@@ -588,27 +560,31 @@ function MsgCard({ m, onChanged }) {
       </div>
       {editing ? (
         <div className="inline-edit">
-          <textarea
-            autoFocus
-            value={draft}
-            rows={3}
-            onChange={(e) => setDraft(e.target.value)}
-          />
+          <AutoTextarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} />
           <div className="idea-form__foot">
             <button className="mini-btn" onClick={() => setEditing(false)}>
               取消
             </button>
-            <button
-              className="mini-btn mini-btn--accent"
-              disabled={!draft.trim() || busy}
-              onClick={save}
-            >
+            <button className="mini-btn mini-btn--accent" disabled={!draft.trim() || busy} onClick={save}>
               {busy ? '保存中…' : '保存'}
             </button>
           </div>
         </div>
       ) : (
-        <p className="msg-card__content">{m.content}</p>
+        // 点内容即进编辑（与记忆一致，无铅笔）；锁定的留言不可编辑
+        <p
+          className={'msg-card__content' + (m.locked ? '' : ' is-editable')}
+          onClick={
+            m.locked
+              ? undefined
+              : () => {
+                  setDraft(m.content || '')
+                  setEditing(true)
+                }
+          }
+        >
+          {m.content}
+        </p>
       )}
     </div>
   )
@@ -742,18 +718,6 @@ function IdeaCard({ idea: i, busy: listBusy, onChanged, onRemove }) {
     <div className="card idea-card" style={{ position: 'relative' }}>
       {!i.locked && !editing && (
         <>
-          <button
-            className="idea-card__del"
-            style={{ right: 56 }}
-            onClick={() => {
-              setDraft(i.content || '')
-              setTagsDraft((i.tags || []).join(', '))
-              setEditing(true)
-            }}
-            aria-label="编辑"
-          >
-            <Pencil size={13} />
-          </button>
           <MoveButton id={i.id} fromType="idea" onMoved={onChanged} />
           <button
             className="idea-card__del"
@@ -767,7 +731,7 @@ function IdeaCard({ idea: i, busy: listBusy, onChanged, onRemove }) {
       )}
       {editing ? (
         <div className="inline-edit">
-          <textarea autoFocus value={draft} rows={3} onChange={(e) => setDraft(e.target.value)} />
+          <AutoTextarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} />
           <input
             className="inline-edit__tags"
             value={tagsDraft}
@@ -785,7 +749,21 @@ function IdeaCard({ idea: i, busy: listBusy, onChanged, onRemove }) {
         </div>
       ) : (
         <>
-          <p className="idea-card__content">{i.content}</p>
+          {/* 点内容即进编辑（与记忆一致，无铅笔）；锁定的灵感不可编辑 */}
+          <p
+            className={'idea-card__content' + (i.locked ? '' : ' is-editable')}
+            onClick={
+              i.locked
+                ? undefined
+                : () => {
+                    setDraft(i.content || '')
+                    setTagsDraft((i.tags || []).join(', '))
+                    setEditing(true)
+                  }
+            }
+          >
+            {i.content}
+          </p>
           {i.tags?.length > 0 && (
             <div className="mem-card__tags">
               {i.tags.map((t) => (

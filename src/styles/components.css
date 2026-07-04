@@ -1344,8 +1344,9 @@
 
 .detail-date {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   margin-bottom: 14px;
   font-size: 13px;
 }
@@ -1355,6 +1356,7 @@
   font-weight: 500;
   color: var(--ink);
   letter-spacing: 0.02em;
+  white-space: nowrap; /* 日期单行不换行，小字挪到下面（.detail-date 竖排） */
 }
 
 .detail-body {
@@ -1388,6 +1390,7 @@
   word-break: break-word;
   min-height: 6em;
   resize: none;
+  overflow: hidden; /* 高度由 JS 撑到 scrollHeight，全部显示、不出内部滚动条 */
   margin-bottom: 18px;
 }
 .detail-body--seamless::placeholder {
@@ -2128,6 +2131,18 @@
   white-space: pre-wrap;
 }
 
+/* 点内容即编辑：可编辑内容的提示光标（留言/灵感通用） */
+.msg-card__content.is-editable,
+.idea-card__content.is-editable {
+  cursor: text;
+}
+
+/* 自适应高度文本框：高度由 JS 撑到 scrollHeight，不出内部滚动条/拉伸手柄 */
+.auto-ta {
+  resize: none;
+  overflow: hidden;
+}
+
 /* ════════════════════════════════════════
    灵感板（设计 4.4b）
    ════════════════════════════════════════ */
@@ -2294,16 +2309,6 @@
   outline: none;
   border-color: var(--accent-soft);
 }
-.letter-card__edit {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 4px;
-  color: var(--text-faint);
-}
-.letter-card__edit:hover {
-  color: var(--accent);
-}
 .letter-card__editor {
   display: flex;
   flex-direction: column;
@@ -2313,7 +2318,6 @@
 }
 .letter-card__editarea {
   width: 100%;
-  resize: vertical;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: var(--bg);
