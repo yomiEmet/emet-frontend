@@ -310,7 +310,6 @@ export default function Chat() {
   // 有思考的气泡外围一圈淡色光圈，点击气泡弹出思考。原版排版下思考折叠条外显，不需要观察态。
   const bubbleMode = !!assistant.bubbleMode
   const [observing, setObserving] = useState(false)
-  const observeMsg = observeMid ? rowMsgs.find((m) => m.mid === observeMid) : null
   const onThreadDblClick = (e) => {
     if (!bubbleMode) return
     if (e.target.closest('.chatx-mrow') || e.target.closest('a') || e.target.closest('button')) return
@@ -881,11 +880,45 @@ export default function Chat() {
                     </div>
                   </details>
                 ))}
+              {/* 观察态点开的思考：在消息上方内联展开（参考图的淡色块），再点气泡收起 */}
+              {bubbleMode && observing && hasThink && observeMid === m.mid && (
+                <div className="chatx-thinkinline">
+                  {m.thinking && (
+                    <>
+                      <div className="chatx-thinkinline__label">thinking</div>
+                      <div className="chatx-thinkinline__body">{m.thinking}</div>
+                    </>
+                  )}
+                  {(m.tools || []).map((t) => (
+                    <details key={t.id} className="chat-tool">
+                      <summary className="chat-tool__summary">
+                        <Wrench size={12} />
+                        <span className="chat-tool__name">{t.name}</span>
+                        {t.status === 'running' && <span className="chat-tool__spin">调用中…</span>}
+                      </summary>
+                      <div className="chat-tool__body">
+                        <div className="chat-tool__label">参数</div>
+                        <pre className="chat-tool__pre">{JSON.stringify(t.input || {}, null, 2)}</pre>
+                        {t.result != null && (
+                          <>
+                            <div className="chat-tool__label">结果</div>
+                            <pre className="chat-tool__pre">{t.result}</pre>
+                          </>
+                        )}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
               {bubbleMode ? (
-                /* 分气泡（Telegram式）：按段拆成小气泡；观察态下有思考的气泡带淡色光圈，点击弹思考 */
+                /* 分气泡（Telegram式）：按段拆成小气泡；观察态下有思考的气泡带淡色光圈，点击在上方展开思考 */
                 <div
                   className={'chatx-tg' + (observing && hasThink ? ' is-glow' : '')}
-                  onClick={observing && hasThink ? () => setObserveMid(m.mid) : undefined}
+                  onClick={
+                    observing && hasThink
+                      ? () => setObserveMid((prev) => (prev === m.mid ? null : m.mid))
+                      : undefined
+                  }
                   role={observing && hasThink ? 'button' : undefined}
                 >
                   {(() => {
@@ -1009,47 +1042,6 @@ export default function Chat() {
           </div>
         </div>
       </main>
-
-      {/* 观察模式：思考/工具弹层 */}
-      {observeMsg && (
-        <>
-          <div className="ts-scrim" onClick={() => setObserveMid(null)} />
-          <div className="ts-panel card chatx-thinkpanel">
-            <div className="ts-head">
-              <span className="ts-title">思考过程</span>
-              <button className="ts-close" onClick={() => setObserveMid(null)} aria-label="关闭">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="chatx-thinkbody">
-              {observeMsg.thinking ? (
-                <div className="chatx-thinktext">{observeMsg.thinking}</div>
-              ) : (
-                !(observeMsg.tools && observeMsg.tools.length) && <p className="faint ts-empty">这条没有记录思考。</p>
-              )}
-              {(observeMsg.tools || []).map((t) => (
-                <details key={t.id} className="chat-tool" open>
-                  <summary className="chat-tool__summary">
-                    <Wrench size={12} />
-                    <span className="chat-tool__name">{t.name}</span>
-                    {t.status === 'running' && <span className="chat-tool__spin">调用中…</span>}
-                  </summary>
-                  <div className="chat-tool__body">
-                    <div className="chat-tool__label">参数</div>
-                    <pre className="chat-tool__pre">{JSON.stringify(t.input || {}, null, 2)}</pre>
-                    {t.result != null && (
-                      <>
-                        <div className="chat-tool__label">结果</div>
-                        <pre className="chat-tool__pre">{t.result}</pre>
-                      </>
-                    )}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
 
       {/* 收藏面板 */}
       {favOpen && (
