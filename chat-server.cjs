@@ -324,6 +324,7 @@ server.listen(PORT, HOST, () => {
     console.log('  ★ 手机（同一 WiFi/热点）用浏览器打开下面任一地址即可：')
     if (ips.length) ips.forEach((ip) => console.log(`        http://${ip}:${PORT}`))
     else console.log('        （没探到局域网地址，确认电脑连着 WiFi/热点）')
+    if (AUTH_TOKEN) console.log(`  ★ 手机上「暗号」栏要输入：${AUTH_TOKEN}`)
   } else {
     console.log('  本机打开：http://localhost:8000')
   }
