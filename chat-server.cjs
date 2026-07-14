@@ -9,9 +9,13 @@
 // 关进程 / 关页面 / Ctrl+C 都会断流。
 
 const http = require('http')
+const https = require('https')
+const net = require('net')
+const tls = require('tls')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
+const { URL } = require('url')
 const { spawn, execSync } = require('child_process')
 
 // 监听地址：默认只听本机回环 127.0.0.1（最安全，只有本机能连）。
@@ -52,6 +56,91 @@ const CORS_ORIGINS = new Set([...DEFAULT_ORIGINS, ...EXTRA_ORIGINS])
 // 缺密钥时中转不启用（只影响手机，本机 HTTP 直连照常）。
 const RELAY_BASE = (process.env.CC_RELAY_BASE || 'https://emet-memoty-v66.aandxiaobao.workers.dev').replace(/\/+$/, '')
 const RELAY_POLL_MS = 2000
+const PROXY_URL = (process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim()
+
+// 经 HTTP 代理（CONNECT 隧道）发一个 HTTPS 请求，返回 { status, text }。
+// 不依赖 NODE_USE_ENV_PROXY（实验特性，实测长驻进程里不稳）——自己建隧道最稳。
+// 无代理配置时回退普通 https 直连。国内直连 workers.dev 不通，所以桥必须配代理。
+function relayFetch(fullUrl, { method = 'GET', headers = {}, body = null } = {}) {
+  const target = new URL(fullUrl)
+  const port = Number(target.port) || 443
+  const hdr = { Host: target.hostname, Connection: 'close', ...headers }
+  if (body != null) hdr['Content-Length'] = Buffer.byteLength(body)
+
+  return new Promise((resolve, reject) => {
+    const doHttpsOverSocket = (socket) => {
+      const tlsSock = tls.connect({ socket, servername: target.hostname }, () => {
+        let reqLine = `${method} ${target.pathname}${target.search} HTTP/1.1\r\n`
+        for (const [k, v] of Object.entries(hdr)) reqLine += `${k}: ${v}\r\n`
+        reqLine += '\r\n'
+        tlsSock.write(reqLine)
+        if (body != null) tlsSock.write(body)
+      })
+      const chunks = []
+      tlsSock.on('data', (d) => chunks.push(d))
+      tlsSock.on('end', () => resolve(parseHttpResponse(Buffer.concat(chunks))))
+      tlsSock.on('error', reject)
+    }
+
+    if (!PROXY_URL) {
+      // 无代理：普通 https 请求
+      const req = https.request(fullUrl, { method, headers: hdr }, (res) => {
+        const chunks = []
+        res.on('data', (d) => chunks.push(d))
+        res.on('end', () => resolve({ status: res.statusCode, text: Buffer.concat(chunks).toString('utf8') }))
+      })
+      req.on('error', reject)
+      req.setTimeout(30000, () => { req.destroy(new Error('请求超时')) })
+      if (body != null) req.write(body)
+      req.end()
+      return
+    }
+
+    // 有代理：先 CONNECT 隧道，再在隧道上做 TLS
+    const px = new URL(PROXY_URL)
+    const sock = net.connect(Number(px.port), px.hostname, () => {
+      sock.write(`CONNECT ${target.hostname}:${port} HTTP/1.1\r\nHost: ${target.hostname}:${port}\r\n\r\n`)
+    })
+    let head = ''
+    const onData = (chunk) => {
+      head += chunk.toString('latin1')
+      if (head.includes('\r\n\r\n')) {
+        sock.removeListener('data', onData)
+        if (/^HTTP\/1\.[01] 200/.test(head)) doHttpsOverSocket(sock)
+        else reject(new Error('代理 CONNECT 失败：' + head.split('\r\n')[0]))
+      }
+    }
+    sock.on('data', onData)
+    sock.on('error', reject)
+    sock.setTimeout(30000, () => { sock.destroy(); reject(new Error('代理连接超时')) })
+  })
+}
+
+// 解析 HTTP/1.1 原始响应字节 → { status, text }，处理 chunked 传输编码
+function parseHttpResponse(buf) {
+  const raw = buf.toString('latin1')
+  const sep = raw.indexOf('\r\n\r\n')
+  const headText = raw.slice(0, sep)
+  const statusMatch = headText.match(/^HTTP\/1\.[01] (\d+)/)
+  const status = statusMatch ? Number(statusMatch[1]) : 0
+  let bodyBuf = buf.slice(Buffer.byteLength(headText, 'latin1') + 4)
+  if (/transfer-encoding:\s*chunked/i.test(headText)) bodyBuf = dechunk(bodyBuf)
+  return { status, text: bodyBuf.toString('utf8') }
+}
+
+function dechunk(buf) {
+  const out = []
+  let i = 0
+  while (i < buf.length) {
+    let lineEnd = buf.indexOf('\r\n', i)
+    if (lineEnd < 0) break
+    const size = parseInt(buf.slice(i, lineEnd).toString('latin1').trim(), 16)
+    if (!size || Number.isNaN(size)) break
+    out.push(buf.slice(lineEnd + 2, lineEnd + 2 + size))
+    i = lineEnd + 2 + size + 2
+  }
+  return Buffer.concat(out)
+}
 function readAdminKey() {
   const fromEnv = (process.env.CC_ADMIN_KEY || '').trim()
   if (fromEnv) return fromEnv
@@ -368,13 +457,32 @@ server.listen(PORT, HOST, () => {
     console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
   }
   if (ADMIN_KEY) {
-    console.log(`  手机中转：✓ 已开 —— 手机在线上 Emet 直接聊，无需同网/无需填地址`)
-    startRelayLoop()
+    relaySelfTestThenLoop()
   } else {
     console.log(`  手机中转：未开（缺 .cc-admin-key）—— 只影响手机线上聊天，本机直连不受影响`)
   }
   console.log('  退出按 Ctrl+C')
 })
+
+// ── 开机自检：先测一次云端连通，把结果和实际环境大声打印，再进循环 ──────────
+async function relaySelfTestThenLoop() {
+  console.log('  手机中转：自检中…')
+  console.log(`      代理(HTTPS_PROXY)：${PROXY_URL || '（未设置！国内连不上云端，中转会失败）'}`)
+  try {
+    const r = await relayFetch(RELAY_BASE + '/api/relay/take', { headers: { 'X-Admin-Key': ADMIN_KEY } })
+    if (r.status === 200) {
+      console.log('  手机中转：✓ 云端连通、认证通过 —— 手机在线上 Emet 直接聊即可')
+    } else if (r.status === 401) {
+      console.log('  手机中转：✗ 云端连通但认证失败（401）—— .cc-admin-key 与 Emet 访问密钥不一致')
+    } else {
+      console.log(`  手机中转：✗ 云端返回异常状态 ${r.status}`)
+    }
+  } catch (e) {
+    console.log('  手机中转：✗ 连不上云端 —— ' + (e?.message || e))
+    console.log('             （多半是代理没设或代理端口不对；本机直连不受影响）')
+  }
+  startRelayLoop()
+}
 
 // ── 中转轮询循环：认领手机问题 → 跑 claude → 交答案 ──────────────
 // 用 setTimeout 递归而非 setInterval，避免一轮没跑完又叠一轮。
@@ -382,17 +490,18 @@ async function startRelayLoop() {
   let warnedOffline = false
   const tick = async () => {
     try {
-      const r = await fetch(RELAY_BASE + '/api/relay/take', {
+      const r = await relayFetch(RELAY_BASE + '/api/relay/take', {
         headers: { 'X-Admin-Key': ADMIN_KEY },
       })
-      if (r.ok) {
+      if (r.status === 200) {
         warnedOffline = false // 只在真正成功时清除告警去重，否则 401 会每 2s 刷屏
-        const data = await r.json()
+        let data = null
+        try { data = JSON.parse(r.text) } catch { /* 非 JSON 忽略 */ }
         if (data && data.job) {
           const job = data.job
           console.log(`[relay] 认领手机问题 ${job.id}（model=${job.model || '默认'}）`)
           const result = await runClaude({ system: job.system, messages: job.messages, model: job.model })
-          await fetch(RELAY_BASE + '/api/relay/answer', {
+          await relayFetch(RELAY_BASE + '/api/relay/answer', {
             method: 'POST',
             headers: { 'content-type': 'application/json', 'X-Admin-Key': ADMIN_KEY },
             body: JSON.stringify({ id: job.id, ok: result.ok, text: result.text, error: result.error }),
