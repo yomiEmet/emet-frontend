@@ -5,3 +5,4 @@ dist
 .vite
 .cc-bridge-token
 .cc-session.json
+.cc-admin-key

@@ -16,10 +16,23 @@ if (Test-Path $tokFile) {
 }
 Set-Clipboard $env:CC_BRIDGE_TOKEN
 
-# 2) proxy so claude can reach Anthropic
+# 2) proxy so claude can reach Anthropic (and node fetch can reach the worker)
 $env:HTTPS_PROXY = "http://127.0.0.1:7897"
 $env:HTTP_PROXY  = "http://127.0.0.1:7897"
 $env:NO_PROXY    = "localhost,127.0.0.1,::1,.local"
+# make node's built-in fetch honor the proxy env vars (for the relay -> worker calls)
+$env:NODE_USE_ENV_PROXY = "1"
+
+# 3) admin key for phone relay (your Emet access key). One-time: paste it once,
+#    saved to .cc-admin-key (gitignored). Lets the phone chat on the online Emet
+#    with no extra token. Skip by pressing Enter if you only use the computer.
+$keyFile = Join-Path $PSScriptRoot ".cc-admin-key"
+if (-not (Test-Path $keyFile)) {
+  $k = Read-Host "Paste your Emet access key for phone relay (Enter to skip)"
+  if ($k.Trim().Length -gt 0) {
+    Set-Content -Path $keyFile -Value $k.Trim() -NoNewline -Encoding ascii
+  }
+}
 
 Set-Location $PSScriptRoot
 node chat-server.cjs

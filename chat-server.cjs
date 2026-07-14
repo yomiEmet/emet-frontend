@@ -43,6 +43,26 @@ const EXTRA_ORIGINS = (process.env.CC_BRIDGE_CORS || '')
   .filter(Boolean)
 const CORS_ORIGINS = new Set([...DEFAULT_ORIGINS, ...EXTRA_ORIGINS])
 
+// ── 中转（relay）：让手机在线上前端聊本机 claude ─────────────────
+// 桥每隔 RELAY_POLL_MS 向云端 worker 轮询 /api/relay/take 认领手机发来的问题，
+// 本地跑完 claude -p 后把答案 POST 回 /api/relay/answer，手机再从 worker 取件。
+// 需要两样东西才启用：
+//   1) worker 地址（下面 RELAY_BASE 写死为 Emet 后端，也可用 CC_RELAY_BASE 覆盖）
+//   2) 管理员密钥：环境变量 CC_ADMIN_KEY，或项目根 .cc-admin-key 文件（gitignore）
+// 缺密钥时中转不启用（只影响手机，本机 HTTP 直连照常）。
+const RELAY_BASE = (process.env.CC_RELAY_BASE || 'https://emet-memoty-v66.aandxiaobao.workers.dev').replace(/\/+$/, '')
+const RELAY_POLL_MS = 2000
+function readAdminKey() {
+  const fromEnv = (process.env.CC_ADMIN_KEY || '').trim()
+  if (fromEnv) return fromEnv
+  try {
+    return fs.readFileSync(path.join(__dirname, '.cc-admin-key'), 'utf8').trim()
+  } catch {
+    return ''
+  }
+}
+const ADMIN_KEY = readAdminKey()
+
 const IS_WIN = process.platform === 'win32'
 
 // 找到 claude 的真实可执行文件：
@@ -202,6 +222,65 @@ function composeSystem(baseSystem, messages) {
   return (sys ? sys + '\n\n' : '') + '以下是你与用户之前的对话历史，仅作为上下文参考。请直接回答用户最新的一句：\n' + transcript
 }
 
+// ── 跑一次 claude -p，返回完整结果（HTTP 流式和 relay 中转共用）──────────
+// onChunk 可选：stdout 每来一段调一次（HTTP 场景转 SSE 用；relay 场景不传，等完整结果）
+// onSpawn 可选：拿到子进程引用（HTTP 断开时杀掉用）
+function runClaude({ system, messages, model }, onChunk, onSpawn) {
+  return new Promise((resolve) => {
+    const promptText = buildPromptText(messages)
+    const baseSystem = composeSystem(system, messages)
+    const modelUsed = model && model.trim() ? model.trim() : '(claude 默认模型)'
+    const systemFull = baseSystem
+      ? `${baseSystem}\n\n（系统说明：当前调用你的具体模型是 ${modelUsed}。如果用户问"你是哪个模型 / 哪个版本"，你就如实回答这个字符串。）`
+      : `（系统说明：你当前的具体模型是 ${modelUsed}。如果用户问"你是哪个模型"，如实回答。）`
+
+    const stampIn = new Date().toISOString().slice(11, 19)
+    console.log(`[${stampIn}] → claude --model ${modelUsed}`)
+
+    const args = ['-p', '--tools', '', '--system-prompt', systemFull]
+    if (model && model.trim()) args.push('--model', model.trim())
+
+    const child = spawn(CLAUDE_RUN.file, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: CLAUDE_RUN.useShell,
+      windowsHide: true,
+    })
+    if (onSpawn) onSpawn(child)
+
+    child.stdin.write(promptText, 'utf8')
+    child.stdin.end()
+
+    let full = ''
+    child.stdout.setEncoding('utf8')
+    child.stdout.on('data', (chunk) => {
+      if (!chunk) return
+      full += chunk
+      if (onChunk) onChunk(chunk)
+    })
+
+    let stderrBuf = ''
+    child.stderr.setEncoding('utf8')
+    child.stderr.on('data', (chunk) => {
+      stderrBuf += chunk
+      process.stderr.write('[claude] ' + chunk)
+    })
+
+    child.on('error', (e) => {
+      resolve({ ok: false, text: full, error: 'spawn 失败：' + e.message })
+    })
+
+    child.on('close', (code) => {
+      const stampOut = new Date().toISOString().slice(11, 19)
+      console.log(`[${stampOut}] ← claude --model ${modelUsed} 完成 (exit ${code})`)
+      if (code !== 0) {
+        resolve({ ok: false, text: full, error: `claude 退出码 ${code}` + (stderrBuf ? '：' + stderrBuf.trim().slice(0, 500) : '') })
+      } else {
+        resolve({ ok: true, text: full, error: '' })
+      }
+    })
+  })
+}
+
 const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, corsHeaders(req))
@@ -245,69 +324,24 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
-  const promptText = buildPromptText(messages)
-  const baseSystem = composeSystem(system, messages)
-  const modelUsed = model && model.trim() ? model.trim() : '(claude 默认模型)'
-
-  // 给模型本人贴一张"身份牌"——否则它真的不知道自己是哪个版本（详见和 CC 的对照说明）。
-  // claude.exe 把 --model X 路由到对应权重，但权重本身没在训练时见过"你叫 X"，
-  // 所以只能我们这边在 system prompt 里写一句。
-  const systemFull = baseSystem
-    ? `${baseSystem}\n\n（系统说明：当前调用你的具体模型是 ${modelUsed}。如果用户问"你是哪个模型 / 哪个版本"，你就如实回答这个字符串。）`
-    : `（系统说明：你当前的具体模型是 ${modelUsed}。如果用户问"你是哪个模型"，如实回答。）`
-
-  // 启动时打一行日志，证明"前端选的"和"-p 传的"一字不差
-  const stampIn = new Date().toISOString().slice(11, 19)
-  console.log(`[${stampIn}] → claude --model ${modelUsed}`)
-
-  // claude -p --tools ""（关全部工具）--system-prompt（替换 agent 默认提示）
-  // 不传 --output-format → 默认 text，stdout 直接吐字
-  const args = ['-p', '--tools', '', '--system-prompt', systemFull]
-  if (model && model.trim()) args.push('--model', model.trim())
-
   writeSseHead(res, req)
 
-  const child = spawn(CLAUDE_RUN.file, args, {
-    stdio: ['pipe', 'pipe', 'pipe'],
-    shell: CLAUDE_RUN.useShell,
-    windowsHide: true,
-  })
+  const result = await runClaude(
+    { system, messages, model },
+    (chunk) => sseSend(res, null, { text: chunk }),
+    (child) => {
+      req.on('close', () => {
+        if (child && !child.killed) child.kill()
+      })
+    },
+  )
 
-  child.stdin.write(promptText, 'utf8')
-  child.stdin.end()
-
-  child.stdout.setEncoding('utf8')
-  child.stdout.on('data', (chunk) => {
-    if (chunk) sseSend(res, null, { text: chunk })
-  })
-
-  let stderrBuf = ''
-  child.stderr.setEncoding('utf8')
-  child.stderr.on('data', (chunk) => {
-    stderrBuf += chunk
-    // 实时透出来，方便排错；前端可以忽略
-    process.stderr.write('[claude] ' + chunk)
-  })
-
-  child.on('error', (e) => {
-    sseSend(res, 'error', { message: 'spawn 失败：' + e.message })
-    res.end()
-  })
-
-  child.on('close', (code) => {
-    const stampOut = new Date().toISOString().slice(11, 19)
-    console.log(`[${stampOut}] ← claude --model ${modelUsed} 完成 (exit ${code})`)
-    if (code !== 0) {
-      sseSend(res, 'error', { message: `claude 退出码 ${code}` + (stderrBuf ? '：' + stderrBuf.trim().slice(0, 500) : '') })
-    } else {
-      sseSend(res, 'done', { ok: true })
-    }
-    res.end()
-  })
-
-  req.on('close', () => {
-    if (!child.killed) child.kill()
-  })
+  if (!result.ok) {
+    sseSend(res, 'error', { message: result.error })
+  } else {
+    sseSend(res, 'done', { ok: true })
+  }
+  res.end()
 })
 
 server.listen(PORT, HOST, () => {
@@ -333,5 +367,47 @@ server.listen(PORT, HOST, () => {
   if (EXTRA_ORIGINS.length) {
     console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
   }
+  if (ADMIN_KEY) {
+    console.log(`  手机中转：✓ 已开 —— 手机在线上 Emet 直接聊，无需同网/无需填地址`)
+    startRelayLoop()
+  } else {
+    console.log(`  手机中转：未开（缺 .cc-admin-key）—— 只影响手机线上聊天，本机直连不受影响`)
+  }
   console.log('  退出按 Ctrl+C')
 })
+
+// ── 中转轮询循环：认领手机问题 → 跑 claude → 交答案 ──────────────
+// 用 setTimeout 递归而非 setInterval，避免一轮没跑完又叠一轮。
+async function startRelayLoop() {
+  let warnedOffline = false
+  const tick = async () => {
+    try {
+      const r = await fetch(RELAY_BASE + '/api/relay/take', {
+        headers: { 'X-Admin-Key': ADMIN_KEY },
+      })
+      warnedOffline = false
+      if (r.ok) {
+        const data = await r.json()
+        if (data && data.job) {
+          const job = data.job
+          console.log(`[relay] 认领手机问题 ${job.id}（model=${job.model || '默认'}）`)
+          const result = await runClaude({ system: job.system, messages: job.messages, model: job.model })
+          await fetch(RELAY_BASE + '/api/relay/answer', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'X-Admin-Key': ADMIN_KEY },
+            body: JSON.stringify({ id: job.id, ok: result.ok, text: result.text, error: result.error }),
+          })
+          console.log(`[relay] 已回传答案 ${job.id}（${result.ok ? '成功' : '失败：' + result.error}）`)
+        }
+      } else if (r.status === 401) {
+        if (!warnedOffline) console.log('[relay] ⚠ 401：.cc-admin-key 不对，中转认证失败')
+        warnedOffline = true
+      }
+    } catch (e) {
+      if (!warnedOffline) console.log('[relay] 暂时连不上云端（' + (e?.message || e) + '），会自动重试')
+      warnedOffline = true
+    }
+    setTimeout(tick, RELAY_POLL_MS)
+  }
+  tick()
+}
