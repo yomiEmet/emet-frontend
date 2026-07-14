@@ -278,15 +278,18 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   const payloadModel = model && model !== '本机订阅' ? model : ''
 
   // ── 直连 vs 中转 自动选择 ──────────────────────────────
-  // 页面由本机桥托管（端口 8000，手机同网直连）→ 一律同源直连（免 CORS）。
-  // 否则先探一下本机桥在不在：
-  //   · 电脑上（dev http 页 / 本机跑着桥）→ 探得到 → 直连，流式最快。
-  //   · 手机 / 线上 https 页 → 探不到（混合内容被浏览器拦，瞬间失败）→ 走云端中转。
-  const servedByBridge = typeof window !== 'undefined' && window.location.port === '8000'
+  // 1) 页面自己的来源就是桥吗？——同源探 /health 看身份标记。
+  //    命中说明本页由桥托管：localhost:8000（电脑/同网）或 emethome.com（隧道）。
+  //    同源直连既免 CORS 又能 SSE 流式，最快。pages.dev 这种 SPA 对 /health 回 index.html，
+  //    没有标记 → 不误判。
+  // 2) 否则探 provider.baseUrl（电脑 dev 页探本机 localhost 桥）。
+  // 3) 都探不到 → 手机线上无桥 → 云端中转。
   let directBase = null
-  if (servedByBridge) {
-    directBase = window.location.origin
-  } else {
+  if (typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)) {
+    const sameOrigin = window.location.origin.replace(/\/+$/, '')
+    if (await bridgeReachable(sameOrigin)) directBase = sameOrigin
+  }
+  if (!directBase) {
     const cand = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
     if (await bridgeReachable(cand)) directBase = cand
   }
@@ -298,14 +301,18 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   return relayViaWorker({ sys, messages, payloadModel, signal, onDelta })
 }
 
-// 探测本机桥是否可直连：/health 短超时。混合内容（https 页探 http）会立即抛错 → false。
+// 探测某来源是不是"本机桥"：/health 必须回带 bridge:'emet-local' 标记。
+// 只看 r.ok 不够——SPA（pages.dev）对任意路径都回 index.html 200，会误判。
+// 短超时；混合内容（https 页探 http）会立即抛错 → false。
 async function bridgeReachable(base) {
   try {
     const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 1200)
+    const timer = setTimeout(() => ctrl.abort(), 1500)
     const r = await fetch(base + '/health', { signal: ctrl.signal })
     clearTimeout(timer)
-    return r.ok
+    if (!r.ok) return false
+    const j = await r.json().catch(() => null)
+    return j?.bridge === 'emet-local'
   } catch {
     return false
   }

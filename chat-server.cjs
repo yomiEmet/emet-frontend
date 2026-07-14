@@ -246,8 +246,14 @@ function serveStatic(req, res) {
   }
 }
 
-// 抽出来，缺/错 token 一律 401，方便排查
+// 鉴权：两种放行方式，满足其一即可——
+//   ① 请求经 Cloudflare Access 隧道进来（带 Cf-Access-Authenticated-User-Email 头）。
+//      桥只监听 127.0.0.1，带这个头的请求只可能是 cloudflared 从隧道转进来的，
+//      而隧道已被 Access 用邮箱验证码挡过一道 → 可信，手机因此无需暗号。
+//   ② 本机直连：带对的 Bearer 暗号（保护本机 8000 端口，防同机其它程序乱调）。
 function checkAuth(req, res) {
+  const accessEmail = (req.headers['cf-access-authenticated-user-email'] || '').trim()
+  if (accessEmail) return true // 经 Access 验证过的隧道请求
   if (!AUTH_TOKEN) return true
   const h = (req.headers.authorization || '').trim()
   const got = h.startsWith('Bearer ') ? h.slice(7).trim() : ''
@@ -379,7 +385,8 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(req) })
-    res.end(JSON.stringify({ ok: true, host: HOST, port: PORT, claude: CLAUDE_RUN.file }))
+    // bridge:'emet-local' 是身份标记，前端据此确认"本页由桥托管"→ 走同源流式直连
+    res.end(JSON.stringify({ ok: true, bridge: 'emet-local', host: HOST, port: PORT, claude: CLAUDE_RUN.file }))
     return
   }
 
