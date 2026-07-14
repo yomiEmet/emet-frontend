@@ -11,9 +11,13 @@
 const http = require('http')
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const { spawn, execSync } = require('child_process')
 
-const HOST = '127.0.0.1'
+// 监听地址：默认只听本机回环 127.0.0.1（最安全，只有本机能连）。
+// 想让同一 WiFi/热点下的手机也能连：启动前设 CC_BRIDGE_HOST=0.0.0.0，
+// 且必须同时设 CC_BRIDGE_TOKEN（暗号）——否则同网别人也能白用你的额度。
+const HOST = (process.env.CC_BRIDGE_HOST || '127.0.0.1').trim()
 const PORT = 8000
 
 // ── 鉴权：可选的 Bearer Token（环境变量 CC_BRIDGE_TOKEN）─────────────
@@ -74,6 +78,62 @@ function corsHeaders(req) {
     'access-control-allow-private-network': 'true',
     'access-control-max-age': '86400',
     vary: 'origin',
+  }
+}
+
+// ── 本机静态托管前端（给同一 WiFi/热点下的手机直连用）─────────────────
+// GET 且不是 /chat /health 时，从 dist/ 里找文件返回；找不到就回 index.html
+// （前端是 SPA，路由如 /chat /settings 都交给它自己处理）。
+// 需先在项目目录跑过 npm run build 生成 dist/。
+const DIST_DIR = path.join(__dirname, 'dist')
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+  '.map': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json',
+  '.txt': 'text/plain; charset=utf-8',
+}
+function serveStatic(req, res) {
+  try {
+    let urlPath = decodeURIComponent((req.url || '/').split('?')[0])
+    if (urlPath === '/' || urlPath === '') urlPath = '/index.html'
+    let filePath = path.join(DIST_DIR, urlPath)
+    // 防目录穿越：解析后必须仍在 dist/ 内
+    if (filePath !== DIST_DIR && !filePath.startsWith(DIST_DIR + path.sep)) {
+      res.writeHead(403, corsHeaders(req)); res.end(); return
+    }
+    let isFile = false
+    try { isFile = fs.statSync(filePath).isFile() } catch { isFile = false }
+    if (!isFile) {
+      // 非文件（前端路由如 /chat /settings）一律回 index.html，交给前端路由
+      filePath = path.join(DIST_DIR, 'index.html')
+      let hasIndex = false
+      try { hasIndex = fs.statSync(filePath).isFile() } catch { hasIndex = false }
+      if (!hasIndex) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', ...corsHeaders(req) })
+        res.end('前端还没构建：请先在项目目录运行 npm run build 生成 dist/')
+        return
+      }
+    }
+    const ext = path.extname(filePath).toLowerCase()
+    res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', ...corsHeaders(req) })
+    fs.createReadStream(filePath).pipe(res)
+  } catch (e) {
+    res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8', ...corsHeaders(req) })
+    res.end('static error: ' + e.message)
   }
 }
 
@@ -152,6 +212,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(req) })
     res.end(JSON.stringify({ ok: true, host: HOST, port: PORT, claude: CLAUDE_RUN.file }))
+    return
+  }
+
+  // GET（非 /health）一律走静态前端托管：手机同网打开根地址就能拿到 Emet 网页
+  if (req.method === 'GET') {
+    serveStatic(req, res)
     return
   }
 
@@ -246,12 +312,25 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log('Emet 本机聊天后端已启动')
-  console.log(`  地址：http://${HOST}:${PORT}`)
+  console.log(`  监听：http://${HOST}:${PORT}`)
+  if (HOST === '0.0.0.0') {
+    const ips = []
+    const ifaces = os.networkInterfaces()
+    for (const name of Object.keys(ifaces)) {
+      for (const ni of ifaces[name] || []) {
+        if (ni.family === 'IPv4' && !ni.internal) ips.push(ni.address)
+      }
+    }
+    console.log('  ★ 手机（同一 WiFi/热点）用浏览器打开下面任一地址即可：')
+    if (ips.length) ips.forEach((ip) => console.log(`        http://${ip}:${PORT}`))
+    else console.log('        （没探到局域网地址，确认电脑连着 WiFi/热点）')
+  } else {
+    console.log('  本机打开：http://localhost:8000')
+  }
   console.log(`  CLI：${CLAUDE_RUN.file}${CLAUDE_RUN.useShell ? '（shell 模式）' : ''}`)
-  console.log(`  鉴权：${AUTH_TOKEN ? '✓ 已开（环境变量 CC_BRIDGE_TOKEN）' : '⚠ 未设 token —— 仅适合纯本机用；公网请设 CC_BRIDGE_TOKEN'}`)
+  console.log(`  鉴权：${AUTH_TOKEN ? '✓ 已开（环境变量 CC_BRIDGE_TOKEN）' : '⚠ 未设 token —— 仅适合纯本机用；对外/手机必须设 CC_BRIDGE_TOKEN'}`)
   if (EXTRA_ORIGINS.length) {
     console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
   }
-  console.log('  前端打开 http://localhost:5173 → 设置页切到"本机 Claude（订阅）"供应商即可开聊')
   console.log('  退出按 Ctrl+C')
 })
