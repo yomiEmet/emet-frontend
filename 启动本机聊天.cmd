@@ -1,16 +1,5 @@
 @echo off
 chcp 65001 >nul
-cd /d "%~dp0"
-echo ============================================================
-echo   Emet 本机聊天后端
-echo   看到下面出现「已启动  地址 http://127.0.0.1:8000」就成功了
-echo   聊天时让这个黑窗口一直开着；用完直接关掉窗口即可
-echo ------------------------------------------------------------
-echo   如果窗口里出现 401 / Failed to authenticate：
-echo   说明 claude 登录过期了，先关掉本窗口，按静怡的重新登录步骤做
-echo ============================================================
-echo.
-node chat-server.cjs
-echo.
-echo [后端已停止] 按任意键关闭本窗口...
-pause >nul
+REM 双击我即可启动本机聊天后端。真正的启动逻辑在同目录的 启动本机聊天.ps1
+REM （设代理 7897 + 生成暗号复制剪贴板 + 跑 chat-server.cjs），窗口保持打开。
+powershell -NoExit -ExecutionPolicy Bypass -File "%~dp0启动本机聊天.ps1"
