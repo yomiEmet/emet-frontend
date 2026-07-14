@@ -393,11 +393,14 @@ async function relayViaWorker({ sys, messages, payloadModel, signal, onDelta }) 
   }
   if (!ask?.id) throw new Error('中转未返回任务号')
 
-  // 2) 轮询结果（最长约 120s，与 worker 里 relay:ask 的 TTL 对齐）
+  // 2) 轮询结果（最长约 240s，与 worker 里 relay:ans 的 TTL 对齐）
+  // 首查快（0.4s）后续 0.8s 一次，尽量压低"查信箱"的感知延迟
   const started = Date.now()
+  let first = true
   for (;;) {
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-    await sleep(1500, signal)
+    await sleep(first ? 400 : 800, signal)
+    first = false
     let poll
     try {
       const r = await fetch(BASE_URL + '/api/relay/poll?id=' + encodeURIComponent(ask.id), { headers, signal })

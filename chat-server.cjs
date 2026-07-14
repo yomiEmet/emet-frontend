@@ -488,7 +488,14 @@ async function relaySelfTestThenLoop() {
 // 用 setTimeout 递归而非 setInterval，避免一轮没跑完又叠一轮。
 async function startRelayLoop() {
   let warnedOffline = false
+  // 自适应节奏：刚认领过活 → 30s 内算"聊天中"，快查（800ms）响应连续对话；
+  // 空闲则慢查（3s）省 Cloudflare 额度。
+  let hotUntil = 0
+  const HOT_MS = 800
+  const IDLE_MS = 3000
+  const HOT_WINDOW = 30000
   const tick = async () => {
+    let picked = false
     try {
       const r = await relayFetch(RELAY_BASE + '/api/relay/take', {
         headers: { 'X-Admin-Key': ADMIN_KEY },
@@ -498,6 +505,7 @@ async function startRelayLoop() {
         let data = null
         try { data = JSON.parse(r.text) } catch { /* 非 JSON 忽略 */ }
         if (data && data.job) {
+          picked = true
           const job = data.job
           console.log(`[relay] 认领手机问题 ${job.id}（model=${job.model || '默认'}）`)
           const result = await runClaude({ system: job.system, messages: job.messages, model: job.model })
@@ -516,7 +524,10 @@ async function startRelayLoop() {
       if (!warnedOffline) console.log('[relay] 暂时连不上云端（' + (e?.message || e) + '），会自动重试')
       warnedOffline = true
     }
-    setTimeout(tick, RELAY_POLL_MS)
+    // 认领到活就续上"聊天中"窗口，让紧接着的下一句也走快查
+    const nowMs = Date.now()
+    if (picked) hotUntil = nowMs + HOT_WINDOW
+    setTimeout(tick, nowMs < hotUntil ? HOT_MS : IDLE_MS)
   }
   tick()
 }
