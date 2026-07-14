@@ -29,6 +29,9 @@ const DEFAULT_ORIGINS = [
   'http://127.0.0.1:5173',
   'http://localhost:4173',
   'http://127.0.0.1:4173',
+  // 线上 Cloudflare Pages 前端也放行：让部署好的 https 页面能连本机桥
+  // （配合下面 corsHeaders 里的 allow-private-network 头，过浏览器的“本地网络访问”握手）
+  'https://emet-frontend.pages.dev',
 ]
 const EXTRA_ORIGINS = (process.env.CC_BRIDGE_CORS || '')
   .split(',')
@@ -66,6 +69,9 @@ function corsHeaders(req) {
     'access-control-allow-origin': allow,
     'access-control-allow-methods': 'POST, GET, OPTIONS',
     'access-control-allow-headers': 'content-type, authorization',
+    // https 公网页面（Pages）访问本机 http://localhost 属于 Private Network Access，
+    // 浏览器预检会带 Access-Control-Request-Private-Network: true，服务端必须回应下面这行才放行。
+    'access-control-allow-private-network': 'true',
     'access-control-max-age': '86400',
     vary: 'origin',
   }
