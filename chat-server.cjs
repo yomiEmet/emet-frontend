@@ -385,8 +385,8 @@ async function startRelayLoop() {
       const r = await fetch(RELAY_BASE + '/api/relay/take', {
         headers: { 'X-Admin-Key': ADMIN_KEY },
       })
-      warnedOffline = false
       if (r.ok) {
+        warnedOffline = false // 只在真正成功时清除告警去重，否则 401 会每 2s 刷屏
         const data = await r.json()
         if (data && data.job) {
           const job = data.job

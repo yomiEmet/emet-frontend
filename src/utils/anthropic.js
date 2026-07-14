@@ -6,7 +6,7 @@
 // - 本机 claude-cli：POST {baseUrl}/chat，把对话+system 交给本机 chat-server.cjs，
 //   后端 spawn `claude -p` 把订阅额度当聊天用，文字流 SSE 吐回（无 [DONE]，靠 done/error 事件）
 import { getActiveTarget } from './providers.js'
-import { request } from '../api/client.js'
+import { request, BASE_URL, getAdminKey } from '../api/client.js'
 
 // baseUrl 归一：去尾斜杠；没带 /v1 的补上
 function endpoint(base, path) {
@@ -272,20 +272,50 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 //   POST {baseUrl}/chat   body { system, messages }
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
 async function streamClaudeCli({ provider, model, system, messages, signal, onDelta }) {
-  // 页面本身就是本机桥托管的（端口 8000，手机同网直连场景）时一律走同源地址：
-  // 云端同步下来的 baseUrl 是 http://localhost:8000，在手机上 localhost 指手机自己，
-  // 必须换成当前页面的来源（http://<电脑IP>:8000）。同源请求也天然免 CORS。
-  // dev(5173)/Pages(443) 端口不同，不受影响。
-  const servedByBridge = typeof window !== 'undefined' && window.location.port === '8000'
-  const base = (servedByBridge ? window.location.origin : provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
   // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去
   const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
-  // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 启动时的 CC_BRIDGE_TOKEN 环境变量
-  const headers = { 'content-type': 'application/json' }
-  if (provider.apiKey) headers.authorization = 'Bearer ' + provider.apiKey
-  // model 透传给后端，由 chat-server 转成 claude --model 参数；
-  // 跳过"本机订阅"这种占位（让 claude 走自己的默认）
+  // model 透传给后端；跳过"本机订阅"这种占位（让 claude 走自己的默认）
   const payloadModel = model && model !== '本机订阅' ? model : ''
+
+  // ── 直连 vs 中转 自动选择 ──────────────────────────────
+  // 页面由本机桥托管（端口 8000，手机同网直连）→ 一律同源直连（免 CORS）。
+  // 否则先探一下本机桥在不在：
+  //   · 电脑上（dev http 页 / 本机跑着桥）→ 探得到 → 直连，流式最快。
+  //   · 手机 / 线上 https 页 → 探不到（混合内容被浏览器拦，瞬间失败）→ 走云端中转。
+  const servedByBridge = typeof window !== 'undefined' && window.location.port === '8000'
+  let directBase = null
+  if (servedByBridge) {
+    directBase = window.location.origin
+  } else {
+    const cand = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
+    if (await bridgeReachable(cand)) directBase = cand
+  }
+
+  if (directBase) {
+    return streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages, payloadModel, signal, onDelta })
+  }
+  // 探不到本机桥 → 手机场景，走云端 relay 中转
+  return relayViaWorker({ sys, messages, payloadModel, signal, onDelta })
+}
+
+// 探测本机桥是否可直连：/health 短超时。混合内容（https 页探 http）会立即抛错 → false。
+async function bridgeReachable(base) {
+  try {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 1200)
+    const r = await fetch(base + '/health', { signal: ctrl.signal })
+    clearTimeout(timer)
+    return r.ok
+  } catch {
+    return false
+  }
+}
+
+// 直连本机桥：SSE 流式，逐字回显（电脑场景）
+async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, signal, onDelta }) {
+  const headers = { 'content-type': 'application/json' }
+  // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 的 CC_BRIDGE_TOKEN
+  if (apiKey) headers.authorization = 'Bearer ' + apiKey
   let res
   try {
     res = await fetch(base + '/chat', {
@@ -295,7 +325,7 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
       signal,
     })
   } catch (e) {
-    throw new Error('连不上本机后端：' + (e?.message || e) + '。请先在终端跑 `node chat-server.cjs`')
+    throw new Error('连不上本机后端：' + (e?.message || e) + '。请先在电脑上启动本机桥')
   }
   if (!res.ok) await throwHttpError(res)
 
@@ -309,7 +339,6 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
     const { done, value } = await reader.read()
     if (done) break
     buf += dec.decode(value, { stream: true })
-    // SSE 帧以空行（\n\n）分隔
     let sep
     while ((sep = buf.indexOf('\n\n')) >= 0) {
       const frame = buf.slice(0, sep)
@@ -339,6 +368,75 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   }
   if (err) throw err
   return full
+}
+
+// 云端中转：把问题投给 worker，电脑上的桥会认领并跑，再从 worker 取结果。
+// 手机在线上 Emet 用这条路——不需要装桥、不需要填暗号，凭已存的访问密钥即可。
+async function relayViaWorker({ sys, messages, payloadModel, signal, onDelta }) {
+  if (!getAdminKey()) throw new Error('请先在设置页填写访问密钥')
+  const headers = { 'content-type': 'application/json', 'X-Admin-Key': getAdminKey() }
+
+  // 1) 投递
+  let ask
+  try {
+    const r = await fetch(BASE_URL + '/api/relay/ask', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ system: sys, messages, model: payloadModel }),
+      signal,
+    })
+    if (!r.ok) await throwHttpError(r)
+    ask = await r.json()
+  } catch (e) {
+    if (e.name === 'AbortError') throw e
+    throw new Error('发送失败：' + (e?.message || e))
+  }
+  if (!ask?.id) throw new Error('中转未返回任务号')
+
+  // 2) 轮询结果（最长约 120s，与 worker 里 relay:ask 的 TTL 对齐）
+  const started = Date.now()
+  for (;;) {
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+    await sleep(1500, signal)
+    let poll
+    try {
+      const r = await fetch(BASE_URL + '/api/relay/poll?id=' + encodeURIComponent(ask.id), { headers, signal })
+      // 认证/权限类错误是确定性的，别当"还在等"干耗——立即失败给准信
+      if (r.status === 401 || r.status === 403) {
+        throw new Error('访问密钥失效，请到设置页重新填写')
+      }
+      if (!r.ok) await throwHttpError(r)
+      poll = await r.json()
+    } catch (e) {
+      if (e.name === 'AbortError') throw e
+      // 确定性错误（上面抛的密钥失效）直接冒泡；仅网络抖动才继续等
+      if (/密钥失效/.test(e.message || '')) throw e
+      poll = { pending: true }
+    }
+    if (poll?.done) {
+      if (!poll.ok) throw new Error(poll.error || '本机桥执行失败')
+      const text = poll.text || ''
+      onDelta?.(text, text) // 中转不流式，一次性给全文
+      return text
+    }
+    // 放宽到 240s：本机 claude -p 长回答/冷启动可能过百秒；与 worker 坑位 TTL(300s) 对齐留余量
+    if (Date.now() - started > 240000) {
+      throw new Error('电脑上的本机桥没有响应（超时）。确认电脑开着、桥在运行')
+    }
+  }
+}
+
+// 可被 abort 打断的 sleep
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms)
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        clearTimeout(t)
+        reject(new DOMException('aborted', 'AbortError'))
+      }, { once: true })
+    }
+  })
 }
 
 // ── OpenAI 兼容（中转站常见格式）─────────────────────────
