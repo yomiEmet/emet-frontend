@@ -38,18 +38,21 @@
 ### 合规红线（第一期相关，不可逾越）
 
 - 只用**官方 `claude` CLI 本体**（spawn 官方可执行文件），绝不提取/转用 OAuth token，绝不直接拿订阅凭证调 Anthropic API。
-- 桥接服务只在 Tailscale 私网内可达，**绝不暴露公网**，`CC_BRIDGE_TOKEN` 必须设置。
+- Claude Code 本体**只跑在静怡自己家里的这台 Windows 电脑上**（家庭宽带 IP，合规最干净），绝不搬到 VPS/机房（机房 IP 会被风控重点盯）。
+- 桥虽然经 Cloudflare 隧道暴露到公网，但必须**双重门禁**：①`CC_BRIDGE_TOKEN` 强制校验；②强烈建议在隧道那个主机名前挂 **Cloudflare Access**（只放行静怡本人的身份，如邮箱一次性验证码），让这个网址对陌生人根本打不开。绝不做「谁知道网址就能连」的裸端点。
 - 单人自用（只有静怡自己连），不给任何第三方提供访问。
 
 ---
 
-## 第一期 · 手机连本体（路线 A：本机 Windows 常驻 + Tailscale）
+## 第一期 · 手机连本体（路线 A：本机 Windows 常驻 + Cloudflare 隧道）
 
-**目标**：静怡出门时，手机打开 Emet 网页 → 切「本机 Claude」通道 → 连上这台电脑上常驻的 Claude Code 本体（带记忆等 MCP 工具），流式对话。
+**目标**：静怡出门时，手机（照常开小火箭）打开 Emet 网页 → 切「本机 Claude」通道 → 连上这台电脑上常驻的 Claude Code 本体（带记忆等 MCP 工具），流式对话。手机端**不装任何 VPN**。
+
+**为什么是隧道不是 Tailscale（决策背景，2026-07-14 静怡拍板）**：iOS 只能同时开一个 VPN，而静怡必须常开小火箭（否则连 Cloudflare 上的 Emet 应用本身都打不开），Tailscale 与小火箭互斥 → Tailscale 方案作废。改用 **Cloudflare 隧道**：在本机跑 `cloudflared`，从电脑**主动向外**连 Cloudflare，把本机桥顶成一个公网 HTTPS 主机名（如 `cc.<域名>`）。手机走平常的小火箭路由访问这个网址即可，与访问 Pages/Worker 是同一条路，天然可达。Claude Code 本体仍留在本机（合规同方案 A，只是把"管子"从 Tailscale 换成隧道）。
 
 **已有雏形**：前端仓库根目录 `chat-server.cjs`——本机桥，把前端聊天请求接到 `claude -p`（stdin 进、stdout 出、SSE 推给浏览器）。现状三个局限：①每次全量拼对话、无会话延续；②`--tools ""` 工具全关；③只监听 `127.0.0.1:8000`，手机够不着。前端 `src/utils/anthropic.js` 的 `streamClaudeCli`、`src/utils/providers.js`、`src/components/ProviderManager.jsx` 已支持 `claude-cli` 协议（`apiKey` 字段兼作桥的暗号，对应 `CC_BRIDGE_TOKEN`）。
 
-**明确不做**：不引入 tmux/WSL（Keep-the-crow 原方案用 tmux capture-pane 轮询抓终端输出，脏且有 50 行截断/转义坑；我们的 stdin/stdout 直连方案天然没有这些问题，保持现状架构）。
+**明确不做**：①不引入 tmux/WSL（Keep-the-crow 原方案用 tmux capture-pane 轮询抓终端输出，脏且有 50 行截断/转义坑；我们的 stdin/stdout 直连方案天然没有这些问题，保持现状架构）；②不引入 Tailscale；③不买 VPS。
 
 ### 摸底任务
 
@@ -71,32 +74,40 @@
 - **明确禁止**：Bash、Write、Edit、Read 等本机文件/命令类工具（手机误触发不能有本机副作用）。
 - `--system-prompt` 继续承载人设（现状逻辑保留）。
 
-**1-3 Tailscale 私网 HTTPS 入口**
-- 静怡手动：电脑和 iPhone 各装 Tailscale 并登录同一账号（这步她自己做，给她写一段 3 句话的中文指引即可）。
-- 桥保持只听 `127.0.0.1:8000` 不变。用 `tailscale serve` 把它以 HTTPS 发布到 tailnet 内（形如 `https://<机器名>.<tailnet>.ts.net`），命令语法以 `tailscale serve --help` 实测为准，配成持久生效。
-- **为什么必须 HTTPS**：Pages 前端是 https 页面，浏览器会拦截对 `http://100.x.x.x` 的混合内容请求（mixed content），直接填 IP 是连不上的。`tailscale serve` 自带 tailnet 内有效证书，正好解决。
-- `CC_BRIDGE_TOKEN` 生成一个强随机串（32 字节+）设为环境变量；`CC_BRIDGE_CORS` 追加 Pages 前端域名。
+**1-3 Cloudflare 隧道公网入口（分两步，先免费验证再固化）**
 
-**1-4 Windows 开机自启常驻**
-- 用任务计划程序（schtasks）建一个登录时自启的任务，跑一个 `.cmd`：先 `chcp 65001`（防中文乱码），设好 `CC_BRIDGE_TOKEN` 等环境变量（从任务配置注入，不写进 `.cmd` 明文提交），循环拉起 `node chat-server.cjs`（进程退出 5 秒后重启）。
+桥保持只听 `127.0.0.1:8000` 不变；`CC_BRIDGE_TOKEN` 生成强随机串（32 字节+）设为环境变量；`CC_BRIDGE_CORS` 追加 Pages 前端域名 `https://emet-frontend.pages.dev`。
+
+- **步骤 A（免费验证，先做）**：本机装 `cloudflared`，跑一次性快速隧道 `cloudflared tunnel --url http://127.0.0.1:8000`，拿到一个随机 `*.trycloudflare.com` 网址。让静怡手机（开着小火箭）在 Emet「本机 Claude」通道填这个网址实测：能不能连上、流式稳不稳。**这一步不花一分钱、不用域名**，目的是先证明「隧道从她家网络出去 + 手机经小火箭进来」这条链路通。
+  - 若本机出网需要走代理（Claude Code 能用说明本机有可用代理/线路），给 `cloudflared` 设 `HTTPS_PROXY`/`HTTP_PROXY` 环境变量走同一条线，保证隧道稳定。
+- **步骤 B（固化，验证通过后）**：静怡买一个便宜域名（约 ¥70/年，阿里云/腾讯云人民币可付；给她写 3 句话指引：买完把域名 NS 改成 Cloudflare 给的两条，加进她现有 Cloudflare 账号）。用**命名隧道**（`cloudflared tunnel create` + `config.yml` 里 `ingress` 把 `cc.<域名>` 指到 `http://127.0.0.1:8000`），得到固定网址。
+  - **强烈建议**：在 Cloudflare Zero Trust 里给 `cc.<域名>` 挂 **Access 策略**（只放行静怡邮箱一次性验证码），让陌生人打不开这个网址。这是把「公网暴露」收敛回「准私有」的关键，也保证单人自用。
+- **不需要处理 mixed content**：隧道网址本身就是 Cloudflare 签发的有效 HTTPS，前端 https 页面直接请求它不会被浏览器拦截（这正是隧道相对裸 IP 的好处）。
+
+**1-4 Windows 开机自启常驻（两个进程）**
+- 用任务计划程序（schtasks）建**登录时自启**的任务，跑一个 `.cmd`：先 `chcp 65001`（防中文乱码），设好 `CC_BRIDGE_TOKEN`（及必要时 `HTTPS_PROXY`）等环境变量（从任务配置注入，不写进 `.cmd` 明文提交），循环拉起 `node chat-server.cjs`（进程退出 5 秒后重启）。
+- `cloudflared` 同样要开机自启常驻：命名隧道装成 Windows 服务（`cloudflared service install`）最稳；或并入同一 `.cmd` 一起循环拉起。两个进程谁都不能少。
 - `.cmd` 里若必须含密钥，则该文件加入 `.gitignore`，仓库里只放去密钥的 `.cmd.example`。
 
 **1-5 前端微调**
-- `ProviderManager.jsx` 的「本机 Claude」说明文案更新：本机后端地址填 `https://<机器名>.ts.net`，暗号填桥的 token，手机使用需开着 Tailscale。
+- `ProviderManager.jsx` 的「本机 Claude」说明文案更新：本机后端地址填隧道网址（验证期是 `*.trycloudflare.com`，固化后是 `https://cc.<域名>`），暗号填桥的 token；**说明手机端不需要装 VPN，照常用小火箭即可**。
+- 若挂了 Cloudflare Access：说明首次访问需在浏览器过一次邮箱验证码（Access 会种 cookie，之后一段时间免验），并确认 Emet 前端的 fetch 带 `credentials`/cookie 能通过 Access（若 Access 拦截了 API 的 SSE 请求，改用 Access Service Token 方式，二选一，实测为准）。
 - 若摸底发现 Chat.jsx 没有 SSE 断流恢复：加最小实现——`visibilitychange` 回前台时检测流已死则提示「连接已断开」，不做自动重发（避免重复消息）。
 
 ### 验收清单（静怡 + Fable 一起过）
 
-- [ ] 手机开 Tailscale → Emet 网页切「本机 Claude」→ 能流式对话
+- [ ] 手机开着小火箭（不装任何 VPN）→ Emet 网页切「本机 Claude」→ 能流式对话
 - [ ] 对话中让它调记忆工具（如「搜一下记忆里的 XX」）能成功
 - [ ] 连续多轮对话它记得前几轮说了什么（会话延续生效）
 - [ ] 手机切后台 2 分钟回来，界面不假死
-- [ ] 不带 token 的请求被 401 拒绝；关掉 Tailscale 后连不上（没走公网）
-- [ ] 电脑重启后不用手动操作，几分钟内通道自动恢复
+- [ ] 不带 token 的请求被 401 拒绝；挂了 Access 的话，未登录身份打不开该网址
+- [ ] 电脑重启后不用手动操作，几分钟内两个进程都自动恢复、通道可用
 
 ### 坑清单
 
-- mixed content（上文 1-3，最大的坑，别试图用裸 IP）。
+- 隧道从国内家庭网络出网可能被干扰：让 `cloudflared` 走本机现有代理线路（`HTTPS_PROXY`），并优先用命名隧道装服务（比 quick 隧道稳、不会换网址）。
+- quick 隧道（`trycloudflare.com`）只用于步骤 A 验证：重启就换网址、有速率限制，**绝不能当长期入口**，验证通过必须转命名隧道。
+- Cloudflare Access + SSE：Access 的登录门可能挡住前端的流式 API 请求，1-5 已列两条应对路，实测选一条，别让 Access 把聊天请求也拦了。
 - Node 24 在 Windows 上 spawn `.cmd` 有 EINVAL 坑——`chat-server.cjs` 里 `resolveClaude()` 已处理，别动它。
 - Keep-the-crow 第 3 篇教训：**判定信号绝不能耦合到可掉线的组件**——桥的任何「这是聊天消息」的判定逻辑要无条件、不依赖 MCP 或其他可掉线的东西。
 - 静默失败最难查：桥收到消息但 claude 没回时，必须往 SSE 推一条明确的错误事件，两端都能看见，不许两头静默。
@@ -203,7 +214,7 @@
 ## 附 · 明确不做清单（防止执行模型自我发挥)
 
 - ❌ tmux / WSL / capture-pane 轮询（用不着）
-- ❌ VPS 迁移（路线 B 未启动，等静怡说）
+- ❌ Tailscale（与小火箭互斥，已弃）、VPS/机房（Claude Code 本体只留本机，合规最干净）
 - ❌ 记忆热力图（已有）、贺卡弹窗（用注入替代）、安卓手环 Gadgetbridge/Tasker 两篇（静怡是 iPhone+Apple Watch，健康感知已完成）
 - ❌ Electron 打包、GitHub Pages 托管、Nginx/Caddy（我们是 Pages+Worker，不需要）
 - ❌ 任何形式的「模型自动扫聊天/自动抽记忆」
