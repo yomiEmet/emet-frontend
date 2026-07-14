@@ -3,8 +3,18 @@
 # mis-decodes UTF-8 Chinese in .ps1 files. The Chinese hints (token / phone URL)
 # are printed by node (chat-server.cjs) below, where UTF-8 works with chcp 65001.
 
-# 1) short 8-char token (you'll type it on the phone; node prints its value below)
-$env:CC_BRIDGE_TOKEN = -join ((1..8) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+# 1) STABLE token shared with desktop mode: read .cc-bridge-token if present,
+#    else generate once and save. Same token across restarts and across both
+#    modes -> paste into the "暗号" field once, sync to cloud, never 401 again.
+#    (.cc-bridge-token is gitignored - the secret never enters the repo.)
+$tokFile = Join-Path $PSScriptRoot ".cc-bridge-token"
+if (Test-Path $tokFile) {
+  $env:CC_BRIDGE_TOKEN = (Get-Content $tokFile -Raw).Trim()
+} else {
+  $env:CC_BRIDGE_TOKEN = -join ((1..40) | ForEach-Object { '{0:x}' -f (Get-Random -Maximum 16) })
+  Set-Content -Path $tokFile -Value $env:CC_BRIDGE_TOKEN -NoNewline -Encoding ascii
+}
+Set-Clipboard $env:CC_BRIDGE_TOKEN
 
 # 2) proxy so claude can reach Anthropic
 $env:HTTPS_PROXY = "http://127.0.0.1:7897"

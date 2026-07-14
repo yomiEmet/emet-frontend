@@ -272,7 +272,12 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 //   POST {baseUrl}/chat   body { system, messages }
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
 async function streamClaudeCli({ provider, model, system, messages, signal, onDelta }) {
-  const base = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
+  // 页面本身就是本机桥托管的（端口 8000，手机同网直连场景）时一律走同源地址：
+  // 云端同步下来的 baseUrl 是 http://localhost:8000，在手机上 localhost 指手机自己，
+  // 必须换成当前页面的来源（http://<电脑IP>:8000）。同源请求也天然免 CORS。
+  // dev(5173)/Pages(443) 端口不同，不受影响。
+  const servedByBridge = typeof window !== 'undefined' && window.location.port === '8000'
+  const base = (servedByBridge ? window.location.origin : provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
   // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去
   const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 启动时的 CC_BRIDGE_TOKEN 环境变量
