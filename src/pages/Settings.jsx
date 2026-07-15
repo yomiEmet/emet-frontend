@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon } from 'lucide-react'
+import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon, Coffee } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
@@ -9,6 +9,8 @@ import HeartbeatToggle from '../components/HeartbeatToggle.jsx'
 import DailyToggle from '../components/DailyToggle.jsx'
 import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
+import IdleToggle from '../components/IdleToggle.jsx'
+import DreamToggle from '../components/DreamToggle.jsx'
 import MemArchiveCard from '../components/MemArchiveCard.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
@@ -219,6 +221,21 @@ export default function Settings() {
         <NightGuardToggle />
         <DailyToggle />
         <KeepaliveToggle />
+      </section>
+
+      {/* ── 独处与梦（二期 2-2 / 2-3，均默认关）────────────── */}
+      <section className="set-group">
+        <div className="section-label">独处与梦</div>
+        <IdleToggle />
+        <DreamToggle />
+        <button className="card set-card set-entry" onClick={() => navigate('/idle')}>
+          <Coffee size={18} />
+          <span className="set-entry__text">
+            <strong>独处手账</strong>
+            <span className="faint">看看他独处时都在做什么</span>
+          </span>
+          <ChevronRight size={16} className="faint" />
+        </button>
       </section>
 
       {/* ── 记忆存档（Paramecium：L0 原文存档状态 + L1 自动摘录开关）── */}

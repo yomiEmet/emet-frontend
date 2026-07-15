@@ -14,6 +14,7 @@ import Tags from './pages/Tags.jsx'
 import TagDetail from './pages/TagDetail.jsx'
 import Messages from './pages/Messages.jsx'
 import Settings from './pages/Settings.jsx'
+import IdleJournal from './pages/IdleJournal.jsx'
 
 export default function App() {
   // 档案页是整屏独立布局，隐藏全局底部 TabBar。
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/mail" element={<Messages />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />
+        <Route path="/idle" element={<IdleJournal />} />
       </Routes>
       {!hideTabBar && <TabBar wide={location.pathname === '/chat'} />}
     </div>

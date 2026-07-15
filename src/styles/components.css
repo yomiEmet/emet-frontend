@@ -2240,6 +2240,63 @@
 }
 
 /* ════════════════════════════════════════
+   独处手账（二期 2-2）
+   ════════════════════════════════════════ */
+.idle-day {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.idle-entry {
+  padding: 12px 14px;
+}
+
+.idle-entry__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.idle-entry__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.idle-entry--post .idle-entry__badge,
+.idle-entry--diary .idle-entry__badge {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+.idle-entry__time {
+  font-size: 12px;
+}
+
+.idle-entry__content {
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.idle-entry__note {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.idle-entry--rest .idle-entry__head {
+  margin-bottom: 0;
+}
+
+/* ════════════════════════════════════════
    灵感板（设计 4.4b）
    ════════════════════════════════════════ */
 .idea-add-btn {

@@ -604,6 +604,24 @@ export function dailyConfigSet(cfg) {
   return writeJSON('POST', '/api/config/daily', cfg)
 }
 
+// ── 独处时间（二期 2-2）+ 做梦（2-3）：开关默认关，config 路由与心跳同款 ──
+export function idleConfigGet() {
+  return getJSON('/api/config/idle') // { config: { enabled, windows, daily_max, model } }
+}
+export function idleConfigSet(cfg) {
+  return request('/api/config/idle', { method: 'POST', body: cfg })
+}
+export function dreamConfigGet() {
+  return getJSON('/api/config/dream') // { config: { enabled, push, model } }
+}
+export function dreamConfigSet(cfg) {
+  return request('/api/config/dream', { method: 'POST', body: cfg })
+}
+// 独处手账：游标分页（before 传上一页最后一条 ts）
+export function idleLogList({ before, limit = 30 } = {}) {
+  return getJSON('/api/idle/log', { before, limit }) // { entries, next_before }
+}
+
 // ── 凌晨守护（iOS app 事件触发，凌晨时段催睡）──
 export function nightGuardConfigGet() {
   return getJSON('/api/config/night-guard') // { config: { enabled, start, end, monitor_apps, cooldown_min } }
