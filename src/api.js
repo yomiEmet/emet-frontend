@@ -394,6 +394,30 @@ export function ideaDelete(id) {
   return writeJSON('DELETE', `/api/idea/${id}`)
 }
 
+// ── 动态流（二期 2-1）：独立游标分页接口，不进 /api/data 缓存 ──
+// 写操作走 request 而非 writeJSON：动态与 /api/data 无关，别清它的缓存（同 moodSet 理由）
+export function feedList({ before, limit = 20 } = {}) {
+  return getJSON('/api/feed', { before, limit }) // { items, next_before, server_time }
+}
+export function feedCreate(content) {
+  return request('/api/feed', { method: 'POST', body: { content, author: 'yomi', source: 'manual' } })
+}
+export function feedUpdate(id, content) {
+  return request(`/api/feed/${id}`, { method: 'PUT', body: { content } })
+}
+export function feedDelete(id) {
+  return request(`/api/feed/${id}`, { method: 'DELETE' })
+}
+export function feedLike(id, who = 'yomi') {
+  return request(`/api/feed/${id}/like`, { method: 'POST', body: { who } }) // 切换式：再点=取消
+}
+export function feedComment(id, content, author = 'yomi') {
+  return request(`/api/feed/${id}/comment`, { method: 'POST', body: { author, content } })
+}
+export function feedCommentDelete(id, cid) {
+  return request(`/api/feed/${id}/comment/${cid}`, { method: 'DELETE' })
+}
+
 // ── 留言/灵感/信件的编辑与删除（worker 路由早已就绪，纯前端补齐）──
 // restPut 白名单外的字段会被忽略；423 = 已锁定，writeJSON 统一提示
 export function messageUpdate(id, patch) {

@@ -2144,6 +2144,102 @@
 }
 
 /* ════════════════════════════════════════
+   动态流（二期 2-1）：复用 msg-card 基底，只补动态特有的部分
+   ════════════════════════════════════════ */
+.feed-card__source {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+.feed-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.feed-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.feed-act.is-on {
+  color: var(--accent);
+}
+
+.feed-act__count {
+  font-size: 12px;
+}
+
+.feed-card__emet-like {
+  font-size: 12px;
+  margin-left: -6px;
+}
+
+.feed-card__comments {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed-comment {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.feed-comment__who {
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.feed-comment__text {
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.feed-comment__del {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.feed-comment__composer {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.feed-comment__composer input {
+  flex: 1;
+  min-width: 0;
+}
+
+.feed-more {
+  align-self: center;
+  margin-top: 4px;
+}
+
+/* ════════════════════════════════════════
    灵感板（设计 4.4b）
    ════════════════════════════════════════ */
 .idea-add-btn {

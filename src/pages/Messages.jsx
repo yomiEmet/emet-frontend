@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Send, Plus, X, Lock, MoreHorizontal } from 'lucide-react'
+import { Send, Plus, X, Lock, MoreHorizontal, Heart, MessageCircle } from 'lucide-react'
 import {
   messageAll,
   messageLeave,
@@ -15,6 +15,13 @@ import {
   letterUpdate,
   memoryMove,
   memoryUpdate,
+  feedList,
+  feedCreate,
+  feedUpdate,
+  feedDelete,
+  feedLike,
+  feedComment,
+  feedCommentDelete,
 } from '../api.js'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
@@ -114,7 +121,7 @@ function MoveButton({ id, fromType, onMoved }) {
 // 信件迁回（旧版 v6.8.2 顶部 tab）：交接信 / 日常信，共用 handoffs 表，kind 区分
 export default function Messages() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = ['letter', 'board', 'idea'].includes(searchParams.get('tab'))
+  const tab = ['letter', 'board', 'idea', 'feed'].includes(searchParams.get('tab'))
     ? searchParams.get('tab')
     : 'letter'
   const setTab = (next) => {
@@ -149,11 +156,18 @@ export default function Messages() {
         >
           灵感板
         </button>
+        <button
+          className={'subtab' + (tab === 'feed' ? ' is-active' : '')}
+          onClick={() => setTab('feed')}
+        >
+          动态
+        </button>
       </div>
 
       {tab === 'letter' && <LetterBoard />}
       {tab === 'board' && <MessageBoard />}
       {tab === 'idea' && <IdeaBoard />}
+      {tab === 'feed' && <FeedBoard />}
     </div>
   )
 }
@@ -775,6 +789,312 @@ function IdeaCard({ idea: i, busy: listBusy, onChanged, onRemove }) {
           )}
           <div className="faint idea-card__date">{(i.created_at || '').slice(0, 10)}</div>
         </>
+      )}
+    </div>
+  )
+}
+
+// ════════════════ 动态流（二期 2-1）════════════════
+// 时间线卡片：内容、来源小标、点赞心形、评论展开。
+// 交互跟随现有三卡片习惯：点内容进编辑仅限自己发的手动动态；AI 自动产出（独处/梦）只读。
+const FEED_SOURCE_LABEL = { 'idle-auto': '独处', dream: '梦' }
+
+function FeedBoard() {
+  const [items, setItems] = useState(null)
+  const [nextBefore, setNextBefore] = useState(null)
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const taRef = useRef(null)
+
+  const loadFirst = () =>
+    feedList({ limit: 20 })
+      .then((r) => {
+        setItems(r.items || [])
+        setNextBefore(r.next_before || null)
+      })
+      // 刷新失败保留旧列表（与留言板同策略）
+      .catch(() => setItems((prev) => prev || []))
+
+  useEffect(() => {
+    let alive = true
+    feedList({ limit: 20 })
+      .then((r) => {
+        if (!alive) return
+        setItems(r.items || [])
+        setNextBefore(r.next_before || null)
+      })
+      .catch(() => alive && setItems([]))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const send = async () => {
+    const content = text.trim()
+    if (!content || sending) return
+    setSending(true)
+    try {
+      await feedCreate(content)
+      setText('')
+      await loadFirst()
+    } catch (e) {
+      showToast(e?.message || '发送失败')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // 游标翻页：接在已有列表后面，老内容永远可达
+  const loadMore = async () => {
+    if (!nextBefore || loadingMore) return
+    setLoadingMore(true)
+    try {
+      const r = await feedList({ before: nextBefore, limit: 20 })
+      setItems((prev) => [...(prev || []), ...(r.items || [])])
+      setNextBefore(r.next_before || null)
+    } catch (e) {
+      showToast(e?.message || '加载失败')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  return (
+    <>
+      <div className="composer">
+        <textarea
+          ref={taRef}
+          value={text}
+          rows={2}
+          placeholder="分享一条动态…"
+          onChange={(e) => setText(e.target.value)}
+        />
+        <button
+          className="composer-send"
+          disabled={!text.trim() || sending}
+          onClick={send}
+          aria-label="发布"
+        >
+          <Send size={17} />
+        </button>
+      </div>
+
+      <div className="stack">
+        {items === null ? (
+          <p className="faint list-hint">加载中…</p>
+        ) : items.length === 0 ? (
+          <p className="faint list-hint">还没有动态</p>
+        ) : (
+          items.map((f) => <FeedCard key={f.id} f={f} onChanged={loadFirst} />)
+        )}
+        {nextBefore && (
+          <button className="mini-btn feed-more" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? '加载中…' : '加载更早的动态'}
+          </button>
+        )}
+      </div>
+
+      <button
+        className="fab"
+        onClick={() => {
+          taRef.current?.focus()
+          taRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }}
+        aria-label="发动态"
+      >
+        <Plus size={24} />
+      </button>
+    </>
+  )
+}
+
+function FeedCard({ f, onChanged }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [showComments, setShowComments] = useState(false)
+  const [commentText, setCommentText] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const isAuto = f.source !== 'manual'
+  const editable = !isAuto && f.author === 'yomi' // 仅自己发的手动动态可编辑
+  const sourceTag = FEED_SOURCE_LABEL[f.source]
+  const likedByMe = !!f.likes?.yomi
+  const likedByEmet = !!f.likes?.emet
+  const comments = f.comments || []
+
+  const toggleLike = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await feedLike(f.id, 'yomi')
+      onChanged()
+    } catch (e) {
+      showToast(e?.message || '操作失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async () => {
+    const c = draft.trim()
+    if (!c || busy) return
+    setBusy(true)
+    try {
+      await feedUpdate(f.id, c)
+      showToast('已保存')
+      setEditing(false)
+      onChanged()
+    } catch (e) {
+      showToast(e?.message || '保存失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async () => {
+    if (busy || !window.confirm('删除这条动态？')) return
+    setBusy(true)
+    try {
+      await feedDelete(f.id)
+      onChanged()
+    } catch (e) {
+      showToast(e?.message || '删除失败')
+      setBusy(false)
+    }
+  }
+
+  const sendComment = async () => {
+    const c = commentText.trim()
+    if (!c || busy) return
+    setBusy(true)
+    try {
+      await feedComment(f.id, c, 'yomi')
+      setCommentText('')
+      onChanged()
+    } catch (e) {
+      showToast(e?.message || '评论失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeComment = async (cid) => {
+    if (busy) return
+    setBusy(true)
+    try {
+      await feedCommentDelete(f.id, cid)
+      onChanged()
+    } catch (e) {
+      showToast(e?.message || '删除失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div
+      className={'card msg-card feed-card' + (f.author === 'emet' ? ' msg-card--emet' : '')}
+      style={{ position: 'relative' }}
+    >
+      {!editing && (
+        <button className="idea-card__del" onClick={remove} aria-label="删除">
+          <X size={14} />
+        </button>
+      )}
+      <div className="msg-card__head">
+        <span className="msg-card__who">
+          {SENDER_LABEL[f.author] || f.author}
+          {sourceTag && <em className="feed-card__source">{sourceTag}</em>}
+        </span>
+        <span className="faint msg-card__time">
+          {shortDateZh(f.created_at)} {timeOfDayZh(f.created_at)}
+        </span>
+      </div>
+
+      {editing ? (
+        <div className="inline-edit">
+          <AutoTextarea autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <div className="idea-form__foot">
+            <button className="mini-btn" onClick={() => setEditing(false)}>
+              取消
+            </button>
+            <button className="mini-btn mini-btn--accent" disabled={!draft.trim() || busy} onClick={save}>
+              {busy ? '保存中…' : '保存'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p
+          className={'msg-card__content' + (editable ? ' is-editable' : '')}
+          onClick={
+            editable
+              ? () => {
+                  setDraft(f.content || '')
+                  setEditing(true)
+                }
+              : undefined
+          }
+        >
+          {f.content}
+        </p>
+      )}
+
+      {/* 点赞 + 评论行 */}
+      <div className="feed-card__actions">
+        <button
+          className={'feed-act' + (likedByMe ? ' is-on' : '')}
+          onClick={toggleLike}
+          aria-label="点赞"
+        >
+          <Heart size={15} fill={likedByMe ? 'currentColor' : 'none'} />
+        </button>
+        {likedByEmet && <span className="faint feed-card__emet-like">Emet ♥</span>}
+        <button
+          className={'feed-act' + (showComments ? ' is-on' : '')}
+          onClick={() => setShowComments((v) => !v)}
+          aria-label="评论"
+        >
+          <MessageCircle size={15} />
+          {comments.length > 0 && <span className="feed-act__count">{comments.length}</span>}
+        </button>
+      </div>
+
+      {showComments && (
+        <div className="feed-card__comments">
+          {comments.map((c) => (
+            <div key={c.id} className="feed-comment">
+              <span className="feed-comment__who">{SENDER_LABEL[c.author] || c.author}</span>
+              <span className="feed-comment__text">{c.content}</span>
+              {c.author === 'yomi' && (
+                <button
+                  className="feed-comment__del faint"
+                  onClick={() => removeComment(c.id)}
+                  aria-label="删除评论"
+                >
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+          <div className="feed-comment__composer">
+            <input
+              value={commentText}
+              placeholder="写条评论…"
+              onChange={(e) => setCommentText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) sendComment()
+              }}
+            />
+            <button
+              className="mini-btn mini-btn--accent"
+              disabled={!commentText.trim() || busy}
+              onClick={sendComment}
+            >
+              发送
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

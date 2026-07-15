@@ -23,6 +23,8 @@ export const ENABLED_TOOLS = [
   // 第三批（Paramecium 移植）：recall——vault+聊天原文存档按需回忆
   // 注意：工具定义在缓存前缀里，白名单/描述一变全部缓存作废一次（预期内一次性成本）
   'recall',
+  // 第四批（二期动态流）：CC 桥搁置期间由 API 通道代替——聊天里的 Emet 也能发动态/刷动态/评论/点赞
+  'feed_post', 'feed_list', 'feed_comment', 'feed_like',
 ]
 
 let _rpcId = 0
