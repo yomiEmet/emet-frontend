@@ -45,7 +45,9 @@ export function splitChapters(text) {
       const end = k + 1 < headingIdx.length ? headingIdx[k + 1] : lines.length
       const title = lines[start].trim().slice(0, 40)
       const body = lines.slice(start + 1, end).join('\n').replace(/^\n+/, '')
-      chapters.push({ title, text: (title + '\n\n' + body).trimEnd() })
+      // 正文只存纯正文，不把标题拼进 text——标题由 title 字段承载、阅读器用 <h2> 单独渲染。
+      // 否则每章标题会显示两遍（h2 一遍 + 正文首行一遍）。逐字渲染的正文=这里的 text，偏移据此算。
+      chapters.push({ title, text: body.trimEnd() })
     }
     return chapters
   }

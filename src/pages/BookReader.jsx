@@ -153,37 +153,36 @@ export default function BookReader() {
     }
   }
 
-  // 正文分段渲染：把批注区间包成 <mark>，其余为纯文本（保持逐字一致）
+  // 正文分段渲染：把批注区间包成 <mark>，其余为纯文本（保持逐字一致）。
+  // 用「区间切分」而非「重叠即丢」：按所有批注的边界把正文切成最小片段，
+  // 每个片段收集覆盖它的全部批注——这样两人（含部分重叠/包含）的划线都能高亮、都能点开。
   const segments = useMemo(() => {
     const text = chapter?.text || ''
     if (!text) return []
-    // 解析每条批注到区间，按 start 排序，丢掉重叠（保留先出现的）
     const ranges = []
     for (const a of annos) {
       const r = resolveAnno(a, text)
-      if (r) ranges.push({ start: r[0], end: r[1], anno: a })
+      if (r && r[1] > r[0]) ranges.push({ start: r[0], end: r[1], anno: a })
     }
-    ranges.sort((x, y) => x.start - y.start || x.end - y.end)
-    const merged = []
-    let lastEnd = -1
+    if (!ranges.length) return [{ k: 0, mark: false, text }]
+    // 所有边界点（含首尾），去重排序 → 相邻两点间即一个最小片段
+    const bounds = new Set([0, text.length])
     for (const r of ranges) {
-      if (r.start >= lastEnd) {
-        merged.push({ start: r.start, end: r.end, annos: [r.anno] })
-        lastEnd = r.end
-      } else if (merged.length && r.start === merged[merged.length - 1].start && r.end === merged[merged.length - 1].end) {
-        merged[merged.length - 1].annos.push(r.anno) // 完全同区间：并到一起
-      }
-      // 其它重叠情况直接跳过（避免偏移错乱）
+      bounds.add(r.start)
+      bounds.add(r.end)
     }
+    const points = [...bounds].filter((p) => p >= 0 && p <= text.length).sort((a, b) => a - b)
     const segs = []
-    let cursor = 0
     let key = 0
-    for (const m of merged) {
-      if (m.start > cursor) segs.push({ k: key++, mark: false, text: text.slice(cursor, m.start) })
-      segs.push({ k: key++, mark: true, text: text.slice(m.start, m.end), annos: m.annos })
-      cursor = m.end
+    for (let i = 0; i < points.length - 1; i++) {
+      const s = points[i]
+      const e = points[i + 1]
+      if (e <= s) continue
+      // 覆盖 [s,e) 的全部批注（一个片段可被多人/多条批注同时覆盖）
+      const covering = ranges.filter((r) => r.start <= s && r.end >= e).map((r) => r.anno)
+      if (covering.length) segs.push({ k: key++, mark: true, text: text.slice(s, e), annos: covering })
+      else segs.push({ k: key++, mark: false, text: text.slice(s, e) })
     }
-    if (cursor < text.length) segs.push({ k: key++, mark: false, text: text.slice(cursor) })
     return segs
   }, [chapter, annos])
 
@@ -209,7 +208,10 @@ export default function BookReader() {
         <p className="faint list-hint">加载中…</p>
       ) : (
         <>
-          <h2 className="book-chapter-title">{chapter.title}</h2>
+          {/* 老书正文首行可能已含标题（旧版分章把标题拼进了正文），此时不再用 h2 渲染，避免重复 */}
+          {chapter.title && !(chapter.text || '').startsWith(chapter.title) && (
+            <h2 className="book-chapter-title">{chapter.title}</h2>
+          )}
           <div
             ref={textRef}
             className="book-text"
