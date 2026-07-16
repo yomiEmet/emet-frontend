@@ -70,7 +70,9 @@ function applyBlob(blob) {
   if (!blob || typeof blob !== 'object') return false
   for (const k of SYNCED_KEYS) {
     const field = k.replace('emet.', '')
-    if (field in blob) writeKey(k, blob[field])
+    // null = 源设备"从没设过"这个键，绝不能当"删除"写回本地（否则会跨设备互相清空
+    // 纪念日/待办/小票/经期等数据，退回默认）。只有云端带来真实值时才覆盖本地。
+    if (field in blob && blob[field] != null) writeKey(k, blob[field])
   }
   if (blob.updated_at) setSettingsAt(blob.updated_at)
   return true
