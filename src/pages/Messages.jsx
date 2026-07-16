@@ -835,9 +835,11 @@ function FeedBoard() {
     if (!content || sending) return
     setSending(true)
     try {
-      await feedCreate(content)
+      const r = await feedCreate(content)
       setText('')
-      await loadFirst()
+      // 新动态直接插到顶部，不整表重拉（避免把已翻出的更早动态冲掉）
+      if (r?.item) setItems((prev) => [r.item, ...(prev || [])])
+      else await loadFirst()
     } catch (e) {
       showToast(e?.message || '发送失败')
     } finally {
@@ -859,6 +861,13 @@ function FeedBoard() {
       setLoadingMore(false)
     }
   }
+
+  // 互动后只局部更新那一条 / 删除那一条，保住已加载的翻页（不再整表塌回第一页）
+  const patchItem = (updated) => {
+    if (!updated) return
+    setItems((prev) => (prev || []).map((x) => (x.id === updated.id ? updated : x)))
+  }
+  const removeItem = (id) => setItems((prev) => (prev || []).filter((x) => x.id !== id))
 
   return (
     <>
@@ -886,7 +895,7 @@ function FeedBoard() {
         ) : items.length === 0 ? (
           <p className="faint list-hint">还没有动态</p>
         ) : (
-          items.map((f) => <FeedCard key={f.id} f={f} onChanged={loadFirst} />)
+          items.map((f) => <FeedCard key={f.id} f={f} onPatch={patchItem} onRemove={removeItem} />)
         )}
         {nextBefore && (
           <button className="mini-btn feed-more" onClick={loadMore} disabled={loadingMore}>
@@ -909,7 +918,7 @@ function FeedBoard() {
   )
 }
 
-function FeedCard({ f, onChanged }) {
+function FeedCard({ f, onPatch, onRemove }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [showComments, setShowComments] = useState(false)
@@ -927,8 +936,8 @@ function FeedCard({ f, onChanged }) {
     if (busy) return
     setBusy(true)
     try {
-      await feedLike(f.id, 'yomi')
-      onChanged()
+      const r = await feedLike(f.id, 'yomi')
+      onPatch(r?.item)
     } catch (e) {
       showToast(e?.message || '操作失败')
     } finally {
@@ -941,10 +950,10 @@ function FeedCard({ f, onChanged }) {
     if (!c || busy) return
     setBusy(true)
     try {
-      await feedUpdate(f.id, c)
+      const r = await feedUpdate(f.id, c)
       showToast('已保存')
       setEditing(false)
-      onChanged()
+      onPatch(r?.item)
     } catch (e) {
       showToast(e?.message || '保存失败')
     } finally {
@@ -957,7 +966,7 @@ function FeedCard({ f, onChanged }) {
     setBusy(true)
     try {
       await feedDelete(f.id)
-      onChanged()
+      onRemove(f.id)
     } catch (e) {
       showToast(e?.message || '删除失败')
       setBusy(false)
@@ -969,9 +978,9 @@ function FeedCard({ f, onChanged }) {
     if (!c || busy) return
     setBusy(true)
     try {
-      await feedComment(f.id, c, 'yomi')
+      const r = await feedComment(f.id, c, 'yomi')
       setCommentText('')
-      onChanged()
+      onPatch(r?.item)
     } catch (e) {
       showToast(e?.message || '评论失败')
     } finally {
@@ -983,8 +992,8 @@ function FeedCard({ f, onChanged }) {
     if (busy) return
     setBusy(true)
     try {
-      await feedCommentDelete(f.id, cid)
-      onChanged()
+      const r = await feedCommentDelete(f.id, cid)
+      onPatch(r?.item)
     } catch (e) {
       showToast(e?.message || '删除失败')
     } finally {
