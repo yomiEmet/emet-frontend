@@ -6,6 +6,7 @@ import MoodPicker from '../components/MoodPicker.jsx'
 import TodoList from '../components/TodoList.jsx'
 import Heatmap from '../components/Heatmap.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
+import ReceiptCard from '../components/ReceiptCard.jsx'
 import { greeting, longDate, daysTogether, sinceLabel, nowCST, nowLogical, dayKey, logicalDayKey } from '../utils/time.js'
 import { homeSummary, healthLatest, subscribeData, memoryAll } from '../api.js'
 import { loadSessions } from '../utils/sessions.js'
@@ -137,6 +138,9 @@ export default function Home() {
           />
         </div>
       </section>
+
+      {/* ── 今日小票（4-1，开关关闭时自我隐藏）── */}
+      <ReceiptCard />
 
       {/* ── 第四区：待办 ─────────────────────────── */}
       <TodoList />

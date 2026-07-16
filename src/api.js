@@ -11,7 +11,7 @@
 // 实际请求统一经 ./api/client.js 发出（自动附加密钥 + 统一 401 处理）。
 // ════════════════════════════════════════════════════════
 
-import { nowCST, logicalDayKey } from './utils/time.js'
+import { nowCST, logicalDayKey, nowLogical } from './utils/time.js'
 import { loadAssistant } from './utils/assistant.js'
 import { smartSearch } from './utils/search.js'
 import { BASE_URL, request, getAdminKey } from './api/client.js'
@@ -474,8 +474,41 @@ export async function chatSystemPrompt() {
     `当前时间（东八区）：${timeStr}`,
     ...(healthLine ? ['', '【身体状态】', healthLine] : []),
     ...todoLines(),
+    ...annivLines(),
   ].join('\n')
   return { stable, semi, volatile }
+}
+
+// 纪念日注入（4-3）：只读、只进 volatile 段（缓存纪律同 todoLines）。
+// 基于 emet.milestones，按周年（MM-DD）计算；开关 emet.anniv={enabled,advanceDays} 默认关。
+// 不做贺卡弹窗——就在动态区注入一行日历备忘录式提醒。
+function annivLines() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('emet.anniv') || 'null')
+    if (!cfg?.enabled) return []
+    const advance = Number.isInteger(cfg.advanceDays) ? cfg.advanceDays : 3
+    const saved = JSON.parse(localStorage.getItem('emet.milestones') || 'null')
+    const items = saved?.items || []
+    if (!items.length) return []
+    const today = nowLogical() // 东八区 + 4 点逻辑日
+    const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+    const hits = []
+    for (const it of items) {
+      if (!it?.name || !it?.date) continue
+      const [, m, d] = it.date.split('-').map(Number)
+      if (!m || !d) continue
+      // 下一次周年：今年的 MM-DD；已过则明年
+      let occ = new Date(today.getFullYear(), m - 1, d).getTime()
+      if (occ < t0) occ = new Date(today.getFullYear() + 1, m - 1, d).getTime()
+      const days = Math.round((occ - t0) / 86400000)
+      if (days === 0) hits.push(`- 今天是 ${it.name} 纪念日`)
+      else if (days <= advance) hits.push(`- 还有 ${days} 天是 ${it.name} 纪念日`)
+    }
+    if (!hits.length) return []
+    return ['', '【纪念日】', ...hits, '（话题合适时可以自然提一句，不必刻意；不做仪式感的贺卡。）']
+  } catch {
+    return []
+  }
 }
 
 // 待办注入（只读）：主页待办的未完成项，最多 10 条。
@@ -602,6 +635,28 @@ export function dailyConfigGet() {
 }
 export function dailyConfigSet(cfg) {
   return writeJSON('POST', '/api/config/daily', cfg)
+}
+
+// ── 今日小票（四期 4-1）：按 4 点逻辑日一张，双端可记 ──
+export function receiptList(date) {
+  return getJSON('/api/receipt', date ? { date } : undefined) // { day, items:[{id,text,added_by,created_at}] }
+}
+export function receiptAdd(text, date) {
+  return request('/api/receipt', { method: 'POST', body: { text, added_by: 'yomi', date } })
+}
+export function receiptDelete(day, itemId) {
+  return request(`/api/receipt/${day}/${itemId}`, { method: 'DELETE' })
+}
+
+// ── 经期月历（四期 4-2）：统计口径由后端一份实现，前端只读 stats ──
+export function periodList() {
+  return getJSON('/api/period') // { logs:[{start_date,end_date,note,...}], stats:{...} }
+}
+export function periodSave({ start_date, end_date, note }) {
+  return request('/api/period', { method: 'POST', body: { start_date, end_date, note } })
+}
+export function periodDelete(startDate) {
+  return request(`/api/period/${startDate}`, { method: 'DELETE' })
 }
 
 // ── 独处时间（二期 2-2）+ 做梦（2-3）：开关默认关，config 路由与心跳同款 ──

@@ -11,6 +11,7 @@ import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import IdleToggle from '../components/IdleToggle.jsx'
 import DreamToggle from '../components/DreamToggle.jsx'
+import { ReceiptToggle, PeriodToggle, AnnivToggle } from '../components/LifeToggles.jsx'
 import MemArchiveCard from '../components/MemArchiveCard.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
@@ -236,6 +237,14 @@ export default function Settings() {
           </span>
           <ChevronRight size={16} className="faint" />
         </button>
+      </section>
+
+      {/* ── 生活（4-1 小票 / 4-2 经期 / 4-3 纪念日注入，均默认关）── */}
+      <section className="set-group">
+        <div className="section-label">生活</div>
+        <ReceiptToggle />
+        <PeriodToggle />
+        <AnnivToggle />
       </section>
 
       {/* ── 记忆存档（Paramecium：L0 原文存档状态 + L1 自动摘录开关）── */}

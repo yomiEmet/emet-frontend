@@ -2297,6 +2297,314 @@
 }
 
 /* ════════════════════════════════════════
+   今日小票（四期 4-1）
+   ════════════════════════════════════════ */
+.receipt {
+  padding: 16px 18px;
+  font-family: 'Courier New', ui-monospace, monospace;
+}
+
+.receipt__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.receipt__title {
+  font-weight: 700;
+  letter-spacing: 2px;
+  font-size: 14px;
+}
+
+.receipt__date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.receipt__rule {
+  border-top: 1px dashed var(--border);
+  margin: 10px 0;
+}
+
+.receipt__empty {
+  text-align: center;
+  font-size: 13px;
+  padding: 4px 0;
+}
+
+.receipt__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.receipt__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13.5px;
+}
+
+.receipt__dot {
+  color: var(--text-muted);
+}
+
+.receipt__text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.receipt__by {
+  font-size: 10px;
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.5;
+}
+
+.receipt__del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  opacity: 0.5;
+}
+
+.receipt__add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.receipt__add input {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0;
+  font-size: 13.5px;
+}
+
+.receipt__add input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.receipt__add-btn {
+  display: inline-flex;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.receipt__add-btn:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+/* ════════════════════════════════════════
+   经期月历（四期 4-2）
+   ════════════════════════════════════════ */
+.period-stats {
+  display: flex;
+  justify-content: space-around;
+  text-align: center;
+  padding: 14px 12px;
+}
+
+.period-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.period-stat strong {
+  font-size: 20px;
+}
+
+.period-stat span {
+  font-size: 11px;
+}
+
+.period-stat--main strong {
+  color: var(--accent);
+  font-size: 24px;
+}
+
+.period-ongoing {
+  font-size: 12.5px;
+  color: var(--accent);
+  margin: 8px 2px 0;
+}
+
+.period-actions {
+  margin: 12px 0;
+}
+
+.period-actions .set-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 10px;
+}
+
+.period-cal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.period-cal__title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.period-cal__nav {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+}
+
+.period-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.period-cal__wd {
+  text-align: center;
+  font-size: 11px;
+  padding: 2px 0;
+}
+
+.period-cal__cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  border-radius: 50%;
+}
+
+.period-cal__day.is-on {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.period-cal__day.is-today {
+  outline: 1.5px solid var(--accent-soft);
+}
+
+.period-cal__day.is-predict {
+  border: 1.5px dashed var(--accent-soft);
+  color: var(--accent);
+}
+
+.period-cal__legend {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  margin-top: 12px;
+  font-size: 11px;
+}
+
+.period-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.period-legend::before {
+  content: '';
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.period-legend--on::before {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+}
+
+.period-legend--predict::before {
+  border: 1.5px dashed var(--accent-soft);
+}
+
+.period-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.period-row__end {
+  border: none;
+  background: none;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.period-row__ongoing {
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.period-row__del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.period-backfill {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.period-backfill__row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.set-inline-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 0 2px;
+}
+
+.anniv-days {
+  width: 52px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px 6px;
+  font-size: 13px;
+}
+
+/* ════════════════════════════════════════
    灵感板（设计 4.4b）
    ════════════════════════════════════════ */
 .idea-add-btn {

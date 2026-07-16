@@ -11,7 +11,7 @@
 
 import { request } from '../api/client.js'
 
-export const SYNCED_KEYS = ['emet.assistant', 'emet.providers', 'emet.chatTarget', 'emet.todos', 'emet.moods', 'emet.milestones']
+export const SYNCED_KEYS = ['emet.assistant', 'emet.providers', 'emet.chatTarget', 'emet.todos', 'emet.moods', 'emet.milestones', 'emet.anniv', 'emet.receipt', 'emet.period']
 const AT_KEY = 'emet.settingsAt' // 本地设置最后修改时间（last-write-wins 依据）
 
 // ── 同步状态（设置页订阅 'emet:settings-sync' 事件显示）──
@@ -59,6 +59,9 @@ function buildBlob(updatedAt) {
     moods: readKey('emet.moods'),
     // 新键必须同时写进 SYNCED_KEYS 和这里——漏这里会"本地能存、换设备不同步"
     milestones: readKey('emet.milestones'),
+    anniv: readKey('emet.anniv'), // 纪念日注入开关（4-3）
+    receipt: readKey('emet.receipt'), // 今日小票开关（4-1）
+    period: readKey('emet.period'), // 经期月历开关（4-2）
   }
 }
 
