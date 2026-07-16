@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon, Coffee } from 'lucide-react'
+import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon, Coffee, BookOpen } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
@@ -324,6 +324,14 @@ export default function Settings() {
           <span className="set-entry__text">
             <strong>对话档案</strong>
             <span className="faint">浏览导入的聊天记录</span>
+          </span>
+          <ChevronRight size={16} className="faint" />
+        </button>
+        <button className="card set-card set-entry" onClick={() => navigate('/books')}>
+          <BookOpen size={18} />
+          <span className="set-entry__text">
+            <strong>共读书架</strong>
+            <span className="faint">和 Emet 在同一本书上划线批注</span>
           </span>
           <ChevronRight size={16} className="faint" />
         </button>

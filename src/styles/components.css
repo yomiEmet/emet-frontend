@@ -2605,6 +2605,245 @@
 }
 
 /* ════════════════════════════════════════
+   共读书架（三期）
+   ════════════════════════════════════════ */
+.book-progress {
+  text-align: center;
+  font-size: 13px;
+  color: var(--accent);
+  padding: 8px 0;
+}
+
+.book-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 0;
+}
+
+.book-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.book-item__spine {
+  width: 4px;
+  align-self: stretch;
+  min-height: 34px;
+  border-radius: 2px;
+  background: var(--accent-soft);
+}
+
+.book-item__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.book-item__title {
+  font-size: 15px;
+}
+
+.book-item__meta {
+  font-size: 12px;
+}
+
+.book-item__del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* 阅读器 */
+.book-reader {
+  padding-bottom: 40px;
+}
+
+.book-chapter-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 8px 2px 14px;
+}
+
+/* 逐字渲染容器：pre-wrap 保留原文空白，绝不加工 */
+.book-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 15.5px;
+  line-height: 1.85;
+  color: var(--text);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.book-mark {
+  background: transparent;
+  color: inherit;
+  border-bottom: 2px solid;
+  cursor: pointer;
+  padding-bottom: 1px;
+}
+
+.book-mark--yomi {
+  border-color: #e0b84c;
+  background: rgba(224, 184, 76, 0.14);
+}
+
+.book-mark--emet {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.book-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  gap: 10px;
+}
+
+.book-nav__pos {
+  font-size: 12.5px;
+}
+
+/* 选区批注条：固定底部 */
+.book-annobar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 40;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+
+.book-annobar__quote {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.book-annobar__note {
+  width: 100%;
+  resize: none;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.book-annobar__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* 批注查看弹层 */
+.book-anno-pop {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  padding: 14px 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.book-anno-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.book-anno-who {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.book-anno-who--emet {
+  color: var(--accent);
+}
+
+.book-anno-who--yomi {
+  color: #c79a2e;
+}
+
+.book-anno-item__quote {
+  font-size: 12.5px;
+  margin: 4px 0;
+}
+
+.book-anno-item__note {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 目录抽屉 */
+.book-toc {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(78vw, 320px);
+  z-index: 50;
+  border-radius: 0;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.book-toc__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.book-toc__head button {
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.book-toc__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.book-toc__item {
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 11px 4px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.book-toc__item.is-current {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ════════════════════════════════════════
    灵感板（设计 4.4b）
    ════════════════════════════════════════ */
 .idea-add-btn {

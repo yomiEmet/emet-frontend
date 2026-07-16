@@ -637,6 +637,41 @@ export function dailyConfigSet(cfg) {
   return writeJSON('POST', '/api/config/daily', cfg)
 }
 
+// ── 共读书架（三期）──────────────────────────────────
+export function bookList() {
+  return getJSON('/api/books') // { books:[{id,title,author,chapter_count,bookmark}] }
+}
+export function bookCreate({ title, author }) {
+  return request('/api/books', { method: 'POST', body: { title, author } })
+}
+export function bookDelete(id) {
+  return request(`/api/books/${id}`, { method: 'DELETE' })
+}
+export function bookMeta(id) {
+  return getJSON(`/api/books/${id}/meta`) // { book, chapters:[{idx,title}], bookmark }
+}
+export function bookChapterUpload(id, { idx, title, text }) {
+  return request(`/api/books/${id}/chapter`, { method: 'POST', body: { idx, title, text } })
+}
+export function bookChapter(id, idx) {
+  return getJSON(`/api/books/${id}/chapter/${idx}`) // { chapter:{idx,title,text} }
+}
+export function bookAnnotations(id) {
+  return getJSON(`/api/books/${id}/annotations`) // { annotations:[...] }
+}
+export function bookAnnotate(id, { chapter_idx, start, end, quote, note, color, author = 'yomi' }) {
+  return request(`/api/books/${id}/annotations`, { method: 'POST', body: { chapter_idx, start, end, quote, note, color, author } })
+}
+export function bookAnnotationDelete(id, annoId) {
+  return request(`/api/books/${id}/annotations/${annoId}`, { method: 'DELETE' })
+}
+export function bookmarkGet(id) {
+  return getJSON(`/api/books/${id}/bookmark`) // { bookmark }
+}
+export function bookmarkSet(id, { chapter_idx, offset }) {
+  return request(`/api/books/${id}/bookmark`, { method: 'PUT', body: { chapter_idx, offset } })
+}
+
 // ── 今日小票（四期 4-1）：按 4 点逻辑日一张，双端可记 ──
 export function receiptList(date) {
   return getJSON('/api/receipt', date ? { date } : undefined) // { day, items:[{id,text,added_by,created_at}] }
