@@ -22,7 +22,8 @@ const { spawn, execSync } = require('child_process')
 // 想让同一 WiFi/热点下的手机也能连：启动前设 CC_BRIDGE_HOST=0.0.0.0，
 // 且必须同时设 CC_BRIDGE_TOKEN（暗号）——否则同网别人也能白用你的额度。
 const HOST = (process.env.CC_BRIDGE_HOST || '127.0.0.1').trim()
-const PORT = 8000
+const PORT = Number(process.env.CC_BRIDGE_PORT) || 8000
+const NO_RELAY = process.env.CC_NO_RELAY === '1' // 测试用：跳过中转轮询，避免和主桥抢活
 
 // ── 鉴权：可选的 Bearer Token（环境变量 CC_BRIDGE_TOKEN）─────────────
 // 设了：所有 /chat 请求必须带 Authorization: Bearer <同样的字符串>
@@ -175,6 +176,13 @@ function resolveClaude() {
 
 const CLAUDE_RUN = resolveClaude()
 
+// claude -p 会沿目录树向上自动发现 CLAUDE.md，并按"项目路径"加载自动记忆。
+// 若在本项目目录跑，Emet 的聊天会误吃开发用的 CLAUDE.md + CC 的记忆文件 → 串味。
+// 解决：给它一个项目树之外的空工作目录（Temp 下），既无 CLAUDE.md 可向上发现，
+// 该路径的自动记忆也是空的，聊天上下文只剩我们传的 --system-prompt。
+const CHAT_CWD = path.join(os.tmpdir(), 'emet-bridge-cwd')
+try { fs.mkdirSync(CHAT_CWD, { recursive: true }) } catch { /* 已存在 */ }
+
 function corsHeaders(req) {
   const origin = req.headers.origin
   const allow = origin && CORS_ORIGINS.has(origin) ? origin : 'http://localhost:5173'
@@ -265,12 +273,16 @@ function checkAuth(req, res) {
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let buf = ''
+    // 收集 Buffer 分片、末尾一次性 UTF-8 解码：避免 `buf += chunk` 把跨分片的
+    // 多字节中文切成乱码（claude 读到乱码会答非所问）。
+    const chunks = []
+    let size = 0
     req.on('data', (c) => {
-      buf += c
-      if (buf.length > 2 * 1024 * 1024) reject(new Error('payload too large'))
+      chunks.push(c)
+      size += c.length
+      if (size > 2 * 1024 * 1024) reject(new Error('payload too large'))
     })
-    req.on('end', () => resolve(buf))
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
     req.on('error', reject)
   })
 }
@@ -318,9 +330,13 @@ function composeSystem(baseSystem, messages) {
 }
 
 // ── 跑一次 claude -p，返回完整结果（HTTP 流式和 relay 中转共用）──────────
-// onChunk 可选：stdout 每来一段调一次（HTTP 场景转 SSE 用；relay 场景不传，等完整结果）
-// onSpawn 可选：拿到子进程引用（HTTP 断开时杀掉用）
-function runClaude({ system, messages, model }, onChunk, onSpawn) {
+// 用 --output-format stream-json 逐行解析增量事件：
+//   · content_block_delta.text_delta   → 正文逐字（onText）
+//   · content_block_delta.thinking_delta → 思考过程逐字（onThink）
+// --effort high 才会产生 thinking（默认不产生）。
+// cb 可选回调：{ onText(增量文本), onThink(增量思考), onSpawn(子进程) }
+function runClaude({ system, messages, model }, cb = {}) {
+  const { onText, onThink, onSpawn } = cb
   return new Promise((resolve) => {
     const promptText = buildPromptText(messages)
     const baseSystem = composeSystem(system, messages)
@@ -332,13 +348,18 @@ function runClaude({ system, messages, model }, onChunk, onSpawn) {
     const stampIn = new Date().toISOString().slice(11, 19)
     console.log(`[${stampIn}] → claude --model ${modelUsed}`)
 
-    const args = ['-p', '--tools', '', '--system-prompt', systemFull]
+    const args = [
+      '-p', '--tools', '', '--system-prompt', systemFull,
+      '--effort', 'high', // 逼出思考过程
+      '--output-format', 'stream-json', '--include-partial-messages', '--verbose',
+    ]
     if (model && model.trim()) args.push('--model', model.trim())
 
     const child = spawn(CLAUDE_RUN.file, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: CLAUDE_RUN.useShell,
       windowsHide: true,
+      cwd: CHAT_CWD, // 隔离目录，避免误吃项目 CLAUDE.md / 自动记忆
     })
     if (onSpawn) onSpawn(child)
 
@@ -346,11 +367,33 @@ function runClaude({ system, messages, model }, onChunk, onSpawn) {
     child.stdin.end()
 
     let full = ''
+    let resultText = '' // result 事件里的权威全文，兜底用
+    let buf = ''
+    const handleLine = (line) => {
+      const s = line.trim()
+      if (!s) return
+      let ev
+      try { ev = JSON.parse(s) } catch { return } // 非 JSON 行忽略
+      if (ev.type === 'stream_event' && ev.event?.type === 'content_block_delta') {
+        const d = ev.event.delta || {}
+        if (d.type === 'text_delta' && d.text) {
+          full += d.text
+          onText?.(d.text)
+        } else if (d.type === 'thinking_delta' && d.thinking) {
+          onThink?.(d.thinking)
+        }
+      } else if (ev.type === 'result' && typeof ev.result === 'string') {
+        resultText = ev.result
+      }
+    }
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk) => {
-      if (!chunk) return
-      full += chunk
-      if (onChunk) onChunk(chunk)
+      buf += chunk
+      let nl
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        handleLine(buf.slice(0, nl))
+        buf = buf.slice(nl + 1)
+      }
     })
 
     let stderrBuf = ''
@@ -365,12 +408,14 @@ function runClaude({ system, messages, model }, onChunk, onSpawn) {
     })
 
     child.on('close', (code) => {
+      if (buf.trim()) handleLine(buf) // 收尾残行
       const stampOut = new Date().toISOString().slice(11, 19)
       console.log(`[${stampOut}] ← claude --model ${modelUsed} 完成 (exit ${code})`)
+      const finalText = full || resultText
       if (code !== 0) {
-        resolve({ ok: false, text: full, error: `claude 退出码 ${code}` + (stderrBuf ? '：' + stderrBuf.trim().slice(0, 500) : '') })
+        resolve({ ok: false, text: finalText, error: `claude 退出码 ${code}` + (stderrBuf ? '：' + stderrBuf.trim().slice(0, 500) : '') })
       } else {
-        resolve({ ok: true, text: full, error: '' })
+        resolve({ ok: true, text: finalText, error: '' })
       }
     })
   })
@@ -424,11 +469,14 @@ const server = http.createServer(async (req, res) => {
 
   const result = await runClaude(
     { system, messages, model },
-    (chunk) => sseSend(res, null, { text: chunk }),
-    (child) => {
-      req.on('close', () => {
-        if (child && !child.killed) child.kill()
-      })
+    {
+      onText: (t) => sseSend(res, null, { text: t }),
+      onThink: (t) => sseSend(res, 'thinking', { thinking: t }),
+      onSpawn: (child) => {
+        req.on('close', () => {
+          if (child && !child.killed) child.kill()
+        })
+      },
     },
   )
 
@@ -463,7 +511,7 @@ server.listen(PORT, HOST, () => {
   if (EXTRA_ORIGINS.length) {
     console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
   }
-  if (ADMIN_KEY) {
+  if (ADMIN_KEY && !NO_RELAY) {
     relaySelfTestThenLoop()
   } else {
     console.log(`  手机中转：未开（缺 .cc-admin-key）—— 只影响手机线上聊天，本机直连不受影响`)

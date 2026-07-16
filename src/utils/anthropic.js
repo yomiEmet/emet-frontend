@@ -31,7 +31,7 @@ export async function streamChat({ system, messages, temperature, maxTokens, too
   const { provider, model } = target
   if (provider.protocol === 'claude-cli') {
     // 本机 chat-server.cjs；工具调用不支持（chat-server 已用 --tools "" 关掉）
-    return streamClaudeCli({ provider, model, system, messages, signal, onDelta })
+    return streamClaudeCli({ provider, model, system, messages, signal, onDelta, onThinking })
   }
   if (provider.protocol === 'openai') {
     // 第一版工具调用只在 Anthropic 原生启用；OpenAI 兼容照旧纯文本聊天
@@ -271,7 +271,7 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 // 配合 chat-server.cjs（项目根目录，node 启动）；后端协议：
 //   POST {baseUrl}/chat   body { system, messages }
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
-async function streamClaudeCli({ provider, model, system, messages, signal, onDelta }) {
+async function streamClaudeCli({ provider, model, system, messages, signal, onDelta, onThinking }) {
   // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去
   const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   // model 透传给后端；跳过"本机订阅"这种占位（让 claude 走自己的默认）
@@ -295,9 +295,9 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   }
 
   if (directBase) {
-    return streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages, payloadModel, signal, onDelta })
+    return streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages, payloadModel, signal, onDelta, onThinking })
   }
-  // 探不到本机桥 → 手机场景，走云端 relay 中转
+  // 探不到本机桥 → 手机场景，走云端 relay 中转（中转不带思考，只回最终文本）
   return relayViaWorker({ sys, messages, payloadModel, signal, onDelta })
 }
 
@@ -318,8 +318,8 @@ async function bridgeReachable(base) {
   }
 }
 
-// 直连本机桥：SSE 流式，逐字回显（电脑场景）
-async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, signal, onDelta }) {
+// 直连本机桥：SSE 流式，逐字回显正文与思考（电脑/隧道场景）
+async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, signal, onDelta, onThinking }) {
   const headers = { 'content-type': 'application/json' }
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 的 CC_BRIDGE_TOKEN
   if (apiKey) headers.authorization = 'Bearer ' + apiKey
@@ -340,6 +340,7 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
   const dec = new TextDecoder()
   let buf = ''
   let full = ''
+  let thinking = ''
   let err = null
 
   outer: for (;;) {
@@ -363,13 +364,15 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
         break outer
       }
       if (event === 'done') break outer
-      if (data) {
-        let payload
-        try { payload = JSON.parse(data) } catch { continue }
-        if (payload?.text) {
-          full += payload.text
-          onDelta?.(payload.text, full)
-        }
+      if (!data) continue
+      let payload
+      try { payload = JSON.parse(data) } catch { continue }
+      if (event === 'thinking' && payload?.thinking) {
+        thinking += payload.thinking
+        onThinking?.(payload.thinking, thinking)
+      } else if (payload?.text) {
+        full += payload.text
+        onDelta?.(payload.text, full)
       }
     }
   }

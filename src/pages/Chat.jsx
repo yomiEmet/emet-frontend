@@ -208,6 +208,29 @@ function UserMsg({ m, favOn, onFav, idx, count, onSwitch, onEdit }) {
   )
 }
 
+// 思考链折叠块：思考进行时自动展开+呼吸标题，正文一出现自动收起；用户可手动开合（手动后不再自动跟随）。
+function ThinkFold({ text, active }) {
+  const [open, setOpen] = useState(active)
+  const touched = useRef(false)
+  useEffect(() => {
+    if (!touched.current) setOpen(active)
+  }, [active])
+  const toggle = () => {
+    touched.current = true
+    setOpen((o) => !o)
+  }
+  return (
+    <div className={'chat-think' + (active ? ' is-active' : '') + (open ? ' is-open' : '')}>
+      <button type="button" className="chat-think__summary" onClick={toggle}>
+        <span className="chat-think__caret" aria-hidden>▸</span>
+        <span className="chat-think__label">{active ? '正在思考' : '思考过程'}</span>
+        {active && <span className="chat-think__dots" aria-hidden><i /><i /><i /></span>}
+      </button>
+      {open && <div className="chat-think__body">{text}</div>}
+    </div>
+  )
+}
+
 export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
   const [curId, setCurId] = useState(() => loadSessions().find((s) => !s.deleted)?.id || null)
@@ -853,12 +876,9 @@ export default function Chat() {
                 <span className="chat-emet-name">{assistant.name}</span>
                 {m.distill && <span className="chat-distill-tag">对话沉淀</span>}
               </div>
-              {/* 原版排版（默认）：思考/工具折叠条外显，回复整块渲染——与改造前一字不差 */}
+              {/* 思考链：思考进行时（本行在流式且正文未出）自动展开+呼吸，正文一出现自动收起 */}
               {!bubbleMode && m.thinking ? (
-                <details className="chat-think">
-                  <summary className="chat-think__summary">思考过程</summary>
-                  <div className="chat-think__body">{m.thinking}</div>
-                </details>
+                <ThinkFold text={m.thinking} active={isStreamingRow && !m.content} />
               ) : null}
               {!bubbleMode &&
                 (m.tools || []).map((t) => (

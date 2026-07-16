@@ -6,3 +6,7 @@ dist
 .cc-bridge-token
 .cc-session.json
 .cc-admin-key
+cloudflared.exe
+.cloudflared/
+cert.pem
+cloudflared-config.yml
