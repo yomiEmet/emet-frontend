@@ -36,7 +36,17 @@ if (-not (Test-Path $keyFile)) {
 
 Set-Location $PSScriptRoot
 
-# 4) Cloudflare Tunnel: publish emethome.com -> local bridge (127.0.0.1:8000),
+# 4) Clean up a leftover bridge holding port 8000 (a previous window that didn't
+#    fully die on Ctrl+C). Without this, the new `node` crashes on EADDRINUSE,
+#    the finally-block below fires and kills the tunnel -> "Bad Gateway" + a
+#    stale old-code bridge. Killing the port occupant first makes restarts clean.
+$stale = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+if ($stale) {
+  $stale | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Milliseconds 600
+}
+
+# 5) Cloudflare Tunnel: publish emethome.com -> local bridge (127.0.0.1:8000),
 #    gated by Cloudflare Access (email OTP, only your email). Runs in a minimized
 #    side window. Kill any leftover cloudflared first so it's single-instance,
 #    and stop it again when the bridge exits (closing this window stops both).
