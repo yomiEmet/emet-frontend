@@ -35,4 +35,24 @@ if (-not (Test-Path $keyFile)) {
 }
 
 Set-Location $PSScriptRoot
-node chat-server.cjs
+
+# 4) Cloudflare Tunnel: publish emethome.com -> local bridge (127.0.0.1:8000),
+#    gated by Cloudflare Access (email OTP, only your email). Runs in a minimized
+#    side window. Kill any leftover cloudflared first so it's single-instance,
+#    and stop it again when the bridge exits (closing this window stops both).
+$cfExe = Join-Path $PSScriptRoot "cloudflared.exe"
+$cfCfg = Join-Path $PSScriptRoot "cloudflared-config.yml"
+$cfProc = $null
+if ((Test-Path $cfExe) -and (Test-Path $cfCfg)) {
+  Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  $cfProc = Start-Process -FilePath $cfExe `
+    -ArgumentList "tunnel","--config",$cfCfg,"run","emet-bridge" `
+    -WindowStyle Minimized -PassThru
+}
+
+try {
+  node chat-server.cjs
+} finally {
+  if ($cfProc -and -not $cfProc.HasExited) { Stop-Process -Id $cfProc.Id -Force -ErrorAction SilentlyContinue }
+  Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+}
