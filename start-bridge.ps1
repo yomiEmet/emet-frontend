@@ -47,22 +47,26 @@ if ($stale) {
 }
 
 # 5) Cloudflare Tunnel: publish emethome.com -> local bridge (127.0.0.1:8000),
-#    gated by Cloudflare Access (email OTP, only your email). Runs in a minimized
-#    side window. Kill any leftover cloudflared first so it's single-instance,
-#    and stop it again when the bridge exits (closing this window stops both).
+#    gated by Cloudflare Access (email OTP, only your email).
+#
+#    DECOUPLED FROM THE BRIDGE (root fix for the "Ctrl+C -> 502" pain):
+#    - Spawn cloudflared as a fully DETACHED process via WMI (Win32_Process.Create).
+#      Such a process is owned by the WMI service, NOT a child of this shell, so
+#      Ctrl+C in this window (or closing it) does NOT kill the tunnel.
+#    - Only spawn it if none is running -> restarting the bridge never duplicates
+#      or disturbs the tunnel. cloudflared auto-reconnects to the bridge origin,
+#      so a bridge restart is invisible to the tunnel (no 502 flap).
+#    - NO finally-block kill: the bridge's lifecycle no longer touches the tunnel.
+#    To fully stop the tunnel: run stop-tunnel.ps1 (or reboot).
 $cfExe = Join-Path $PSScriptRoot "cloudflared.exe"
 $cfCfg = Join-Path $PSScriptRoot "cloudflared-config.yml"
-$cfProc = $null
 if ((Test-Path $cfExe) -and (Test-Path $cfCfg)) {
-  Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-  $cfProc = Start-Process -FilePath $cfExe `
-    -ArgumentList "tunnel","--config",$cfCfg,"run","emet-bridge" `
-    -WindowStyle Minimized -PassThru
+  if (-not (Get-Process cloudflared -ErrorAction SilentlyContinue)) {
+    $cmd = '"' + $cfExe + '" tunnel --config "' + $cfCfg + '" run emet-bridge'
+    Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd } | Out-Null
+  }
 }
 
-try {
-  node chat-server.cjs
-} finally {
-  if ($cfProc -and -not $cfProc.HasExited) { Stop-Process -Id $cfProc.Id -Force -ErrorAction SilentlyContinue }
-  Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-}
+# Bridge runs in THIS window (foreground). Ctrl+C stops only the bridge; the
+# detached tunnel keeps running and reconnects when you start the bridge again.
+node chat-server.cjs
