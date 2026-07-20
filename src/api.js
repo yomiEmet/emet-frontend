@@ -91,8 +91,38 @@ function emitDataUpdate() {
 let _dataPromise = null
 let _dataRevalidating = false
 
+// 数据涨到 1000+ 条时，一把拉全部会撞 Worker 单次调用 1000 子请求上限 → 后端 1101 崩。
+// 改为 7 类各拉一次（后端 ?only=<类>），每次独立 Worker 调用各有独立额度，再合并成
+// 老的 { memories, moments, ... } 形状——前端其它地方无感。
+const DATA_TYPES = ['memories', 'moments', 'diaries', 'messages', 'handoffs', 'ideas', 'games']
+
+function loadAllData() {
+  return Promise.all(
+    DATA_TYPES.map((t) =>
+      getJSON('/api/data?only=' + t).then(
+        (r) => [t, r[t] || []],
+        () => [t, null], // 单类失败先记 null，下面判断整体成败
+      ),
+    ),
+  ).then((pairs) => {
+    const d = {}
+    let anyFail = false
+    for (const [t, v] of pairs) {
+      if (v == null) anyFail = true
+      d[t] = v || []
+    }
+    // 有任一类彻底失败就当整体失败（不写半截缓存，避免"部分空白"假象）
+    if (anyFail) {
+      const e = new Error('部分数据加载失败')
+      e.partial = true
+      throw e
+    }
+    return d
+  })
+}
+
 function fetchData() {
-  return getJSON('/api/data')
+  return loadAllData()
     .then((d) => {
       writeCache(DATA_CACHE_KEY, d)
       return d
@@ -107,7 +137,7 @@ function fetchData() {
 function revalidateData() {
   if (_dataRevalidating) return
   _dataRevalidating = true
-  getJSON('/api/data')
+  loadAllData()
     .then((d) => {
       writeCache(DATA_CACHE_KEY, d)
       _dataPromise = Promise.resolve(d)
