@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon, Coffee, BookOpen } from 'lucide-react'
+import { Archive, ChevronRight, Download, Upload, RefreshCw, Lock as LockIcon } from 'lucide-react'
 import { showToast } from '../utils/toast.js'
 import ProviderManager from '../components/ProviderManager.jsx'
 import AssistantSettings from '../components/AssistantSettings.jsx'
@@ -11,8 +11,6 @@ import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import IdleToggle from '../components/IdleToggle.jsx'
 import DreamToggle from '../components/DreamToggle.jsx'
-import { ReceiptToggle, PeriodToggle, AnnivToggle } from '../components/LifeToggles.jsx'
-import MemArchiveCard from '../components/MemArchiveCard.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
@@ -22,13 +20,25 @@ import { daysTogether, sinceLabel, dayKey } from '../utils/time.js'
 
 const APP_VERSION = '0.1.0'
 
-// 密钥只显示后 4 位
 const mask = (k) => '···· ' + k.slice(-4)
+
+function useTheme() {
+  const [theme, setTheme] = useState(() => localStorage.getItem('emet-theme') || 'paper')
+  const apply = (t) => {
+    document.documentElement.setAttribute('data-theme', t)
+    localStorage.setItem('emet-theme', t)
+    setTheme(t)
+  }
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [])
+  return [theme, apply]
+}
 
 export default function Settings() {
   const navigate = useNavigate()
+  const [theme, setTheme] = useTheme()
 
-  // 后端连接状态：null=检测中
   const [health, setHealth] = useState(null)
   const [stats, setStats] = useState(null)
 
@@ -44,12 +54,9 @@ export default function Settings() {
     statsGet()
       .then((s) => alive && setStats(s))
       .catch(() => {})
-    return () => {
-      alive = false
-    }
+    return () => { alive = false }
   }, [])
 
-  // 设置同步状态（settingsSync 派发 'emet:settings-sync'）
   const [settingsSyncState, setSettingsSyncState] = useState(getSyncState)
   useEffect(() => {
     const h = (e) => setSettingsSyncState(e.detail)
@@ -57,7 +64,6 @@ export default function Settings() {
     return () => window.removeEventListener('emet:settings-sync', h)
   }, [])
 
-  // 保存访问密钥到本机；随后立刻从云端拉取设置覆盖本地（"一个密钥全同步"）
   const saveKey = async () => {
     const v = storeAdminKey(keyInput)
     setAdminKey(v)
@@ -70,15 +76,11 @@ export default function Settings() {
         showToast('已从云端同步设置，正在刷新…')
         setTimeout(() => window.location.reload(), 600)
       } else {
-        // 云端尚无设置 → 用本地播种云端
         await pushSettings()
         showToast('已将本地设置上传到云端')
       }
-    } catch {
-      /* 离线/失败：忽略，下次再同步 */
-    }
+    } catch { /* offline */ }
   }
-  // A10 改良：主动"锁定"= 清掉本机密钥，下次请求需重新填写
   const lockAdmin = () => {
     clearAdminKey()
     setAdminKey('')
@@ -105,7 +107,6 @@ export default function Settings() {
     }
   }
 
-  // ── 会话存档：导出全部会话为带版本号的 JSON / 导入合并 ──
   const fileRef = useRef(null)
   const exportSessions = () => {
     const data = buildExport()
@@ -120,7 +121,7 @@ export default function Settings() {
   }
   const onImportFile = async (e) => {
     const file = e.target.files?.[0]
-    e.target.value = '' // 清空，允许重复选同一文件
+    e.target.value = ''
     if (!file) return
     try {
       const parsed = JSON.parse(await file.text())
@@ -131,7 +132,6 @@ export default function Settings() {
     }
   }
 
-  // 云同步：全量对账
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState(getLastSync)
   const doSync = async () => {
@@ -153,28 +153,24 @@ export default function Settings() {
     <div className="page">
       <h1 className="settings-title">设置</h1>
 
-      {/* ── 后端连接 ─────────────────────────── */}
+      {/* ── 1. 账号卡片 ─────────────────────── */}
       <section className="set-group">
-        <div className="section-label">后端连接</div>
         <div className="card set-card">
-          <Row label="地址">
-            <span className="set-mono">{BASE_URL.replace('https://', '')}</span>
-          </Row>
-          <Row label="状态">
-            {health === null ? (
-              <span className="faint">检测中…</span>
-            ) : health.ok ? (
-              <span className="set-status">
-                <i className="status-dot status-dot--ok" />
-                在线 · v{health.version}
-              </span>
-            ) : (
-              <span className="set-status">
-                <i className="status-dot status-dot--bad" />
-                连接失败
-              </span>
-            )}
-          </Row>
+          <div className="set-row" style={{ justifyContent: 'flex-start', gap: 14 }}>
+            <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'var(--accent-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
+              🪨
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>Emet Memory</div>
+              <div className="faint" style={{ fontSize: 12 }}>
+                {health === null ? '检测中…' : health.ok ? (
+                  <span className="set-status"><i className="status-dot status-dot--ok" /> 在线 · v{health.version}</span>
+                ) : (
+                  <span className="set-status"><i className="status-dot status-dot--bad" /> 连接失败</span>
+                )}
+              </div>
+            </div>
+          </div>
           <Row label="访问密钥">
             <span className="set-inline" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               {adminKey && <span className="set-mono">{mask(adminKey)}</span>}
@@ -199,126 +195,94 @@ export default function Settings() {
             <span className="set-status">
               {settingsSyncState === 'synced' && <i className="status-dot status-dot--ok" />}
               {settingsSyncState === 'error' && <i className="status-dot status-dot--bad" />}
-              {settingsSyncState === 'syncing'
-                ? '同步中…'
-                : settingsSyncState === 'synced'
-                  ? '设置已同步'
-                  : settingsSyncState === 'error'
-                    ? '同步失败'
-                    : '未同步'}
+              {settingsSyncState === 'syncing' ? '同步中…'
+                : settingsSyncState === 'synced' ? '设置已同步'
+                : settingsSyncState === 'error' ? '同步失败'
+                : '未同步'}
             </span>
           </Row>
         </div>
         <p className="set-hint faint" style={{ marginTop: 8 }}>
-          访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。助手/供应商/待办/心情会随密钥自动云同步。
+          访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。
         </p>
       </section>
 
-      {/* ── 通知（Web Push 推送开关 + 心跳系统主动消息）────────────── */}
+      {/* ── 2. AI 供应商 ─────────────────────── */}
+      <ProviderManager />
+      <section className="set-group" style={{ marginTop: -8 }}>
+        <div className="section-label">助手人设</div>
+        <div className="card set-card">
+          <AssistantSettings />
+        </div>
+      </section>
+
+      {/* ── 3. 通知 ──────────────────────────── */}
       <section className="set-group">
         <div className="section-label">通知</div>
         <PushToggle />
         <HeartbeatToggle />
         <NightGuardToggle />
         <DailyToggle />
-        <KeepaliveToggle />
-      </section>
-
-      {/* ── 独处与梦（二期 2-2 / 2-3，均默认关）────────────── */}
-      <section className="set-group">
-        <div className="section-label">独处与梦</div>
         <IdleToggle />
         <DreamToggle />
-        <button className="card set-card set-entry" onClick={() => navigate('/idle')}>
-          <Coffee size={18} />
-          <span className="set-entry__text">
-            <strong>独处手账</strong>
-            <span className="faint">看看他独处时都在做什么</span>
-          </span>
-          <ChevronRight size={16} className="faint" />
-        </button>
       </section>
 
-      {/* ── 生活（4-1 小票 / 4-2 经期 / 4-3 纪念日注入，均默认关）── */}
+      {/* ── 4. 外观 ──────────────────────────── */}
       <section className="set-group">
-        <div className="section-label">生活</div>
-        <ReceiptToggle />
-        <PeriodToggle />
-        <AnnivToggle />
-      </section>
-
-      {/* ── 记忆存档（Paramecium：L0 原文存档状态 + L1 自动摘录开关）── */}
-      <section className="set-group">
-        <div className="section-label">记忆存档</div>
-        <MemArchiveCard />
-      </section>
-
-      {/* ── 供应商管理（多供应商，聊天页用）────── */}
-      <ProviderManager />
-      <p className="set-hint faint" style={{ marginTop: -12, marginBottom: 20 }}>
-        Key 只存在本机浏览器，不会发给后端。中转站大多选「OpenAI 兼容」。
-      </p>
-
-      {/* ── 助手（单助手，所有会话共用；聊天页顶栏也可进入）────── */}
-      <section className="set-group">
-        <div className="section-label">助手</div>
+        <div className="section-label">外观</div>
         <div className="card set-card">
-          <AssistantSettings />
+          <Row label="主题">
+            <select
+              className="set-select"
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+            >
+              <option value="paper">陶土纸感</option>
+              <option value="glass">液态玻璃</option>
+            </select>
+          </Row>
+          <Row label="深色模式">
+            <button
+              className={'chatx-switch' + (theme === 'night' ? ' is-on' : '')}
+              onClick={() => setTheme(theme === 'night' ? 'paper' : 'night')}
+            >
+              <span className="chatx-switch__dot" />
+            </button>
+          </Row>
         </div>
       </section>
 
-      {/* ── 数据管理 ─────────────────────────── */}
+      {/* ── 5. 数据 ──────────────────────────── */}
       <section className="set-group">
-        <div className="section-label">数据管理</div>
+        <div className="section-label">数据</div>
         <div className="card set-card">
-          <Row label="备份导出">
+          <Row label="导出备份">
             <button className="set-btn set-btn--accent" disabled={exporting} onClick={doExport}>
               <Download size={14} />
               {exporting ? '导出中…' : '下载 JSON'}
             </button>
           </Row>
-        </div>
-      </section>
-
-      {/* ── 会话存档（聊天记录导出/导入）─────────── */}
-      <section className="set-group">
-        <div className="section-label">会话存档</div>
-        <div className="card set-card">
-          <Row label="导出全部会话">
-            <button className="set-btn set-btn--accent" onClick={exportSessions}>
-              <Download size={14} /> 下载 JSON
-            </button>
-          </Row>
-          <Row label="导入会话">
-            <button className="set-btn" onClick={() => fileRef.current?.click()}>
-              <Upload size={14} /> 选择文件
-            </button>
+          <Row label="导入聊天记录">
+            <span className="set-inline">
+              <button className="set-btn" onClick={exportSessions}>
+                <Download size={14} /> 导出
+              </button>
+              <button className="set-btn" onClick={() => fileRef.current?.click()}>
+                <Upload size={14} /> 导入
+              </button>
+            </span>
           </Row>
           <Row label="云同步">
             <span className="set-inline">
               <span className="faint" style={{ fontSize: 12 }}>上次 {lastSyncLabel}</span>
               <button className="set-btn set-btn--accent" disabled={syncing} onClick={doSync}>
                 <RefreshCw size={14} />
-                {syncing ? '同步中…' : '立即同步'}
+                {syncing ? '同步中…' : '同步'}
               </button>
             </span>
           </Row>
         </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          style={{ display: 'none' }}
-          onChange={onImportFile}
-        />
-        <p className="set-hint faint" style={{ marginTop: 8 }}>
-          导入会与现有会话合并；相同会话 ID 冲突时保留时间较新的一份。
-        </p>
-      </section>
-
-      {/* ── 档案 ─────────────────────────────── */}
-      <section className="set-group">
-        <div className="section-label">档案</div>
+        <KeepaliveToggle />
         <button className="card set-card set-entry" onClick={() => navigate('/archive')}>
           <Archive size={18} />
           <span className="set-entry__text">
@@ -327,41 +291,30 @@ export default function Settings() {
           </span>
           <ChevronRight size={16} className="faint" />
         </button>
-        <button className="card set-card set-entry" onClick={() => navigate('/books')}>
-          <BookOpen size={18} />
-          <span className="set-entry__text">
-            <strong>共读书架</strong>
-            <span className="faint">和 Emet 在同一本书上划线批注</span>
-          </span>
-          <ChevronRight size={16} className="faint" />
-        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={onImportFile}
+        />
       </section>
 
-      {/* ── 关于 ─────────────────────────────── */}
-      <section className="set-group">
-        <div className="section-label">关于</div>
-        <div className="card set-card">
-          <Row label="版本">
-            <span>
-              前端 v{APP_VERSION}
-              {health?.version && <span className="faint"> · 后端 v{health.version}</span>}
-            </span>
-          </Row>
-          <Row label="正计时">
-            <span>
-              <strong>{daysTogether()}</strong> days together
-              <span className="faint"> · since {sinceLabel()}</span>
-            </span>
-          </Row>
-          {stats && (
-            <div className="set-stats faint">
-              记忆 {stats.total_memories} · 瞬记 {stats.total_moments} · 日记 {stats.total_diaries}
-              {' · '}故事 {stats.total_stories} · 留言 {stats.total_messages} · 信 {stats.total_handoffs}
-              {' · '}灵感 {stats.total_ideas} · 游戏 {stats.total_games}
-            </div>
-          )}
+      {/* ── 6. 底部 ──────────────────────────── */}
+      <div style={{ textAlign: 'center', padding: '24px 0 12px' }}>
+        <div className="faint" style={{ fontSize: 12 }}>
+          v{APP_VERSION}{health?.version && ` · 后端 v${health.version}`}
         </div>
-      </section>
+        <div className="faint" style={{ fontFamily: 'var(--serif-en)', fontStyle: 'italic', fontSize: 13, marginTop: 4 }}>
+          a quiet place where we exist
+        </div>
+        {stats && (
+          <div className="faint" style={{ fontSize: 11, marginTop: 8 }}>
+            记忆 {stats.total_memories} · 瞬记 {stats.total_moments} · 日记 {stats.total_diaries}
+            {' · '}留言 {stats.total_messages} · 灵感 {stats.total_ideas}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
