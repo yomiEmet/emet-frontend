@@ -73,7 +73,7 @@ textarea {
 }
 
 .page {
-  padding: 20px 18px 8px;
+  padding: 20px var(--page-px) 8px;
   animation: page-fade 0.25s ease;
 }
 

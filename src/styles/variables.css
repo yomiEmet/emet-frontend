@@ -2,16 +2,28 @@
    不破坏现有 components.css 引用。 */
 :root,
 [data-theme='paper'] {
-  /* ── v66 paper 色板 ──────────────── */
-  --bg: #f9f9f7;
-  --bg-soft: #f2f2ef;
+  /* ── 背景层次 ────────────────────── */
+  --bg: #f9f8f5;
+  --bg-soft: #f4f2ee;
   --card: #ffffff;
   --card-soft: #efefed;
+  --card-alt: #f4f2ee;
+
+  /* ── 墨色 ────────────────────────── */
   --ink: #2a2724;
   --ink-soft: #6b655e;
   --ink-faint: #a8a39b;
-  --line: #e8e5df;
+  --ink-muted: #d4d0c8;
+
+  /* ── 强调色 ──────────────────────── */
   --accent: #c6613f;
+  --accent-bg: rgba(198,97,63,.06);
+  --accent-soft: #e8c4b4;
+
+  /* ── 线——极淡 ────────────────────── */
+  --line: rgba(0,0,0,.05);
+
+  /* ── 装饰色 ──────────────────────── */
   --rose: #f2dad4;
   --note-1: #fbf6e8;
   --note-2: #f4ecdd;
@@ -21,11 +33,13 @@
   --pin: #d4a85e;
   --lock: #6b655e;
   --moment-glow: rgba(198, 97, 63, 0.07);
-  --shadow-sm: 0 1px 2px rgba(42, 39, 36, 0.04), 0 8px 24px rgba(42, 39, 36, 0.04);
-  --shadow-md: 0 1px 2px rgba(42, 39, 36, 0.06), 0 12px 32px rgba(42, 39, 36, 0.06);
+
+  /* ── 阴影——去掉，改用 border ────── */
+  --shadow-sm: none;
+  --shadow-md: none;
   --shadow-pop: 0 4px 32px rgba(42, 39, 36, 0.18);
 
-  /* ── home 旧别名 → v66 映射（避免现有 CSS 大面积破坏） ── */
+  /* ── 旧别名 → 映射（避免现有 CSS 大面积破坏） ── */
   --bg-card: var(--card);
   --bg-sidebar: var(--bg-soft);
   --bg-human: var(--card-soft);
@@ -34,8 +48,9 @@
   --text-faint: var(--ink-faint);
   --border: var(--line);
   --border-soft: var(--line);
-  --accent-soft: var(--rose);
-  --accent-bg: var(--rose);
+  --ink2: var(--ink-soft);
+  --ink3: var(--ink-faint);
+  --ink4: var(--ink-muted);
   --green: #7ea67e;
   --red: var(--del);
   --blue: #6a8eb0;
@@ -63,11 +78,31 @@
   /* ── 圆角 ────────────────────────── */
   --radius-lg: 14px;
   --radius-sm: 10px;
+  --radius-card: 12px;
   --radius-bubble: 20px;
+
+  /* ── 间距 ────────────────────────── */
+  --gap-section: 28px;
+  --gap-card: 10px;
+  --page-px: 24px;
 
   /* ── 布局 ────────────────────────── */
   --tabbar-height: 60px;
   --content-max: 680px;
+}
+
+/* ── 液态玻璃主题（iOS 26 风格备选） ── */
+[data-theme='glass'] {
+  --bg: #e8e6e1;
+  --card: rgba(255,255,255,.45);
+  --card-border: rgba(255,255,255,.5);
+  --card-blur: blur(16px) saturate(180%);
+  --line: var(--card-border);
+}
+[data-theme='glass'] .card,
+[data-theme='glass'] .tabbar {
+  backdrop-filter: var(--card-blur);
+  -webkit-backdrop-filter: var(--card-blur);
 }
 
 [data-theme='night'] {

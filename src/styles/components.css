@@ -48,12 +48,12 @@
 /* ════════════════════════════════════════
    通用卡片
    ════════════════════════════════════════ */
-/* v66 通用卡片：白色 + 10 圆角 + 柔阴影，无 1px 边框 */
+/* 通用卡片：白色 + 圆角 + 极细边框，无阴影 */
 .card {
   background: var(--card);
-  border: none;
-  border-radius: 10px;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: none;
   padding: 18px 20px;
   transition: transform 0.15s;
 }
@@ -62,7 +62,7 @@
 }
 
 .stack > * + * {
-  margin-top: 14px;
+  margin-top: var(--gap-section);
 }
 
 /* ════════════════════════════════════════
