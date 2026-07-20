@@ -759,6 +759,20 @@ export function moodSet({ mood, note, who = 'yomi', date }) {
   return request('/api/mood', { method: 'POST', body: { mood, note, who, date } })
 }
 
+// ── 喝水 / 运动（日计数，走 KV 直存）──────────────
+export function waterGet(date) {
+  return getJSON('/api/water', { date })
+}
+export function waterSet(date, count) {
+  return request('/api/water', { method: 'POST', body: { date, count } })
+}
+export function exerciseGet(date) {
+  return getJSON('/api/exercise', { date })
+}
+export function exerciseSet(date, minutes) {
+  return request('/api/exercise', { method: 'POST', body: { date, minutes } })
+}
+
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
 export async function homeSummary() {
   const d = await getData()

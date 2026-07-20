@@ -1,17 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Flame } from 'lucide-react'
 import { dayKey, nowLogical } from '../utils/time.js'
+import { exerciseGet, exerciseSet } from '../api.js'
 
 function getToday() {
   return dayKey(nowLogical())
 }
-function load() {
+function loadLocal() {
   try {
     const d = JSON.parse(localStorage.getItem('emet-exercise') || '{}')
     return d[getToday()] || 0
   } catch { return 0 }
 }
-function save(mins) {
+function saveLocal(mins) {
   try {
     const d = JSON.parse(localStorage.getItem('emet-exercise') || '{}')
     d[getToday()] = mins
@@ -20,12 +21,19 @@ function save(mins) {
 }
 
 export default function ExerciseCard() {
-  const [mins, setMins] = useState(load)
+  const [mins, setMins] = useState(loadLocal)
+
+  useEffect(() => {
+    exerciseGet(getToday())
+      .then(r => { if (r?.minutes > 0) { setMins(r.minutes); saveLocal(r.minutes) } })
+      .catch(() => {})
+  }, [])
 
   const tap = () => {
     const next = mins + 15
     setMins(next)
-    save(next)
+    saveLocal(next)
+    exerciseSet(getToday(), next).catch(() => {})
   }
 
   return (

@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react'
 import { Droplets } from 'lucide-react'
 import { dayKey, nowLogical } from '../utils/time.js'
+import { waterGet, waterSet } from '../api.js'
 
 const TOTAL = 7
 
 function getToday() {
   return dayKey(nowLogical())
 }
-function load() {
+function loadLocal() {
   try {
     const d = JSON.parse(localStorage.getItem('emet-water') || '{}')
     return d[getToday()] || 0
   } catch { return 0 }
 }
-function save(count) {
+function saveLocal(count) {
   try {
     const d = JSON.parse(localStorage.getItem('emet-water') || '{}')
     d[getToday()] = count
@@ -22,12 +23,19 @@ function save(count) {
 }
 
 export default function WaterCard() {
-  const [count, setCount] = useState(load)
+  const [count, setCount] = useState(loadLocal)
+
+  useEffect(() => {
+    waterGet(getToday())
+      .then(r => { if (r?.count > 0) { setCount(r.count); saveLocal(r.count) } })
+      .catch(() => {})
+  }, [])
 
   const tap = () => {
     const next = count >= TOTAL ? 0 : count + 1
     setCount(next)
-    save(next)
+    saveLocal(next)
+    waterSet(getToday(), next).catch(() => {})
   }
 
   return (
