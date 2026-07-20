@@ -46,27 +46,14 @@ if ($stale) {
   Start-Sleep -Milliseconds 600
 }
 
-# 5) Cloudflare Tunnel: publish emethome.com -> local bridge (127.0.0.1:8000),
-#    gated by Cloudflare Access (email OTP, only your email).
-#
-#    DECOUPLED FROM THE BRIDGE (root fix for the "Ctrl+C -> 502" pain):
-#    - Spawn cloudflared as a fully DETACHED process via WMI (Win32_Process.Create).
-#      Such a process is owned by the WMI service, NOT a child of this shell, so
-#      Ctrl+C in this window (or closing it) does NOT kill the tunnel.
-#    - Only spawn it if none is running -> restarting the bridge never duplicates
-#      or disturbs the tunnel. cloudflared auto-reconnects to the bridge origin,
-#      so a bridge restart is invisible to the tunnel (no 502 flap).
-#    - NO finally-block kill: the bridge's lifecycle no longer touches the tunnel.
-#    To fully stop the tunnel: run stop-tunnel.ps1 (or reboot).
-$cfExe = Join-Path $PSScriptRoot "cloudflared.exe"
-$cfCfg = Join-Path $PSScriptRoot "cloudflared-config.yml"
-if ((Test-Path $cfExe) -and (Test-Path $cfCfg)) {
-  if (-not (Get-Process cloudflared -ErrorAction SilentlyContinue)) {
-    $cmd = '"' + $cfExe + '" tunnel --config "' + $cfCfg + '" run emet-bridge'
-    Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd } | Out-Null
-  }
-}
+# 5) Cloudflare Tunnel is now a Windows SERVICE (installed once via
+#    `cloudflared service install`, reading ~\.cloudflared\config.yml).
+#    -> It runs system-wide, auto-starts on boot, auto-restarts on crash, and is
+#       fully independent of this window. This script no longer touches the tunnel.
+#    Root fix for the old "Ctrl+C on the bridge -> emethome 502" pain: the bridge
+#    and the tunnel now have completely separate lifecycles.
+#    Manage the tunnel with: stop-tunnel.ps1 / start-tunnel.ps1 (service stop/start).
 
 # Bridge runs in THIS window (foreground). Ctrl+C stops only the bridge; the
-# detached tunnel keeps running and reconnects when you start the bridge again.
+# tunnel service keeps running and reconnects to the bridge when you restart it.
 node chat-server.cjs
