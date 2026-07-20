@@ -88,8 +88,8 @@
 
 /* ── 悄悄话卡片 ─────────────────────── */
 .whisper {
-  background: var(--accent-bg);
-  border: 1px solid var(--accent-soft);
+  background: rgba(151,67,73,.06);
+  border: 1px solid rgba(151,67,73,.12);
   border-radius: var(--radius-lg);
   padding: 16px 18px;
 }
