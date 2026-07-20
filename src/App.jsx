@@ -14,6 +14,7 @@ import Tags from './pages/Tags.jsx'
 import TagDetail from './pages/TagDetail.jsx'
 import Messages from './pages/Messages.jsx'
 import SpacePage from './pages/SpacePage.jsx'
+import IdeasPage from './pages/IdeasPage.jsx'
 import MoodPage from './pages/MoodPage.jsx'
 import Settings from './pages/Settings.jsx'
 import IdleJournal from './pages/IdleJournal.jsx'
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/mood" element={<MoodPage />} />
         <Route path="/space" element={<SpacePage />} />
         <Route path="/space/messages" element={<Messages />} />
+        <Route path="/space/ideas" element={<IdeasPage />} />
         <Route path="/mail" element={<Navigate to="/space" replace />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />

@@ -5333,6 +5333,51 @@
 }
 
 /* ════════════════════════════════════════
+   灵感板 · 瀑布流便利贴
+   ════════════════════════════════════════ */
+.ideas-masonry {
+  columns: 2;
+  column-gap: var(--gap-card);
+}
+.sticky-note {
+  break-inside: avoid;
+  border-radius: var(--radius-card);
+  padding: 14px 14px 10px;
+  margin-bottom: var(--gap-card);
+  position: relative;
+  border: 1px solid var(--line);
+}
+.sticky-note__content {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sticky-note__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.sticky-note__date {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 6px;
+}
+.sticky-note__del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--ink-faint);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.sticky-note:hover .sticky-note__del {
+  opacity: 1;
+}
+
+/* ════════════════════════════════════════
    空间页 · 入口网格
    ════════════════════════════════════════ */
 .space-grid {
