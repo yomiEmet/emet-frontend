@@ -4031,6 +4031,7 @@
 }
 
 .chat-bubble--emet {
+  width: fit-content;
   max-width: 94%;
   font-size: 14.5px;
   line-height: 1.75;
@@ -4990,6 +4991,25 @@
 }
 .chatx-top__spacer {
   flex: 1;
+}
+.chatx-modepill {
+  display: inline-flex;
+  background: var(--bg-soft);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 0;
+}
+.chatx-modepill button {
+  font-size: 11px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  color: var(--ink-faint);
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.chatx-modepill button.is-active {
+  background: var(--accent);
+  color: #fff;
 }
 .chatx-menu {
   display: none; /* 桌面隐藏：侧栏常驻，新对话入口也在侧栏 */

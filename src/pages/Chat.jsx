@@ -836,6 +836,20 @@ export default function Chat() {
             )}
             <ChevronDown size={12} />
           </button>
+          <div className="chatx-modepill">
+            <button className={!bubbleMode ? 'is-active' : ''} onClick={() => {
+              const a = loadAssistant()
+              a.bubbleMode = false
+              localStorage.setItem('emet-assistant', JSON.stringify(a))
+              setAssistant({ ...a })
+            }}>普通</button>
+            <button className={bubbleMode ? 'is-active' : ''} onClick={() => {
+              const a = loadAssistant()
+              a.bubbleMode = true
+              localStorage.setItem('emet-assistant', JSON.stringify(a))
+              setAssistant({ ...a })
+            }}>气泡</button>
+          </div>
           <span className="chatx-top__spacer" />
           <button className="chatx-icon chatx-menu" onClick={newSession} aria-label="新对话">
             <Plus size={18} />
@@ -872,7 +886,6 @@ export default function Chat() {
           ) : (
             <div className="chat-msg chat-msg--emet">
               <div className="chat-emet-head">
-                <AssistantAvatar avatar={assistant.avatar} size={18} />
                 <span className="chat-emet-name">{assistant.name}</span>
                 {m.distill && <span className="chat-distill-tag">对话沉淀</span>}
               </div>
