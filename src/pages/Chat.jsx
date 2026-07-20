@@ -6,7 +6,7 @@ import { chatSystemPrompt, memInject } from '../api.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
 import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from '../utils/providers.js'
-import { loadAssistant } from '../utils/assistant.js'
+import { loadAssistant, saveAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
 import { formatCardTime } from '../utils/time.js'
@@ -837,18 +837,8 @@ export default function Chat() {
             <ChevronDown size={12} />
           </button>
           <div className="chatx-modepill">
-            <button className={!bubbleMode ? 'is-active' : ''} onClick={() => {
-              const a = loadAssistant()
-              a.bubbleMode = false
-              localStorage.setItem('emet-assistant', JSON.stringify(a))
-              setAssistant({ ...a })
-            }}>普通</button>
-            <button className={bubbleMode ? 'is-active' : ''} onClick={() => {
-              const a = loadAssistant()
-              a.bubbleMode = true
-              localStorage.setItem('emet-assistant', JSON.stringify(a))
-              setAssistant({ ...a })
-            }}>气泡</button>
+            <button className={!bubbleMode ? 'is-active' : ''} onClick={() => setAssistant(saveAssistant({ bubbleMode: false }))}>普通</button>
+            <button className={bubbleMode ? 'is-active' : ''} onClick={() => setAssistant(saveAssistant({ bubbleMode: true }))}>气泡</button>
           </div>
           <span className="chatx-top__spacer" />
           <button className="chatx-icon chatx-menu" onClick={newSession} aria-label="新对话">

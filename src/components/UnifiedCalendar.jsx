@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { moodList, periodList } from '../api.js'
-import { dayKey, nowLogical, nowCST } from '../utils/time.js'
+import { dayKey, nowLogical, nowCST, logicalDayKey } from '../utils/time.js'
 import { loadSessions } from '../utils/sessions.js'
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
@@ -22,13 +22,6 @@ function monthDays(year, month) {
 
 function fmtMonth(y, m) {
   return `${y}年${m + 1}月`
-}
-
-function logicalDayKey(ts) {
-  const d = new Date(ts)
-  d.setHours(d.getHours() + 8)
-  if (d.getHours() < 4) d.setDate(d.getDate() - 1)
-  return d.toISOString().slice(0, 10)
 }
 
 function chatDayCounts() {
