@@ -81,6 +81,7 @@ function MemoryManage({ mode = 'memory' }) {
   const navigate = useNavigate()
   const [all, setAll] = useState(null) // null=loading
   const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [category, setCategory] = useState('all')
   const [sortKey, setSortKey] = useState('create')
   const [sortOrder, setSortOrder] = useState('desc')
@@ -237,17 +238,16 @@ function MemoryManage({ mode = 'memory' }) {
         </span>
       </div>
 
-      {/* 搜索 + 视图切换 + 排序 */}
+      {/* 工具行：搜索按钮 + 视图切换 + 排序 */}
       <div className="mem-controls">
-        <div className="search-box">
-          <Search size={16} className="search-box__icon" />
-          <input
-            className="search-box__input"
-            placeholder={isLog ? '搜索日志…' : '搜索记忆…'}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
+        <button
+          className={'cal-btn' + (query || searchOpen ? ' is-active' : '')}
+          onClick={() => setSearchOpen((v) => !v)}
+          aria-label="搜索"
+        >
+          <Search size={18} />
+        </button>
+        <span style={{ flex: 1 }} />
         <button
           className="cal-btn"
           onClick={() => setView((v) => (v === 'gallery' ? 'list' : 'gallery'))}
@@ -263,6 +263,24 @@ function MemoryManage({ mode = 'memory' }) {
           <ArrowUpDown size={17} />
         </button>
       </div>
+
+      {searchOpen && (
+        <div className="search-box">
+          <Search size={16} className="search-box__icon" />
+          <input
+            autoFocus
+            className="search-box__input"
+            placeholder={isLog ? '搜索日志…' : '搜索记忆…'}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button onClick={() => { setQuery(''); setSearchOpen(false) }} style={{ color: 'var(--ink-faint)' }}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 排序菜单（旧版 A4 完整版）*/}
       {sortOpen && (
