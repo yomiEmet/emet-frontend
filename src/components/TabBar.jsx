@@ -1,11 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { Home, MessageSquare, BookOpen, Mail, Settings } from 'lucide-react'
+import { Home, MessageSquare, BookOpen, Layers, Settings } from 'lucide-react'
 
 const TABS = [
   { to: '/', label: '主页', Icon: Home, end: true },
   { to: '/chat', label: '消息', Icon: MessageSquare },
   { to: '/memory', label: '记忆', Icon: BookOpen },
-  { to: '/mail', label: '留言', Icon: Mail },
+  { to: '/space', label: '空间', Icon: Layers },
   { to: '/settings', label: '设置', Icon: Settings },
 ]
 

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { getAdminKey } from './api/client.js'
 import { pullSettings } from './utils/settingsSync.js'
 import TabBar from './components/TabBar.jsx'
@@ -47,7 +47,8 @@ export default function App() {
         <Route path="/moment/:id" element={<MomentDetail />} />
         <Route path="/tags" element={<Tags />} />
         <Route path="/tags/:tag" element={<TagDetail />} />
-        <Route path="/mail" element={<Messages />} />
+        <Route path="/space" element={<Messages />} />
+        <Route path="/mail" element={<Navigate to="/space" replace />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />
         <Route path="/idle" element={<IdleJournal />} />
