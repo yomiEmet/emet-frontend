@@ -13,6 +13,7 @@ import ArchivePage from './pages/ArchivePage.jsx'
 import Tags from './pages/Tags.jsx'
 import TagDetail from './pages/TagDetail.jsx'
 import Messages from './pages/Messages.jsx'
+import SpacePage from './pages/SpacePage.jsx'
 import MoodPage from './pages/MoodPage.jsx'
 import Settings from './pages/Settings.jsx'
 import IdleJournal from './pages/IdleJournal.jsx'
@@ -49,7 +50,8 @@ export default function App() {
         <Route path="/tags" element={<Tags />} />
         <Route path="/tags/:tag" element={<TagDetail />} />
         <Route path="/mood" element={<MoodPage />} />
-        <Route path="/space" element={<Messages />} />
+        <Route path="/space" element={<SpacePage />} />
+        <Route path="/space/messages" element={<Messages />} />
         <Route path="/mail" element={<Navigate to="/space" replace />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />
