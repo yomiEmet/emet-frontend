@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
+import MoodFace from './MoodFace.jsx'
 import { moodList } from '../api.js'
 import { moodOf } from '../utils/moods.js'
 import { dayKey, nowLogical } from '../utils/time.js'
@@ -21,14 +22,15 @@ export default function MoodEntryCard() {
 
   const meta = mood ? moodOf(mood) : null
   const label = meta?.label || '未记录'
-  const emoji = meta?.emoji || '🫥'
   // valence -1..1 → 0..100% 进度
   const pct = meta ? ((meta.valence + 1) / 2) * 100 : 0
 
   return (
     <button className="card today-card" onClick={() => navigate('/mood')} style={{ cursor: 'pointer' }}>
       <div className="today-card__label">
-        <span style={{ fontSize: 15 }}>{emoji}</span>
+        <span style={{ color: meta?.color || 'var(--ink-faint)', display: 'flex' }}>
+          <MoodFace mood={meta?.id || 'calm'} size={16} />
+        </span>
         <span>今日心情</span>
         <ChevronRight size={14} style={{ marginLeft: 'auto', color: 'var(--ink-faint)' }} />
       </div>

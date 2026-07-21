@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
+import MoodFace from '../components/MoodFace.jsx'
 import { moodList, moodSet } from '../api.js'
 import { MOODS_BY_VALENCE, moodOf } from '../utils/moods.js'
 import { dayKey, nowLogical, nowCST } from '../utils/time.js'
@@ -79,8 +80,8 @@ export default function MoodPage() {
 
       {/* 当下感受 */}
       <div className="card" style={{ padding: '24px 20px', textAlign: 'center', marginBottom: 'var(--gap-section)' }}>
-        <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 8 }}>
-          {cur.emoji}
+        <div style={{ color: cur.color, marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
+          <MoodFace mood={cur.id} size={56} />
         </div>
         <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', marginBottom: 16 }}>
           {cur.label}
@@ -132,7 +133,9 @@ export default function MoodPage() {
               const pct = meta ? ((meta.valence + 1) / 2) * 100 : 50
               return (
                 <div key={m.date} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 24 }}>{meta?.emoji || '😐'}</span>
+                  <span style={{ color: meta?.color || 'var(--ink-faint)', display: 'flex' }}>
+                    <MoodFace mood={meta?.id || 'calm'} size={24} />
+                  </span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{m.date.slice(5).replace('-', '/')}</div>
                     <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{meta?.label || m.mood}</div>
