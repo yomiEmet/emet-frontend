@@ -62,6 +62,11 @@
 }
 
 .stack > * + * {
+  margin-top: 14px;
+}
+/* 主页各大区块要更透气的 28px（--gap-section）；.stack 保持 14px 不连累
+   记忆/日记/留言等旧列表页（它们也用 .stack 排卡片，翻倍会太散） */
+.home-stack > * + * {
   margin-top: var(--gap-section);
 }
 
@@ -5062,6 +5067,20 @@
 @media (min-width: 769px) {
   .chatx-mask {
     display: none;
+  }
+}
+
+/* 窄屏顶栏：加了模式 pill 后 汉堡+助手名+模型名+pill+加号 挤不下，
+   模型名被压成省略号。让助手只留头像、模型只留 id，把空间让给 pill。 */
+@media (max-width: 480px) {
+  .chat-assistant__name {
+    display: none;
+  }
+  .chat-model__prov {
+    display: none;
+  }
+  .chatx-top {
+    gap: 7px;
   }
 }
 

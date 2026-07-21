@@ -58,7 +58,7 @@ export default function Home() {
   const sleepHours = summary?.sleep || null
 
   return (
-    <div className="page stack">
+    <div className="page home-stack">
       {/* ── 问候区：日期 + 问候 + days together ── */}
       <header className="home-header">
         <div className="home-header__date">{longDate(now)}</div>

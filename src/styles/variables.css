@@ -97,7 +97,9 @@
   --card: rgba(255,255,255,.45);
   --card-border: rgba(255,255,255,.5);
   --card-blur: blur(16px) saturate(180%);
-  --line: var(--card-border);
+  /* --line 不跟 --card-border 走白色：卡内分隔线/输入框下划线用白色会在浅底上消失，
+     改用低透明黑，卡片边框也随之变成可见的细线而非纯玻璃白边（功能优先） */
+  --line: rgba(0,0,0,.1);
 }
 [data-theme='glass'] .card,
 [data-theme='glass'] .tabbar {
@@ -124,6 +126,10 @@
   --pin: #b0884a;
   --lock: #948f84;
   --moment-glow: rgba(216, 126, 92, 0.1);
+  /* 夜间强调色：paper 的浅粉 --accent-soft(#e8c4b4) 在纯黑上刺眼、--accent-bg 近乎不可见，
+     按夜间 accent(#d87e5c) 重给一套——渐变起点用暗棕、高亮底纹用可见的低透明暖色 */
+  --accent-bg: rgba(216, 126, 92, 0.16);
+  --accent-soft: #6e3d2c;
   --shadow-sm: 0 0 0 1px #1f1e1c;
   --shadow-md: 0 0 0 1px #2a2926, 0 4px 20px rgba(0, 0, 0, 0.5);
   --shadow-pop: 0 0 0 1px #2a2926, 0 8px 40px rgba(0, 0, 0, 0.7);
