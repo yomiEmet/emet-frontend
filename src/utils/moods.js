@@ -2,19 +2,40 @@
 // id 与后端 mood_set 的 enum 一致；valence 与后端 valMap 一致。
 
 export const MOODS = [
-  { id: 'excited', label: '兴奋', valence: 0.9, color: '#E07B5A' },
-  { id: 'happy', label: '开心', valence: 0.8, color: '#E8A04C' },
-  { id: 'heart', label: '心动', valence: 0.7, color: '#D98AA8' },
-  { id: 'calm', label: '平静', valence: 0.3, color: '#7EA67E' },
-  { id: 'tired', label: '疲惫', valence: -0.2, color: '#9DA3A8' },
-  { id: 'anxious', label: '焦虑', valence: -0.4, color: '#6A8EB0' },
-  { id: 'sad', label: '难过', valence: -0.6, color: '#8E7CC3' },
+  { id: 'excited', label: '兴奋', valence: 0.9, color: '#E07B5A', emoji: '🤩' },
+  { id: 'happy', label: '开心', valence: 0.8, color: '#E8A04C', emoji: '😊' },
+  { id: 'heart', label: '心动', valence: 0.7, color: '#D98AA8', emoji: '🥰' },
+  { id: 'calm', label: '平静', valence: 0.3, color: '#7EA67E', emoji: '😌' },
+  { id: 'tired', label: '疲惫', valence: -0.2, color: '#9DA3A8', emoji: '😮‍💨' },
+  { id: 'anxious', label: '焦虑', valence: -0.4, color: '#6A8EB0', emoji: '😰' },
+  { id: 'sad', label: '难过', valence: -0.6, color: '#8E7CC3', emoji: '😢' },
 ]
 
 const BY_ID = Object.fromEntries(MOODS.map((m) => [m.id, m]))
 
 export function moodMeta(id) {
   return BY_ID[id] || null
+}
+
+// 按 valence 从低到高（滑块用：难过 → 平静 → 兴奋，对应"低落←→开心"）
+export const MOODS_BY_VALENCE = [...MOODS].sort((a, b) => a.valence - b.valence)
+
+// valence（-1..1 浮点）→ 最接近的 mood 元数据。仅当记录缺 mood id 时兜底用；
+// 正常读回优先走 moodMeta(record.mood)。
+export function moodByValence(v) {
+  if (v == null) return null
+  let best = MOODS[0]
+  let bestD = Infinity
+  for (const m of MOODS) {
+    const d = Math.abs(m.valence - v)
+    if (d < bestD) { bestD = d; best = m }
+  }
+  return best
+}
+
+// 记录（{ mood, valence }）→ mood 元数据：优先 id，兜底 valence
+export function moodOf(record) {
+  return moodMeta(record?.mood) || moodByValence(record?.valence)
 }
 
 export const WHO_LABEL = { yomi: '静怡', emet: 'Emet' }

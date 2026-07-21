@@ -2,10 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { moodList } from '../api.js'
+import { moodOf } from '../utils/moods.js'
 import { dayKey, nowLogical } from '../utils/time.js'
-
-const MOOD_LABELS = ['', '很差', '差', '低落', '一般', '平静', '还好', '不错', '开心', '很开心', '超开心']
-const MOOD_EMOJI = ['', '😞', '😔', '🫤', '😐', '😌', '🙂', '😊', '😄', '🥰', '🤩']
 
 export default function MoodEntryCard() {
   const navigate = useNavigate()
@@ -21,9 +19,11 @@ export default function MoodEntryCard() {
       .catch(() => {})
   }, [])
 
-  const val = mood?.valence ?? 5
-  const label = MOOD_LABELS[val] || '平静'
-  const emoji = MOOD_EMOJI[val] || '😌'
+  const meta = mood ? moodOf(mood) : null
+  const label = meta?.label || '未记录'
+  const emoji = meta?.emoji || '🫥'
+  // valence -1..1 → 0..100% 进度
+  const pct = meta ? ((meta.valence + 1) / 2) * 100 : 0
 
   return (
     <button className="card today-card" onClick={() => navigate('/mood')} style={{ cursor: 'pointer' }}>
@@ -39,7 +39,7 @@ export default function MoodEntryCard() {
         }}>
           <div style={{
             position: 'absolute', left: 0, top: 0, bottom: 0,
-            width: `${val * 10}%`,
+            width: `${pct}%`,
             borderRadius: 2,
             background: 'linear-gradient(90deg, var(--accent-soft), var(--accent))'
           }} />

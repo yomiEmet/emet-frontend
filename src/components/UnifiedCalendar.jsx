@@ -1,17 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { moodList, periodList } from '../api.js'
+import { moodOf } from '../utils/moods.js'
 import { dayKey, nowLogical, nowCST, logicalDayKey } from '../utils/time.js'
 import { loadSessions } from '../utils/sessions.js'
 
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 const TABS = ['心情', '经期', '互动']
-
-const MOOD_COLORS = {
-  1: '#d85040', 2: '#d87050', 3: '#d89070',
-  4: '#c8a888', 5: '#a8b0a0', 6: '#90b890',
-  7: '#78c078', 8: '#60c860', 9: '#50d050', 10: '#40d840'
-}
 
 function monthDays(year, month) {
   const first = new Date(year, month, 1)
@@ -133,7 +128,7 @@ export default function UnifiedCalendar() {
           const chatCount = chatCounts[cell.key] || 0
 
           let dotColor = null
-          if (tab === 0 && mood) dotColor = MOOD_COLORS[mood.valence] || 'var(--accent)'
+          if (tab === 0 && mood) dotColor = moodOf(mood)?.color || 'var(--accent)'
           else if (tab === 1 && isPeriod) dotColor = 'var(--accent)'
           else if (tab === 2 && chatCount > 0) {
             const alpha = Math.min(chatCount / 30, 1) * 0.7 + 0.3

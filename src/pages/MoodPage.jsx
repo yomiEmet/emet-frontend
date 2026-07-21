@@ -2,19 +2,22 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
 import { moodList, moodSet } from '../api.js'
+import { MOODS_BY_VALENCE, moodOf } from '../utils/moods.js'
 import { dayKey, nowLogical, nowCST } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 
-const MOOD_EMOJI = ['', '😞', '😔', '🫤', '😐', '😌', '🙂', '😊', '😄', '🥰', '🤩']
-const MOOD_LABELS = ['', '很差', '差', '低落', '一般', '平静', '还好', '不错', '开心', '很开心', '超开心']
-const OVERALL_LABELS = ['', '很差', '差', '不太好', '一般', '还行', '还好', '不错', '好', '很好', '超棒']
-
-const sliderTrack = (val) => ({
-  background: `linear-gradient(90deg, var(--accent-soft) 0%, var(--accent) ${val * 10}%, var(--line) ${val * 10}%)`,
-})
+// 滑块档位 = 按 valence 从低到高排的 7 个心情（难过…兴奋）。
+// 写入发英文 id（后端 mood_set 契约），读回按 id 反查档位——与 MoodPicker 同一套数据模型。
+const STOPS = MOODS_BY_VALENCE
+const MID = Math.floor(STOPS.length / 2)
 
 function formatDate(d) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+const sliderTrack = (idx) => {
+  const pct = (idx / (STOPS.length - 1)) * 100
+  return { background: `linear-gradient(90deg, var(--accent-soft) 0%, var(--accent) ${pct}%, var(--line) ${pct}%)` }
 }
 
 export default function MoodPage() {
@@ -22,23 +25,22 @@ export default function MoodPage() {
   const today = dayKey(nowLogical())
   const now = nowCST()
 
-  const [currentMood, setCurrentMood] = useState(5)
-  const [overallMood, setOverallMood] = useState(5)
+  const [idx, setIdx] = useState(MID) // 默认平静档
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState(false)
   const [recentDays, setRecentDays] = useState([])
 
   useEffect(() => {
-    const end = today
     const d = new Date(now)
     d.setDate(d.getDate() - 3)
     const start = dayKey(d)
-    moodList({ start, end })
+    moodList({ start, end: today })
       .then(r => {
         const moods = (r?.moods || []).filter(m => m.who === 'yomi')
         const todayMood = moods.find(m => m.date === today)
         if (todayMood) {
-          setCurrentMood(todayMood.valence || 5)
+          const i = STOPS.findIndex(s => s.id === todayMood.mood)
+          if (i >= 0) setIdx(i)
           setNote(todayMood.note || '')
           setSaved(true)
         }
@@ -51,10 +53,11 @@ export default function MoodPage() {
       .catch(() => {})
   }, [])
 
+  const cur = STOPS[idx]
+
   const doSave = async () => {
-    const label = MOOD_LABELS[currentMood]
     try {
-      await moodSet({ mood: label, note, who: 'yomi', date: today })
+      await moodSet({ mood: cur.id, note, who: 'yomi', date: today })
       setSaved(true)
       showToast('心情已记录')
     } catch {
@@ -77,38 +80,20 @@ export default function MoodPage() {
       {/* 当下感受 */}
       <div className="card" style={{ padding: '24px 20px', textAlign: 'center', marginBottom: 'var(--gap-section)' }}>
         <div style={{ fontSize: 48, lineHeight: 1, marginBottom: 8 }}>
-          {MOOD_EMOJI[currentMood]}
+          {cur.emoji}
         </div>
         <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--ink)', marginBottom: 16 }}>
-          {MOOD_LABELS[currentMood]}
+          {cur.label}
         </div>
         <div style={{ padding: '0 8px' }}>
           <input
-            type="range" min="1" max="10" value={currentMood}
-            onChange={e => { setCurrentMood(+e.target.value); setSaved(false) }}
-            className="slider" style={{ width: '100%', ...sliderTrack(currentMood) }}
+            type="range" min="0" max={STOPS.length - 1} value={idx}
+            onChange={e => { setIdx(+e.target.value); setSaved(false) }}
+            className="slider" style={{ width: '100%', ...sliderTrack(idx) }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-faint)', marginTop: 4 }}>
             <span>低落</span><span>平静</span><span>开心</span>
           </div>
-        </div>
-      </div>
-
-      {/* 今天整体感受 */}
-      <div className="card" style={{ padding: '18px 20px', marginBottom: 'var(--gap-section)' }}>
-        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-soft)', marginBottom: 12 }}>今天整体感受</div>
-        <div style={{ padding: '0 8px' }}>
-          <input
-            type="range" min="1" max="10" value={overallMood}
-            onChange={e => setOverallMood(+e.target.value)}
-            className="slider" style={{ width: '100%', ...sliderTrack(overallMood) }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--ink-faint)', marginTop: 4 }}>
-            <span>很差</span><span>一般</span><span>很好</span>
-          </div>
-        </div>
-        <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--accent)', marginTop: 8 }}>
-          {OVERALL_LABELS[overallMood]}
         </div>
       </div>
 
@@ -142,25 +127,29 @@ export default function MoodPage() {
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--ink-soft)', marginBottom: 12 }}>最近记录</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {recentDays.map(m => (
-              <div key={m.date} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span style={{ fontSize: 24 }}>{MOOD_EMOJI[m.valence] || '😐'}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{m.date.slice(5).replace('-', '/')}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{m.mood}</div>
-                </div>
-                <div style={{
-                  width: 40, height: 4, borderRadius: 2, background: 'var(--line)',
-                  position: 'relative', overflow: 'hidden'
-                }}>
+            {recentDays.map(m => {
+              const meta = moodOf(m)
+              const pct = meta ? ((meta.valence + 1) / 2) * 100 : 50
+              return (
+                <div key={m.date} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <span style={{ fontSize: 24 }}>{meta?.emoji || '😐'}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{m.date.slice(5).replace('-', '/')}</div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{meta?.label || m.mood}</div>
+                  </div>
                   <div style={{
-                    position: 'absolute', left: 0, top: 0, bottom: 0,
-                    width: `${(m.valence || 5) * 10}%`, borderRadius: 2,
-                    background: 'var(--accent)'
-                  }} />
+                    width: 40, height: 4, borderRadius: 2, background: 'var(--line)',
+                    position: 'relative', overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute', left: 0, top: 0, bottom: 0,
+                      width: `${pct}%`, borderRadius: 2,
+                      background: 'var(--accent)'
+                    }} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
