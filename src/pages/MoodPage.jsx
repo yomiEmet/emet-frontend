@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, CalendarDays } from 'lucide-react'
 import MoodFace from '../components/MoodFace.jsx'
+import MoodCalendar from '../components/MoodCalendar.jsx'
 import { moodList, moodSet } from '../api.js'
 import { MOODS_BY_VALENCE, moodOf } from '../utils/moods.js'
 import { dayKey, nowLogical, nowCST } from '../utils/time.js'
@@ -30,6 +31,7 @@ export default function MoodPage() {
   const [note, setNote] = useState('')
   const [saved, setSaved] = useState(false)
   const [recentDays, setRecentDays] = useState([])
+  const [calOpen, setCalOpen] = useState(false) // 历史/趋势日历（共写+备注+分布+趋势）
 
   useEffect(() => {
     const d = new Date(now)
@@ -76,6 +78,9 @@ export default function MoodPage() {
           <div style={{ fontFamily: 'var(--serif-zh)', fontSize: 18, fontWeight: 500 }}>今日心情</div>
           <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{formatDate(now)}</div>
         </div>
+        <button onClick={() => setCalOpen(true)} style={{ display: 'flex', color: 'var(--ink-soft)' }} aria-label="心情日历">
+          <CalendarDays size={20} />
+        </button>
       </div>
 
       {/* 当下感受 */}
@@ -156,6 +161,8 @@ export default function MoodPage() {
           </div>
         </div>
       )}
+
+      {calOpen && <MoodCalendar onClose={() => setCalOpen(false)} />}
     </div>
   )
 }
