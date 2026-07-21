@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { moodList, periodList } from '../api.js'
-import { moodOf } from '../utils/moods.js'
+import { pleasantOf } from '../utils/moods.js'
 import { dayKey, nowLogical, nowCST, logicalDayKey } from '../utils/time.js'
 import { loadSessions } from '../utils/sessions.js'
 
@@ -128,7 +128,7 @@ export default function UnifiedCalendar() {
           const chatCount = chatCounts[cell.key] || 0
 
           let dotColor = null
-          if (tab === 0 && mood) dotColor = moodOf(mood)?.color || 'var(--accent)'
+          if (tab === 0 && mood) dotColor = pleasantOf(mood)?.color || 'var(--accent)'
           else if (tab === 1 && isPeriod) dotColor = 'var(--accent)'
           else if (tab === 2 && chatCount > 0) {
             const alpha = Math.min(chatCount / 30, 1) * 0.7 + 0.3

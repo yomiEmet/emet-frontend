@@ -754,9 +754,21 @@ export function nightGuardConfigSet(cfg) {
 export function moodList({ start, end } = {}) {
   return getJSON('/api/mood', { start, end }) // { moods: [{ date, who, mood, note, valence }] }
 }
-export function moodSet({ mood, note, who = 'yomi', date }) {
+export function moodSet({ mood, level, note, who = 'yomi', date }) {
   // 不走 writeJSON（它会清 /api/data 缓存，心情跟 data 无关，没必要）
-  return request('/api/mood', { method: 'POST', body: { mood, note, who, date } })
+  // level(1-7 愉悦度) 与 mood(具名) 二选一；静怡新版发 level，Emet/旧数据发 mood。
+  return request('/api/mood', { method: 'POST', body: { mood, level, note, who, date } })
+}
+
+// ── 情绪：当下感受，一天可多条带时间（区别于 mood 每天一条整体心情）──
+export function emotionList({ start, end } = {}) {
+  return getJSON('/api/emotion', { start, end }) // { emotions: [{id, who, date, ts, level, valence, note}] }
+}
+export function emotionAdd({ level, note, date, who = 'yomi' }) {
+  return request('/api/emotion', { method: 'POST', body: { level, note, date, who } })
+}
+export function emotionDelete({ id, date }) {
+  return request(`/api/emotion?id=${encodeURIComponent(id)}&date=${encodeURIComponent(date)}`, { method: 'DELETE' })
 }
 
 // ── 喝水 / 运动（日计数，走 KV 直存）──────────────
