@@ -3,7 +3,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import PleasantFace from './PleasantFace.jsx'
 import { PLEASANT, pleasantMeta, pleasantOf, levelOfValence, WHO_LABEL } from '../utils/moods.js'
 import { moodList, moodSet, emotionList } from '../api.js'
-import { toCST } from '../utils/time.js'
+import { toCST, dayKey, nowLogical } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 
 // 心情日历：月历（每天 静怡 + Emet 两张愉悦度脸）+ 月度分布 + 心情趋势 + 当天情绪时间线。
@@ -16,8 +16,9 @@ function pad(n) {
   return String(n).padStart(2, '0')
 }
 function todayKey() {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  // 与全站一致：东八区 + 凌晨4点逻辑日（原来用设备自然日会在凌晨0-4点错位、
+  // 且和 MoodPage 写入的 date 键不一致，导致同一晚心情被拆成两天）
+  return dayKey(nowLogical())
 }
 function hhmm(iso) {
   const d = toCST(iso) // 服务端 ts 是 UTC，按东八区显示，不随设备时区漂移
