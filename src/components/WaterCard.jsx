@@ -8,34 +8,48 @@ const TOTAL = 7
 function getToday() {
   return dayKey(nowLogical())
 }
-function loadLocal() {
+function loadLocal(day) {
   try {
     const d = JSON.parse(localStorage.getItem('emet-water') || '{}')
-    return d[getToday()] || 0
+    return d[day] || 0
   } catch { return 0 }
 }
-function saveLocal(count) {
+function saveLocal(day, count) {
   try {
     const d = JSON.parse(localStorage.getItem('emet-water') || '{}')
-    d[getToday()] = count
+    d[day] = count
     localStorage.setItem('emet-water', JSON.stringify(d))
   } catch { /* */ }
 }
 
 export default function WaterCard() {
-  const [count, setCount] = useState(loadLocal)
+  const [day, setDay] = useState(getToday)
+  const [count, setCount] = useState(() => loadLocal(getToday()))
 
   useEffect(() => {
-    waterGet(getToday())
-      .then(r => { if (r?.count > 0) { setCount(r.count); saveLocal(r.count) } })
+    const today = getToday()
+    waterGet(today)
+      // 只有服务端存在真实记录（含 count=0）才覆盖本地——用 updated_at 区分
+      // "服务端确有此天记录" 与 "缺省兜底的 {count:0}"，避免另一设备清零无法同步下来。
+      .then(r => {
+        if (r && r.updated_at != null) {
+          setDay(today)
+          setCount(r.count || 0)
+          saveLocal(today, r.count || 0)
+        }
+      })
       .catch(() => {})
   }, [])
 
   const tap = () => {
-    const next = count >= TOTAL ? 0 : count + 1
+    const today = getToday()
+    // 跨过逻辑日边界（凌晨4点）后组件没重挂载：昨天的 count 不能顺延进今天
+    const base = today === day ? count : 0
+    const next = base >= TOTAL ? 0 : base + 1
+    setDay(today)
     setCount(next)
-    saveLocal(next)
-    waterSet(getToday(), next).catch(() => {})
+    saveLocal(today, next)
+    waterSet(today, next).catch(() => {})
   }
 
   return (
