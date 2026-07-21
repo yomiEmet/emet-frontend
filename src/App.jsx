@@ -1,5 +1,12 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+
+// 旧路由 /mail 迁到 /space/messages。保留 ?tab= 转发——旧推送/信件深链
+//（如做梦推送的 /mail?tab=feed）的 tab 命名与 Messages 完全一致，转发后老链接全部复活。
+function MailRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/space/messages${search}`} replace />
+}
 import { getAdminKey } from './api/client.js'
 import { pullSettings } from './utils/settingsSync.js'
 import TabBar from './components/TabBar.jsx'
@@ -54,7 +61,7 @@ export default function App() {
         <Route path="/space" element={<SpacePage />} />
         <Route path="/space/messages" element={<Messages />} />
         <Route path="/space/ideas" element={<IdeasPage />} />
-        <Route path="/mail" element={<Navigate to="/space" replace />} />
+        <Route path="/mail" element={<MailRedirect />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/archive" element={<ArchivePage />} />
         <Route path="/idle" element={<IdleJournal />} />
