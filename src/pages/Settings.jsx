@@ -11,6 +11,7 @@ import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import IdleToggle from '../components/IdleToggle.jsx'
 import DreamToggle from '../components/DreamToggle.jsx'
+import FeedReactToggle from '../components/FeedReactToggle.jsx'
 import { ReceiptToggle, PeriodEntry, AnnivToggle } from '../components/LifeToggles.jsx'
 import MemArchiveCard from '../components/MemArchiveCard.jsx'
 import { IosSwitch } from '../components/SettingRow.jsx'
@@ -223,6 +224,7 @@ export default function Settings() {
           <DailyToggle />
           <IdleToggle />
           <DreamToggle />
+          <FeedReactToggle />
           <AnnivToggle />
         </div>
       </section>
