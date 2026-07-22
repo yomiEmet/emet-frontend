@@ -22,10 +22,24 @@ const MCP_URL = new URL(process.env.EMET_MCP_URL || 'https://emet-memoty-v66.aan
 const KEY_FILE = process.env.EMET_ADMIN_KEY_FILE || path.join(__dirname, '.cc-admin-key')
 const PROXY_URL = (process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim()
 
-// 只读查询默认白名单；设 EMET_MCP_TOOLS=all 可放全量（不建议，费额度）
-const TOOL_ALLOW = (process.env.EMET_MCP_TOOLS ||
-  'recall,memory_search,memory_get,memory_list,diary_list,diary_get,mood_list,feed_list,current_status,stats,period_status,message_read'
-).split(',').map((s) => s.trim()).filter(Boolean)
+// 默认白名单 = 读 + 写（2026-07-22 静怡拍板升完整版）。
+// 刻意不放：删除类(memory/moment/idea/game_delete——数据丢失要单独点头)、
+// backup_export(全量导出,聊天用不上)、breath(系统心跳)、move_item(整理类)。
+// 显式白名单的好处：worker 以后新增工具不会悄悄冒进聊天。
+// 设 EMET_MCP_TOOLS=all 可放全量（不建议）。
+const TOOL_ALLOW = (process.env.EMET_MCP_TOOLS || [
+  // ── 读 ──
+  'recall', 'memory_search', 'memory_get', 'memory_list',
+  'diary_list', 'diary_get', 'mood_list', 'emotion_list', 'feed_list', 'moment_list',
+  'current_status', 'stats', 'period_status', 'life_daily', 'message_read',
+  'idea_list', 'idea_get', 'game_list', 'game_get',
+  'book_list', 'book_read', 'book_annotations', 'receipt_list', 'handoff_read', 'weave_candidates',
+  // ── 写 ──
+  'memory_save', 'memory_update', 'memory_link', 'memory_unlink',
+  'diary_write', 'mood_set', 'emotion_add', 'message_leave',
+  'moment_save', 'feed_post', 'feed_comment', 'feed_like',
+  'idea_save', 'idea_update', 'receipt_add', 'book_annotate', 'handoff_save', 'game_save',
+].join(',')).split(',').map((s) => s.trim()).filter(Boolean)
 const ALLOW_ALL = TOOL_ALLOW.length === 1 && TOOL_ALLOW[0] === 'all'
 
 let ADMIN_KEY = ''

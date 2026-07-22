@@ -378,7 +378,7 @@ function runClaude({ system, messages, model }, cb = {}) {
 
     // MCP 开启时给模型一句使用说明（不然它不知道自己有查询能力）
     const systemWithTools = MCP_ENABLED
-      ? systemFull + '\n\n（系统说明：你接着 Emet 记忆库的只读查询工具。需要查记忆、日记、心情、动态、当前状态时，先用 ToolSearch 找到对应工具再调用；查不到内容就如实说，不要编造。）'
+      ? systemFull + '\n\n（系统说明：你接着 Emet 记忆库的读写工具。查记忆/日记/心情/动态/当前状态时，先用 ToolSearch 找到对应工具再调用，查不到就如实说、不要编造。写操作（记住某事、写日记、记心情、留言、记账等）在她明确要求或明显同意时才做，别自作主张；写完看工具的实际返回再告知结果，返回里有 error 就如实说失败，不要报成功。删除类工具你没有，别答应帮她删东西。）'
       : systemFull
 
     const args = [
