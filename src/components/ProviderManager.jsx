@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Plus, X, Pencil, Trash2 } from 'lucide-react'
+import { Plus, X, Pencil, Trash2, ChevronRight } from 'lucide-react'
 import { loadProviders, saveProviders, syncTargetToDefault, DEFAULT_ANTHROPIC_MODELS, LOCAL_CLAUDE_MODELS } from '../utils/providers.js'
 import { showToast } from '../utils/toast.js'
+import { IosSwitch } from './SettingRow.jsx'
 
 const mask = (k) => (k ? '···· ' + k.slice(-4) : '未填')
 
@@ -25,10 +26,13 @@ const LOCAL_CLAUDE_PRESET = {
   enabled: true,
 }
 
-// 设置页"供应商管理"分组（参考 Kelivo：多供应商 + 各自模型列表）
+// 设置页"供应商管理"分组——折叠列表版：
+// 默认每个供应商一行（名称+类型标签 / N个模型·默认模型 / 启用开关+▸），
+// 点行展开详情（URL、Key、编辑/删除），同时只展开一个。
 export default function ProviderManager() {
   const [providers, setProviders] = useState(loadProviders)
   const [editing, setEditing] = useState(null) // null | {…draft}
+  const [openId, setOpenId] = useState(null) // 当前展开的供应商
 
   const persist = (arr) => {
     saveProviders(arr)
@@ -64,7 +68,7 @@ export default function ProviderManager() {
       return
     }
     persist([...providers, { ...LOCAL_CLAUDE_PRESET, id: 'p-local-' + Date.now() }])
-    showToast('已添加；先在终端 node chat-server.cjs')
+    showToast('已添加；用前先在终端跑 node chat-server.cjs')
   }
 
   const save = (draft) => {
@@ -83,56 +87,62 @@ export default function ProviderManager() {
   return (
     <section className="set-group">
       <div className="section-label">供应商管理</div>
-
-      {providers.length === 0 ? (
-        <p className="set-hint faint">还没有供应商。添加一个就能在聊天页开聊。</p>
-      ) : (
-        <div className="stack" style={{ marginBottom: 10 }}>
-          {providers.map((p) => (
-            <div key={p.id} className={'card prov-card' + (p.enabled ? '' : ' is-off')}>
-              <div className="prov-card__head">
-                <span className="prov-card__name">{p.name}</span>
-                <span className="prov-badge">{protocolLabel(p.protocol)}</span>
-                <span style={{ flex: 1 }} />
-                <button
-                  className={'prov-switch' + (p.enabled ? ' is-on' : '')}
-                  onClick={() => toggle(p.id)}
-                  aria-label={p.enabled ? '禁用' : '启用'}
-                >
-                  <i />
-                </button>
-              </div>
-              <div className="prov-card__meta faint">
-                {p.protocol === 'claude-cli'
-                  ? `${(p.baseUrl || 'http://localhost:8000').replace(/^https?:\/\//, '')} · 无需密钥`
-                  : `${(p.baseUrl || '').replace(/^https?:\/\//, '')} · Key ${mask(p.apiKey)}`}
-              </div>
-              <div className="prov-card__meta faint">
-                {p.models.length} 个模型
-                {p.defaultModel && ` · 默认 ${p.defaultModel}`}
-              </div>
-              <div className="prov-card__ops">
-                <button className="set-btn" onClick={() => setEditing({ ...p, models: [...p.models] })}>
-                  <Pencil size={12} /> 编辑
-                </button>
-                <button className="set-btn prov-del" onClick={() => remove(p.id)}>
-                  <Trash2 size={12} /> 删除
-                </button>
+      <div className="card set-card">
+        {providers.length === 0 && (
+          <div className="set-row">
+            <span className="set-row__desc">还没有供应商。添加一个就能在聊天页开聊。</span>
+          </div>
+        )}
+        {providers.map((p) => {
+          const open = openId === p.id
+          return (
+            <div key={p.id} className={'prov-item' + (p.enabled ? '' : ' is-off')}>
+              <button type="button" className="set-row" onClick={() => setOpenId(open ? null : p.id)}>
+                <span className="set-row__main">
+                  <span className="set-row__name">
+                    {p.name} <em className="prov-badge">{protocolLabel(p.protocol)}</em>
+                  </span>
+                  <span className="set-row__desc">
+                    {p.models.length} 个模型{p.defaultModel ? ` · ${p.defaultModel}` : ''}
+                  </span>
+                </span>
+                <IosSwitch on={!!p.enabled} onChange={() => toggle(p.id)} />
+                <ChevronRight size={16} className={'set-caret' + (open ? ' is-open' : '')} />
+              </button>
+              <div className={'set-collapse' + (open ? ' is-open' : '')}>
+                <div className="set-collapse__inner">
+                  <span className="set-row__desc" style={{ whiteSpace: 'normal' }}>
+                    {p.protocol === 'claude-cli'
+                      ? `${(p.baseUrl || 'http://localhost:8000').replace(/^https?:\/\//, '')} · 无需密钥`
+                      : `${(p.baseUrl || '').replace(/^https?:\/\//, '')} · Key ${mask(p.apiKey)}`}
+                  </span>
+                  {p.protocol === 'claude-cli' && (
+                    <span className="set-row__desc" style={{ whiteSpace: 'normal', fontSize: 11 }}>
+                      用前先在本机终端跑 node chat-server.cjs；只本机回环，不对外。
+                    </span>
+                  )}
+                  <div className="prov-detail-ops">
+                    <button className="set-btn" onClick={() => setEditing({ ...p, models: [...p.models] })}>
+                      <Pencil size={12} /> 编辑
+                    </button>
+                    <button className="set-btn prov-del" onClick={() => remove(p.id)}>
+                      <Trash2 size={12} /> 删除
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-          ))}
+          )
+        })}
+        <div className="set-row" style={{ gap: 8, justifyContent: 'flex-start' }}>
+          <button className="set-btn" onClick={openNew}>
+            <Plus size={13} /> 添加供应商
+          </button>
+          <button className="set-btn" onClick={addLocalClaude}>
+            <Plus size={13} /> 本机 Claude（订阅）
+          </button>
         </div>
-      )}
-
-      <button className="idea-add-btn" onClick={openNew}>
-        <Plus size={16} /> 添加供应商
-      </button>
-      <button className="idea-add-btn" onClick={addLocalClaude} style={{ marginTop: 6 }}>
-        <Plus size={16} /> 一键添加：本机 Claude（订阅）
-      </button>
-      <p className="faint prov-tip" style={{ marginTop: 4 }}>
-        用前先在本机终端跑 <code>node chat-server.cjs</code>；只本机回环，不对外。
-      </p>
+      </div>
 
       {editing && <ProviderForm draft={editing} onSave={save} onClose={() => setEditing(null)} />}
     </section>

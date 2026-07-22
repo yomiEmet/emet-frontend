@@ -3520,6 +3520,50 @@
   margin-bottom: 8px;
 }
 
+/* 折叠展开（供应商详情 / 系统提示词 / 访问密钥）：max-height 过渡 */
+.set-collapse {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+}
+.set-collapse.is-open {
+  max-height: 260px;
+}
+.set-collapse--tall.is-open {
+  max-height: 320px;
+}
+.set-collapse__inner {
+  padding: 2px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+.set-collapse + .set-row {
+  border-top: 1px solid var(--line);
+}
+.set-caret {
+  color: var(--ink-faint);
+  flex: none;
+  transition: transform 0.2s ease;
+}
+.set-caret.is-open {
+  transform: rotate(90deg);
+}
+
+/* 供应商折叠列表 */
+.prov-item + .prov-item,
+.prov-item + .set-row {
+  border-top: 1px solid var(--line);
+}
+.prov-item.is-off .set-row__name {
+  opacity: 0.45;
+}
+.prov-detail-ops {
+  display: flex;
+  gap: 8px;
+}
+
 .set-mono {
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   font-size: 12.5px;

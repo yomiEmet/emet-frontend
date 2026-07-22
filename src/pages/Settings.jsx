@@ -48,6 +48,7 @@ export default function Settings() {
 
   const [adminKey, setAdminKey] = useState(() => getAdminKey())
   const [keyInput, setKeyInput] = useState('')
+  const [keyOpen, setKeyOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
@@ -169,26 +170,38 @@ export default function Settings() {
             </div>
             <i className={'status-dot ' + (health?.ok ? 'status-dot--ok' : health === null ? '' : 'status-dot--bad')} />
           </div>
-          <Row label="访问密钥">
-            <span className="set-inline" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {adminKey && <span className="set-mono">{mask(adminKey)}</span>}
-              <input
-                className="set-input"
-                type="password"
-                autoComplete="off"
-                placeholder={adminKey ? '输入以更换' : '粘贴访问密钥'}
-                value={keyInput}
-                onChange={(e) => setKeyInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveKey()}
-              />
-              <button className="set-btn set-btn--accent" onClick={saveKey}>保存</button>
-              {adminKey && (
-                <button className="set-btn" onClick={lockAdmin}>
-                  <LockIcon size={12} /> 锁定
-                </button>
-              )}
+          {/* 访问密钥：折叠行，点开才显示输入与操作 */}
+          <button type="button" className="set-row" onClick={() => setKeyOpen((v) => !v)}>
+            <span className="set-row__main">
+              <span className="set-row__name">访问密钥</span>
+              <span className="set-row__desc">{adminKey ? `${mask(adminKey)} · 已保存` : '未设置'}</span>
             </span>
-          </Row>
+            <ChevronRight size={16} className={'set-caret' + (keyOpen ? ' is-open' : '')} />
+          </button>
+          <div className={'set-collapse' + (keyOpen ? ' is-open' : '')}>
+            <div className="set-collapse__inner">
+              <span className="set-inline" style={{ flexWrap: 'wrap' }}>
+                <input
+                  className="set-input"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={adminKey ? '输入以更换' : '粘贴访问密钥'}
+                  value={keyInput}
+                  onChange={(e) => setKeyInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && saveKey()}
+                />
+                <button className="set-btn set-btn--accent" onClick={saveKey}>保存</button>
+                {adminKey && (
+                  <button className="set-btn" onClick={lockAdmin}>
+                    <LockIcon size={12} /> 锁定
+                  </button>
+                )}
+              </span>
+              <p className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
+                访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。
+              </p>
+            </div>
+          </div>
           <Row label="设置同步">
             <span className="set-status">
               {settingsSyncState === 'synced' && <i className="status-dot status-dot--ok" />}
@@ -200,9 +213,6 @@ export default function Settings() {
             </span>
           </Row>
         </div>
-        <p className="set-hint faint" style={{ marginTop: 8 }}>
-          访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。
-        </p>
       </section>
 
       {/* ── 2. AI 供应商 ─────────────────────── */}
