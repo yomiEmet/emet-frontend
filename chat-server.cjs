@@ -183,6 +183,34 @@ const CLAUDE_RUN = resolveClaude()
 const CHAT_CWD = path.join(os.tmpdir(), 'emet-bridge-cwd')
 try { fs.mkdirSync(CHAT_CWD, { recursive: true }) } catch { /* 已存在 */ }
 
+// ── MCP 只读工具（让聊天里的 Emet 能自己查记忆/日记/心情）──────────
+// claude 自带的 MCP HTTP 客户端不走本机代理（国内直连 workers.dev 必挂、
+// 状态永远 pending），所以走本地 stdio 转发器 mcp-stdio-proxy.cjs，
+// 由它经 HTTPS_PROXY 的 CONNECT 隧道转发到 worker /mcp。
+// 白名单只放只读查询（在转发器里过滤），写操作模型根本看不见。
+// 关键坑（实测 2.1.209）：MCP 工具是"延迟加载"，模型要靠内置 ToolSearch
+// 现取；--tools "" 会连 MCP 一起废掉 → 必须 --tools ToolSearch。
+// 回滚开关：环境变量 CC_NO_MCP=1 → 回到纯聊天（--tools ""）。
+const ADMIN_KEY_FILE = path.join(__dirname, '.cc-admin-key')
+const MCP_ENABLED = process.env.CC_NO_MCP !== '1' && fs.existsSync(ADMIN_KEY_FILE)
+let MCP_CFG_PATH = ''
+if (MCP_ENABLED) {
+  MCP_CFG_PATH = path.join(CHAT_CWD, 'emet-mcp.json')
+  // 配置里只有路径引用，不含密钥本体（密钥始终留在 gitignore 的 .cc-admin-key）
+  fs.writeFileSync(MCP_CFG_PATH, JSON.stringify({
+    mcpServers: {
+      emet: {
+        command: process.execPath, // 当前 node 的绝对路径，不赌 PATH
+        args: [path.join(__dirname, 'mcp-stdio-proxy.cjs')],
+        env: {
+          ...(PROXY_URL ? { HTTPS_PROXY: PROXY_URL } : {}),
+          EMET_ADMIN_KEY_FILE: ADMIN_KEY_FILE,
+        },
+      },
+    },
+  }, null, 2))
+}
+
 function corsHeaders(req) {
   const origin = req.headers.origin
   const allow = origin && CORS_ORIGINS.has(origin) ? origin : 'http://localhost:5173'
@@ -336,7 +364,7 @@ function composeSystem(baseSystem, messages) {
 // --effort high 才会产生 thinking（默认不产生）。
 // cb 可选回调：{ onText(增量文本), onThink(增量思考), onSpawn(子进程) }
 function runClaude({ system, messages, model }, cb = {}) {
-  const { onText, onThink, onSpawn } = cb
+  const { onText, onThink, onSpawn, onTool } = cb
   return new Promise((resolve) => {
     const promptText = buildPromptText(messages)
     const baseSystem = composeSystem(system, messages)
@@ -346,13 +374,24 @@ function runClaude({ system, messages, model }, cb = {}) {
       : `（系统说明：你当前的具体模型是 ${modelUsed}。如果用户问"你是哪个模型"，如实回答。）`
 
     const stampIn = new Date().toISOString().slice(11, 19)
-    console.log(`[${stampIn}] → claude --model ${modelUsed}`)
+    console.log(`[${stampIn}] → claude --model ${modelUsed}${MCP_ENABLED ? '（带记忆工具）' : ''}`)
+
+    // MCP 开启时给模型一句使用说明（不然它不知道自己有查询能力）
+    const systemWithTools = MCP_ENABLED
+      ? systemFull + '\n\n（系统说明：你接着 Emet 记忆库的只读查询工具。需要查记忆、日记、心情、动态、当前状态时，先用 ToolSearch 找到对应工具再调用；查不到内容就如实说，不要编造。）'
+      : systemFull
 
     const args = [
-      '-p', '--tools', '', '--system-prompt', systemFull,
+      '-p', '--system-prompt', systemWithTools,
       '--effort', 'high', // 逼出思考过程
       '--output-format', 'stream-json', '--include-partial-messages', '--verbose',
     ]
+    if (MCP_ENABLED) {
+      // ToolSearch 是 MCP 延迟加载的引擎，必须保留；其余内置工具一个不给
+      args.push('--tools', 'ToolSearch', '--mcp-config', MCP_CFG_PATH, '--strict-mcp-config', '--allowedTools', 'mcp__emet')
+    } else {
+      args.push('--tools', '')
+    }
     if (model && model.trim()) args.push('--model', model.trim())
 
     const child = spawn(CLAUDE_RUN.file, args, {
@@ -369,6 +408,16 @@ function runClaude({ system, messages, model }, cb = {}) {
     let full = ''
     let resultText = '' // result 事件里的权威全文，兜底用
     let buf = ''
+    // 工具调用跟踪：id → {name, input}；ToolSearch 是内部引擎，对用户隐藏
+    const toolMeta = new Map()
+    const hiddenToolIds = new Set()
+    const toolResultText = (content) => {
+      if (typeof content === 'string') return content
+      if (Array.isArray(content)) {
+        return content.map((b) => (b && b.type === 'text' ? b.text : '')).filter(Boolean).join('\n')
+      }
+      try { return JSON.stringify(content) } catch { return String(content) }
+    }
     const handleLine = (line) => {
       const s = line.trim()
       if (!s) return
@@ -381,6 +430,36 @@ function runClaude({ system, messages, model }, cb = {}) {
           onText?.(d.text)
         } else if (d.type === 'thinking_delta' && d.thinking) {
           onThink?.(d.thinking)
+        }
+      } else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_start') {
+        const cb2 = ev.event.content_block || {}
+        if (cb2.type === 'tool_use' && cb2.id) {
+          if (cb2.name === 'ToolSearch') hiddenToolIds.add(cb2.id)
+          else {
+            toolMeta.set(cb2.id, { name: cb2.name })
+            onTool?.({ phase: 'start', id: cb2.id, name: cb2.name })
+          }
+        }
+      } else if (ev.type === 'assistant' && Array.isArray(ev.message?.content)) {
+        for (const b of ev.message.content) {
+          if (b.type === 'tool_use' && b.id && !hiddenToolIds.has(b.id) && b.name !== 'ToolSearch') {
+            toolMeta.set(b.id, { name: b.name, input: b.input })
+            onTool?.({ phase: 'input', id: b.id, name: b.name, input: b.input })
+          }
+        }
+      } else if (ev.type === 'user' && Array.isArray(ev.message?.content)) {
+        for (const b of ev.message.content) {
+          if (b.type === 'tool_result' && b.tool_use_id && !hiddenToolIds.has(b.tool_use_id)) {
+            const meta = toolMeta.get(b.tool_use_id) || {}
+            onTool?.({
+              phase: 'result',
+              id: b.tool_use_id,
+              name: meta.name || '(工具)',
+              input: meta.input,
+              result: toolResultText(b.content).slice(0, 2000),
+              isError: !!b.is_error,
+            })
+          }
         }
       } else if (ev.type === 'result' && typeof ev.result === 'string') {
         resultText = ev.result
@@ -472,6 +551,7 @@ const server = http.createServer(async (req, res) => {
     {
       onText: (t) => sseSend(res, null, { text: t }),
       onThink: (t) => sseSend(res, 'thinking', { thinking: t }),
+      onTool: (t) => sseSend(res, 'tool', t),
       onSpawn: (child) => {
         req.on('close', () => {
           if (child && !child.killed) child.kill()
