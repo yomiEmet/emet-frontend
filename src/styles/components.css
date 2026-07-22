@@ -3315,12 +3315,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 16px;
-  font-size: 13.5px;
+  padding: 14px 18px;
+  font-size: 14px;
+  width: 100%;
+  text-align: left;
 }
 
 .set-row + .set-row {
-  border-top: 1px solid var(--border-soft);
+  border-top: 1px solid var(--line);
 }
 
 .set-row__label {
@@ -3331,6 +3333,73 @@
 .set-row__val {
   text-align: right;
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 规范行：左名称 + 一行小字说明 */
+.set-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.set-row__name {
+  font-size: 14px;
+  color: var(--ink);
+}
+.set-row__desc {
+  font-size: 12px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* iOS 滑动开关：44×26 胶囊，白圆钮 20px 带细阴影 */
+.ios-switch {
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: #d4d0c8;
+  position: relative;
+  flex: none;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+.ios-switch.is-on {
+  background: var(--accent);
+}
+.ios-switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.ios-switch__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 0.18s ease;
+}
+.ios-switch.is-on .ios-switch__knob {
+  transform: translateX(18px);
+}
+[data-theme='night'] .ios-switch {
+  background: #3a3835;
+}
+
+/* 设置页分组标签：10px 大写字距（比全局 .section-label 再小一号） */
+.set-group .section-label {
+  font-size: 10px;
+  margin-bottom: 8px;
 }
 
 .set-mono {

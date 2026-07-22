@@ -1,10 +1,10 @@
-// 设置页：凌晨守护开关（iOS app 事件触发，凌晨时段催睡）
+// 设置页：凌晨守护开关（iOS app 事件触发，凌晨时段催睡）——规范单行版
 // 后端 POST 要求 5 字段齐，所以 toggle 时先拿完整 config，只翻转 enabled
 
 import { useEffect, useState } from 'react'
-import { Moon, MoonStar } from 'lucide-react'
 import { nightGuardConfigGet, nightGuardConfigSet } from '../api.js'
 import { showToast } from '../utils/toast.js'
+import { SetRow, IosSwitch } from './SettingRow.jsx'
 
 export default function NightGuardToggle() {
   const [cfg, setCfg] = useState(null) // null = loading
@@ -35,46 +35,9 @@ export default function NightGuardToggle() {
     }
   }
 
-  const text = cfg === null ? '检测中…' : cfg.enabled ? '已开启' : '已关闭'
-
   return (
-    <div className="card set-card">
-      <Row label="凌晨守护">
-        <span className="set-status">
-          {cfg?.enabled === true && <i className="status-dot status-dot--ok" />}
-          {text}
-        </span>
-      </Row>
-      <Row label="操作">
-        <button
-          className={`set-btn ${cfg?.enabled ? '' : 'set-btn--accent'}`}
-          disabled={busy || cfg === null}
-          onClick={toggle}
-        >
-          {cfg?.enabled ? (
-            <>
-              <Moon size={12} /> 关闭
-            </>
-          ) : (
-            <>
-              <MoonStar size={12} /> 开启
-            </>
-          )}
-        </button>
-      </Row>
-      <p className="set-hint faint" style={{ marginTop: 8, marginBottom: 0 }}>
-        开启后 iOS 在凌晨时段（默认 23:30-03:00）打开监控 app 会触发 Emet 催睡推送。
-        监控应用、时段、冷却时间在后端 config:night-guard 调整。
-      </p>
-    </div>
-  )
-}
-
-function Row({ label, children }) {
-  return (
-    <div className="set-row">
-      <span className="set-row__label">{label}</span>
-      <span className="set-row__val">{children}</span>
-    </div>
+    <SetRow label="凌晨守护" desc="23:30–03:00 催睡提醒">
+      <IosSwitch on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
+    </SetRow>
   )
 }

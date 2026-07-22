@@ -11,6 +11,7 @@ import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import IdleToggle from '../components/IdleToggle.jsx'
 import DreamToggle from '../components/DreamToggle.jsx'
+import { IosSwitch } from '../components/SettingRow.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
 import { buildExport, importSessions } from '../utils/sessions.js'
@@ -156,20 +157,14 @@ export default function Settings() {
       {/* ── 1. 账号卡片 ─────────────────────── */}
       <section className="set-group">
         <div className="card set-card">
-          <div className="set-row" style={{ justifyContent: 'flex-start', gap: 14 }}>
-            <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'var(--accent-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>
-              🪨
+          <div className="set-row">
+            <div className="set-row__main">
+              <span className="set-row__name" style={{ fontWeight: 600, fontSize: 15 }}>Emet Memory</span>
+              <span className="set-row__desc">
+                {health === null ? '检测中…' : health.ok ? '已连接 · emet-memoty-v66' : '连接失败'}
+              </span>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>Emet Memory</div>
-              <div className="faint" style={{ fontSize: 12 }}>
-                {health === null ? '检测中…' : health.ok ? (
-                  <span className="set-status"><i className="status-dot status-dot--ok" /> 在线 · v{health.version}</span>
-                ) : (
-                  <span className="set-status"><i className="status-dot status-dot--bad" /> 连接失败</span>
-                )}
-              </div>
-            </div>
+            <i className={'status-dot ' + (health?.ok ? 'status-dot--ok' : health === null ? '' : 'status-dot--bad')} />
           </div>
           <Row label="访问密钥">
             <span className="set-inline" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -216,15 +211,17 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* ── 3. 通知 ──────────────────────────── */}
+      {/* ── 3. 通知：全部功能行合并进一张卡，一行=名称+说明+iOS开关 ── */}
       <section className="set-group">
         <div className="section-label">通知</div>
-        <PushToggle />
-        <HeartbeatToggle />
-        <NightGuardToggle />
-        <DailyToggle />
-        <IdleToggle />
-        <DreamToggle />
+        <div className="card set-card">
+          <PushToggle />
+          <HeartbeatToggle />
+          <NightGuardToggle />
+          <DailyToggle />
+          <IdleToggle />
+          <DreamToggle />
+        </div>
       </section>
 
       {/* ── 4. 外观 ──────────────────────────── */}
@@ -242,12 +239,10 @@ export default function Settings() {
             </select>
           </Row>
           <Row label="深色模式">
-            <button
-              className={'chatx-switch' + (theme === 'night' ? ' is-on' : '')}
-              onClick={() => setTheme(theme === 'night' ? 'paper' : 'night')}
-            >
-              <span className="chatx-switch__dot" />
-            </button>
+            <IosSwitch
+              on={theme === 'night'}
+              onChange={() => setTheme(theme === 'night' ? 'paper' : 'night')}
+            />
           </Row>
         </div>
       </section>
@@ -281,8 +276,8 @@ export default function Settings() {
               </button>
             </span>
           </Row>
+          <KeepaliveToggle />
         </div>
-        <KeepaliveToggle />
         <button className="card set-card set-entry" onClick={() => navigate('/archive')}>
           <Archive size={18} />
           <span className="set-entry__text">

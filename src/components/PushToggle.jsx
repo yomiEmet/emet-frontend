@@ -1,18 +1,17 @@
-// 设置页：Web Push 推送开关
+// 设置页：Web Push 推送开关（规范单行：名称+说明+iOS开关；已开启时点行发测试推送）
 // 见 docs/阶段0-web-push.md §5
 
 import { useEffect, useState } from 'react'
-import { Bell, BellOff } from 'lucide-react'
 import { getStatus, subscribe, unsubscribe } from '../utils/push.js'
 import { pushSend } from '../api.js'
 import { showToast } from '../utils/toast.js'
+import { SetRow, IosSwitch } from './SettingRow.jsx'
 
-const STATUS_TEXT = {
-  unsupported: '此浏览器不支持推送通知',
-  'not-installed': '需要先把网站添加到主屏幕，从图标启动后才能开启推送（iOS 限制）',
-  'not-permitted': '通知权限被拒绝过。去 设置 → 通知 → Emet 里手动开启',
-  'not-subscribed': '未开启',
-  subscribed: '已开启',
+// 一行版说明：正常态不啰嗦，被系统挡住时说清原因
+const BLOCK_TEXT = {
+  unsupported: '此浏览器不支持推送',
+  'not-installed': '需先添加到主屏幕，从图标启动（iOS）',
+  'not-permitted': '通知权限被拒，去系统设置里开启',
 }
 
 export default function PushToggle() {
@@ -86,49 +85,17 @@ export default function PushToggle() {
     }
   }
 
-  const text = status ? STATUS_TEXT[status] : '检测中…'
-  const showOk = status === 'subscribed'
-  const showBad = status === 'unsupported' || status === 'not-permitted'
+  const blocked = status && BLOCK_TEXT[status]
+  const on = status === 'subscribed'
+  const desc = status === null ? '检测中…' : blocked || (on ? '点行发测试通知' : '聊天 / 做梦 / 守护的系统通知')
 
   return (
-    <div className="card set-card">
-      <Row label="状态">
-        <span className="set-status">
-          {showOk && <i className="status-dot status-dot--ok" />}
-          {showBad && <i className="status-dot status-dot--bad" />}
-          {text}
-        </span>
-      </Row>
-
-      {status === 'not-subscribed' && (
-        <Row label="操作">
-          <button className="set-btn set-btn--accent" disabled={busy} onClick={doSubscribe}>
-            <Bell size={12} /> 开启
-          </button>
-        </Row>
-      )}
-
-      {status === 'subscribed' && (
-        <Row label="操作">
-          <span className="set-inline" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            <button className="set-btn" disabled={busy} onClick={doTest}>
-              测试
-            </button>
-            <button className="set-btn" disabled={busy} onClick={doUnsubscribe}>
-              <BellOff size={12} /> 关闭
-            </button>
-          </span>
-        </Row>
-      )}
-    </div>
-  )
-}
-
-function Row({ label, children }) {
-  return (
-    <div className="set-row">
-      <span className="set-row__label">{label}</span>
-      <span className="set-row__val">{children}</span>
-    </div>
+    <SetRow label="推送通知" desc={desc} onClick={on ? doTest : undefined}>
+      <IosSwitch
+        on={on}
+        disabled={busy || status === null || !!blocked}
+        onChange={on ? doUnsubscribe : doSubscribe}
+      />
+    </SetRow>
   )
 }

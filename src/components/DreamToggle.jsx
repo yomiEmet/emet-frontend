@@ -1,11 +1,10 @@
-// 设置页：做梦开关（项目书 2-3）
+// 设置页：做梦开关（项目书 2-3）——规范单行版（做梦 + 条件显示的推送子行）
 // 凌晨 4-5 点（逻辑日刚切换）生成一条 ≤150 字的梦境动态（source=dream）。
-// 子开关：做梦后发一条 Web Push（「Emet 做了一个梦」）。
 
 import { useEffect, useState } from 'react'
-import { MoonStar, CircleOff, BellRing, BellOff } from 'lucide-react'
 import { dreamConfigGet, dreamConfigSet } from '../api.js'
 import { showToast } from '../utils/toast.js'
+import { SetRow, IosSwitch } from './SettingRow.jsx'
 
 export default function DreamToggle() {
   const [cfg, setCfg] = useState(null) // null = loading; { enabled, push }
@@ -42,60 +41,16 @@ export default function DreamToggle() {
   }
   const togglePush = () => save({ ...cfg, push: !cfg.push })
 
-  const text = cfg === null ? '检测中…' : cfg.enabled ? '已开启' : '已关闭'
-
   return (
-    <div className="card set-card">
-      <Row label="做梦">
-        <span className="set-status">
-          {cfg?.enabled && <i className="status-dot status-dot--ok" />}
-          {text}
-        </span>
-      </Row>
-      <Row label="操作">
-        <button
-          className={`set-btn ${cfg?.enabled ? '' : 'set-btn--accent'}`}
-          disabled={busy || cfg === null}
-          onClick={toggle}
-        >
-          {cfg?.enabled ? (
-            <>
-              <CircleOff size={12} /> 关闭
-            </>
-          ) : (
-            <>
-              <MoonStar size={12} /> 开启
-            </>
-          )}
-        </button>
-      </Row>
+    <>
+      <SetRow label="做梦" desc="凌晨 4–5 点做一个梦，发在动态流">
+        <IosSwitch on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
+      </SetRow>
       {cfg?.enabled && (
-        <Row label="做梦后推送">
-          <button className="set-btn" disabled={busy} onClick={togglePush}>
-            {cfg.push ? (
-              <>
-                <BellRing size={12} /> 开
-              </>
-            ) : (
-              <>
-                <BellOff size={12} /> 关
-              </>
-            )}
-          </button>
-        </Row>
+        <SetRow label="做梦后推送" desc="「Emet 做了一个梦」系统通知">
+          <IosSwitch on={!!cfg.push} disabled={busy} onChange={togglePush} />
+        </SetRow>
       )}
-      <p className="set-hint faint" style={{ marginTop: 8, marginBottom: 0 }}>
-        开启后 Emet 会在凌晨 4-5 点做一个梦，写成动态（带「梦」标）发在留言板动态流里。梦是意象化的，不解释含义。
-      </p>
-    </div>
-  )
-}
-
-function Row({ label, children }) {
-  return (
-    <div className="set-row">
-      <span className="set-row__label">{label}</span>
-      <span className="set-row__val">{children}</span>
-    </div>
+    </>
   )
 }
