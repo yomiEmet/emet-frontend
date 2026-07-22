@@ -4216,17 +4216,22 @@
   border-bottom-right-radius: 6px;
   padding: 10px 14px;
   max-width: 82%;
-  font-size: 14.5px;
+  font-size: 15.5px;
   line-height: 1.6;
+  font-weight: 400;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
+/* Emet 正文与用户气泡同字号同字重同 ink——裸文字没有灰底衬托，
+   跟 body 的 300 细字重走会显得"淡"，这里锁 400 */
 .chat-bubble--emet {
   width: fit-content;
   max-width: 94%;
-  font-size: 14.5px;
+  font-size: 15.5px;
   line-height: 1.75;
+  font-weight: 400;
+  color: var(--ink);
   word-break: break-word;
 }
 

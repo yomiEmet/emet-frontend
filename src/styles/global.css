@@ -13,17 +13,22 @@ body,
   height: 100%;
 }
 
-/* v66 body 风格：sans-zh + 1.85 行距 + 300 字重 */
+/* v66 body 风格：sans-zh + 1.85 行距 + 300 字重（字号 15→16，整体略放大） */
 body {
   font-family: var(--sans-zh);
   color: var(--ink);
   background: var(--bg);
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.85;
   font-weight: 300;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   transition: background 0.4s, color 0.4s;
+}
+
+/* 桌面端滚动条只占右侧会让居中列视觉偏左：两侧都预留槽位摆正 */
+html {
+  scrollbar-gutter: stable both-edges;
 }
 
 h1, h2, h3, h4, h5, h6 {
