@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Send, Plus, X, Lock, MoreHorizontal, Heart, MessageCircle } from 'lucide-react'
+import { Send, Plus, X, Lock, MoreHorizontal, Heart, MessageCircle, ImagePlus } from 'lucide-react'
 import {
   messageAll,
   messageLeave,
@@ -22,9 +22,11 @@ import {
   feedLike,
   feedComment,
   feedCommentDelete,
+  feedImageUrl,
 } from '../api.js'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
+import { compressImage } from '../utils/image.js'
 import { MOVE_GROUPS, visibleChildren, groupHasOptions } from '../utils/moveGroups.js'
 
 // 自适应高度文本框：内容多长撑多高，不出内部滚动条/拉伸条（编辑态全部显示）
@@ -803,9 +805,29 @@ function FeedBoard() {
   const [items, setItems] = useState(null)
   const [nextBefore, setNextBefore] = useState(null)
   const [text, setText] = useState('')
+  const [imgs, setImgs] = useState([]) // [{ data, media_type, preview }]，最多 3 张
   const [sending, setSending] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const taRef = useRef(null)
+  const fileRef = useRef(null)
+
+  const pickImages = async (e) => {
+    const files = [...(e.target.files || [])]
+    e.target.value = '' // 允许重复选同一张
+    if (!files.length) return
+    const room = 3 - imgs.length
+    if (room <= 0) {
+      showToast('最多 3 张图')
+      return
+    }
+    try {
+      const picked = []
+      for (const f of files.slice(0, room)) picked.push(await compressImage(f))
+      setImgs((prev) => [...prev, ...picked])
+    } catch (err) {
+      showToast(err?.message || '图片处理失败')
+    }
+  }
 
   const loadFirst = () =>
     feedList({ limit: 20 })
@@ -832,11 +854,14 @@ function FeedBoard() {
 
   const send = async () => {
     const content = text.trim()
-    if (!content || sending) return
+    if ((!content && imgs.length === 0) || sending) return
     setSending(true)
     try {
-      const r = await feedCreate(content)
+      const r = await feedCreate(content, imgs.map(({ data, media_type }) => ({ data, media_type })))
+      // 发图必须验真落库（worker 错误当 200 的坑）：带了图但返回的 item 没有图 = 没存上
+      if (imgs.length && !(r?.item?.images?.length)) throw new Error('图片没有存上，请再试一次')
       setText('')
+      setImgs([])
       // 新动态直接插到顶部，不整表重拉（避免把已翻出的更早动态冲掉）
       if (r?.item) setItems((prev) => [r.item, ...(prev || [])])
       else await loadFirst()
@@ -871,7 +896,7 @@ function FeedBoard() {
 
   return (
     <>
-      <div className="composer">
+      <div className="composer composer--feed">
         <textarea
           ref={taRef}
           value={text}
@@ -879,15 +904,49 @@ function FeedBoard() {
           placeholder="分享一条动态…"
           onChange={(e) => setText(e.target.value)}
         />
-        <button
-          className="composer-send"
-          disabled={!text.trim() || sending}
-          onClick={send}
-          aria-label="发布"
-        >
-          <Send size={17} />
-        </button>
+        <div className="composer-side">
+          <button
+            className="composer-attach"
+            onClick={() => fileRef.current?.click()}
+            disabled={sending || imgs.length >= 3}
+            aria-label="添加图片"
+          >
+            <ImagePlus size={17} />
+          </button>
+          <button
+            className="composer-send"
+            disabled={(!text.trim() && imgs.length === 0) || sending}
+            onClick={send}
+            aria-label="发布"
+          >
+            <Send size={17} />
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={pickImages}
+        />
       </div>
+      {imgs.length > 0 && (
+        <div className="feed-compose__previews">
+          {imgs.map((im, i) => (
+            <div key={i} className="feed-compose__preview">
+              <img src={im.preview} alt="" />
+              <button
+                className="feed-compose__preview-del"
+                onClick={() => setImgs((prev) => prev.filter((_, j) => j !== i))}
+                aria-label="移除图片"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="stack">
         {items === null ? (
@@ -924,6 +983,7 @@ function FeedCard({ f, onPatch, onRemove }) {
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [viewImg, setViewImg] = useState(null) // 点小图看大图；null = 关闭
 
   const isAuto = f.source !== 'manual'
   const editable = !isAuto && f.author === 'yomi' // 仅自己发的手动动态可编辑
@@ -931,6 +991,7 @@ function FeedCard({ f, onPatch, onRemove }) {
   const likedByMe = !!f.likes?.yomi
   const likedByEmet = !!f.likes?.emet
   const comments = f.comments || []
+  const images = f.images || []
 
   const toggleLike = async () => {
     if (busy) return
@@ -1047,6 +1108,26 @@ function FeedCard({ f, onPatch, onRemove }) {
         >
           {f.content}
         </p>
+      )}
+
+      {images.length > 0 && (
+        <div className="feed-card__imgs" data-n={Math.min(images.length, 3)}>
+          {images.map((id) => (
+            <img
+              key={id}
+              src={feedImageUrl(id)}
+              alt=""
+              loading="lazy"
+              onClick={() => setViewImg(feedImageUrl(id))}
+            />
+          ))}
+        </div>
+      )}
+
+      {viewImg && (
+        <div className="img-lightbox" onClick={() => setViewImg(null)}>
+          <img src={viewImg} alt="" />
+        </div>
       )}
 
       {/* 点赞 + 评论行 */}

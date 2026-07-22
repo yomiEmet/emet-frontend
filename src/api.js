@@ -429,8 +429,28 @@ export function ideaDelete(id) {
 export function feedList({ before, limit = 20 } = {}) {
   return getJSON('/api/feed', { before, limit }) // { items, next_before, server_time }
 }
-export function feedCreate(content) {
-  return request('/api/feed', { method: 'POST', body: { content, author: 'yomi', source: 'manual' } })
+// images: [{ data: base64, media_type }]（≤3 张，compressImage 压过再传）；不带图时字段省略
+export function feedCreate(content, images) {
+  return request('/api/feed', {
+    method: 'POST',
+    body: {
+      content,
+      author: 'yomi',
+      source: 'manual',
+      ...(Array.isArray(images) && images.length ? { images } : {}),
+    },
+  })
+}
+// 图片直链：<img> 带不了请求头，走 ?key= 双鉴权（worker 端与 health/mcp 同款闸门）
+export function feedImageUrl(id) {
+  return `${BASE_URL}/api/feed-image/${id}?key=${encodeURIComponent(getAdminKey())}`
+}
+// 动态回应（朋友圈化）：Emet 延迟路过点赞/评论的总开关，config 路由与独处/做梦同款
+export function feedReactConfigGet() {
+  return getJSON('/api/config/feed-react') // { config: { enabled, model } }
+}
+export function feedReactConfigSet(cfg) {
+  return request('/api/config/feed-react', { method: 'POST', body: cfg })
 }
 export function feedUpdate(id, content) {
   return request(`/api/feed/${id}`, { method: 'PUT', body: { content } })
