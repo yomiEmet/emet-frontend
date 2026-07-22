@@ -1,96 +1,44 @@
-// 生活三件套 + 纪念日注入的设置开关（四期 4-1 / 4-2 / 4-3），每样独立、默认关。
-// 存 localStorage（emet.receipt / emet.period / emet.anniv），随设置云同步。
+// 生活三件套 + 纪念日注入的设置开关（四期 4-1 / 4-2 / 4-3）——规范单行版。
+// 存 localStorage（emet.receipt / emet.anniv），随设置云同步。
 
 import { useNavigate } from 'react-router-dom'
-import { Receipt, CalendarHeart, CakeSlice, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { useLocalStorage } from '../utils/useLocalStorage.js'
+import { SetRow, IosSwitch } from './SettingRow.jsx'
 
-function Row({ label, children }) {
-  return (
-    <div className="set-row">
-      <span className="set-row__label">{label}</span>
-      <span className="set-row__val">{children}</span>
-    </div>
-  )
-}
-
-// 通用开关卡：读写 localStorage 的 { enabled }
-function ToggleCard({ storageKey, title, hint, OnIcon, children }) {
-  const [cfg, setCfg] = useLocalStorage(storageKey, { enabled: false })
+// 今日小票：开关控制主页「今日小票」卡显隐（ReceiptCard 自我门禁读同一个键）
+export function ReceiptToggle() {
+  const [cfg, setCfg] = useLocalStorage('emet.receipt', { enabled: false })
   const enabled = !!cfg?.enabled
   return (
-    <div className="card set-card">
-      <Row label={title}>
-        <span className="set-status">
-          {enabled && <i className="status-dot status-dot--ok" />}
-          {enabled ? '已开启' : '已关闭'}
-        </span>
-      </Row>
-      <Row label="操作">
-        <button
-          className={`set-btn ${enabled ? '' : 'set-btn--accent'}`}
-          onClick={() => setCfg({ ...cfg, enabled: !enabled })}
-        >
-          <OnIcon size={12} /> {enabled ? '关闭' : '开启'}
-        </button>
-      </Row>
-      {enabled && children}
-      <p className="set-hint faint" style={{ marginTop: 8, marginBottom: 0 }}>
-        {hint}
-      </p>
-    </div>
+    <SetRow label="今日小票" desc="主页小票卡：随手记今天做了什么">
+      <IosSwitch on={enabled} onChange={() => setCfg({ ...cfg, enabled: !enabled })} />
+    </SetRow>
   )
 }
 
-export function ReceiptToggle() {
-  return (
-    <ToggleCard
-      storageKey="emet.receipt"
-      title="今日小票"
-      OnIcon={Receipt}
-      hint="开启后主页出现「今日小票」——像超市小票一样随手记今天做了什么，按凌晨 4 点切日。你和 Emet 都能往上记。"
-    />
-  )
-}
-
-export function PeriodToggle() {
+// 经期月历：纯入口行（数据本就在综合月历的经期 tab 可见，不再做显隐门禁）
+export function PeriodEntry() {
   const navigate = useNavigate()
   return (
-    <ToggleCard
-      storageKey="emet.period"
-      title="经期月历"
-      OnIcon={CalendarHeart}
-      hint="开启后可在下面进入经期月历，记录、看预测。数据只存你的记忆库，Emet 可在你问起时读到。"
-    >
-      <button className="set-inline-entry" onClick={() => navigate('/period')}>
-        打开经期月历 <ChevronRight size={14} />
-      </button>
-    </ToggleCard>
+    <SetRow label="经期月历" desc="记录与预测" onClick={() => navigate('/period')}>
+      <ChevronRight size={16} className="faint" />
+    </SetRow>
   )
 }
 
+// 纪念日提醒：开启后 Milestones 里的纪念日临近时（当天或提前 N 天）Emet 聊天时自然提一句
 export function AnnivToggle() {
   const [cfg, setCfg] = useLocalStorage('emet.anniv', { enabled: false, advanceDays: 3 })
   const enabled = !!cfg?.enabled
   const advance = Number.isInteger(cfg?.advanceDays) ? cfg.advanceDays : 3
   return (
-    <div className="card set-card">
-      <Row label="纪念日提醒">
-        <span className="set-status">
-          {enabled && <i className="status-dot status-dot--ok" />}
-          {enabled ? '已开启' : '已关闭'}
-        </span>
-      </Row>
-      <Row label="操作">
-        <button
-          className={`set-btn ${enabled ? '' : 'set-btn--accent'}`}
-          onClick={() => setCfg({ ...cfg, enabled: !enabled })}
-        >
-          <CakeSlice size={12} /> {enabled ? '关闭' : '开启'}
-        </button>
-      </Row>
+    <>
+      <SetRow label="纪念日提醒" desc="临近时 Emet 聊天里自然提一句">
+        <IosSwitch on={enabled} onChange={() => setCfg({ ...cfg, enabled: !enabled })} />
+      </SetRow>
       {enabled && (
-        <Row label="提前提醒">
+        <SetRow label="提前提醒" desc="0 = 只在当天提">
           <span className="set-inline">
             <input
               className="anniv-days"
@@ -105,11 +53,8 @@ export function AnnivToggle() {
             />
             <span className="faint">天</span>
           </span>
-        </Row>
+        </SetRow>
       )}
-      <p className="set-hint faint" style={{ marginTop: 8, marginBottom: 0 }}>
-        开启后，主页 Milestones 里的纪念日临近时（当天或提前 N 天），Emet 聊天时会自然提一句。不做贺卡弹窗。
-      </p>
-    </div>
+    </>
   )
 }

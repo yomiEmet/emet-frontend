@@ -6,6 +6,7 @@ import MoodEntryCard from '../components/MoodEntryCard.jsx'
 import WaterCard from '../components/WaterCard.jsx'
 import ExerciseCard from '../components/ExerciseCard.jsx'
 import TodoList from '../components/TodoList.jsx'
+import ReceiptCard from '../components/ReceiptCard.jsx'
 import UnifiedCalendar from '../components/UnifiedCalendar.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
 import { greeting, longDate, daysTogether, sinceLabel, nowCST, nowLogical, dayKey, logicalDayKey } from '../utils/time.js'
@@ -102,6 +103,9 @@ export default function Home() {
 
       {/* ── 待办 ── */}
       <TodoList />
+
+      {/* ── 今日小票（emet.receipt 开关关时自渲染为空）── */}
+      <ReceiptCard />
 
       {/* ── 综合月历 ── */}
       <UnifiedCalendar />

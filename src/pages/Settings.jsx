@@ -11,6 +11,8 @@ import NightGuardToggle from '../components/NightGuardToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import IdleToggle from '../components/IdleToggle.jsx'
 import DreamToggle from '../components/DreamToggle.jsx'
+import { ReceiptToggle, PeriodEntry, AnnivToggle } from '../components/LifeToggles.jsx'
+import MemArchiveCard from '../components/MemArchiveCard.jsx'
 import { IosSwitch } from '../components/SettingRow.jsx'
 import { BASE_URL, healthCheck, statsGet, backupExport } from '../api.js'
 import { getAdminKey, setAdminKey as storeAdminKey, clearAdminKey } from '../api/client.js'
@@ -221,6 +223,16 @@ export default function Settings() {
           <DailyToggle />
           <IdleToggle />
           <DreamToggle />
+          <AnnivToggle />
+        </div>
+      </section>
+
+      {/* ── 3.5 生活（四期三件套的入口/开关）──── */}
+      <section className="set-group">
+        <div className="section-label">生活</div>
+        <div className="card set-card">
+          <ReceiptToggle />
+          <PeriodEntry />
         </div>
       </section>
 
@@ -277,6 +289,7 @@ export default function Settings() {
             </span>
           </Row>
           <KeepaliveToggle />
+          <MemArchiveCard />
         </div>
         <button className="card set-card set-entry" onClick={() => navigate('/archive')}>
           <Archive size={18} />
