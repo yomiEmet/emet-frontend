@@ -85,7 +85,8 @@ export default function MoodPage() {
 
   const loadEmotions = () => {
     emotionList({ start: today, end: today })
-      .then(r => setTodayEmotions((r?.emotions || []).filter(e => e.who === 'yomi')))
+      // 共写：Emet 在聊天里记的情绪也显示（带名字标注），只有自己的可删
+      .then(r => setTodayEmotions(r?.emotions || []))
       .catch(() => {})
   }
 
@@ -185,12 +186,17 @@ export default function MoodPage() {
                       <span className="emo-item__time">{hhmm(toCST(e.ts))}</span>
                       <span style={{ color: meta?.color, display: 'flex' }}><PleasantFace level={meta?.level || 4} size={22} /></span>
                       <div className="emo-item__body">
-                        <span className="emo-item__label">{meta?.label}</span>
+                        <span className="emo-item__label">
+                          {meta?.label}
+                          {e.who === 'emet' && <em className="emo-item__who">Emet</em>}
+                        </span>
                         {e.note && <span className="emo-item__note">{e.note}</span>}
                       </div>
-                      <button className="emo-item__del" onClick={() => removeEmotion(e)} aria-label="删除">
-                        <X size={13} />
-                      </button>
+                      {e.who === 'yomi' && (
+                        <button className="emo-item__del" onClick={() => removeEmotion(e)} aria-label="删除">
+                          <X size={13} />
+                        </button>
+                      )}
                     </div>
                   )
                 })}

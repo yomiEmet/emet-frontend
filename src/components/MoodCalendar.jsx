@@ -306,6 +306,7 @@ export default function MoodCalendar({ onClose }) {
                       <span className="mc-emo-time">{hhmm(e.ts)}</span>
                       <i style={{ color: meta?.color, display: 'flex' }}><PleasantFace level={meta?.level || MID} size={18} /></i>
                       <span className="mc-emo-label" style={{ color: meta?.color }}>{meta?.label}</span>
+                      <span className="mc-emo-who faint">{WHO_LABEL[e.who] || ''}</span>
                       {e.note && <span className="mc-emo-note">{e.note}</span>}
                     </div>
                   )

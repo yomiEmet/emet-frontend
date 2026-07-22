@@ -5552,6 +5552,19 @@
   color: var(--ink-faint);
   word-break: break-word;
 }
+.mc-emo-who {
+  font-size: 11px;
+  flex: none;
+}
+.emo-item__who {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 6px;
+  margin-left: 6px;
+}
 .mc-sheet-picker {
   padding: 4px 4px 8px;
 }
