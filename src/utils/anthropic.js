@@ -146,6 +146,22 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
     system && typeof system === 'object'
       ? JSON.parse(JSON.stringify({ providerId: provider.id, model, tools: tools && tools.length ? tools : undefined, system: systemBlocks, messages: apiMessages }))
       : null
+
+  // 当轮图片：末条 user 消息带 _imgs（Chat.jsx 只给"本轮要发的"消息挂它）→ 转视觉块。
+  // 刻意放在 snapBody 之后：保活快照不掺 base64（重放时末条本来就会被换成 nonce，塞图纯浪费 KV）。
+  // 历史轮的图不重发——存储里 content 始终是干净字符串，BP4 缓存前缀逐字稳定（与 volatile 同套路）。
+  const lastImgs = messages.length ? messages[messages.length - 1]._imgs : null
+  if (Array.isArray(lastImgs) && lastImgs.length && apiMessages.length) {
+    const last = apiMessages[apiMessages.length - 1]
+    const t = typeof last.content === 'string' ? last.content : ''
+    apiMessages[apiMessages.length - 1] = {
+      role: last.role,
+      content: [
+        ...lastImgs.map((im) => ({ type: 'image', source: { type: 'base64', media_type: im.media_type || 'image/jpeg', data: im.data } })),
+        { type: 'text', text: t },
+      ],
+    }
+  }
   const pushSnapshot = () => {
     if (!snapBody) return
     const act = (turnUsage?.cache_read_input_tokens || 0) + (turnUsage?.cache_creation_input_tokens || 0)
@@ -280,6 +296,15 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.carry, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   // model 透传给后端；跳过"本机订阅"这种占位（让 claude 走自己的默认）
   const payloadModel = model && model !== '本机订阅' ? model : ''
+  // 桥协议的消息：{role, content, images?}——只有末条 user 消息带当轮图（_imgs），
+  // 桥会把图落成临时文件让 claude 用 Read 看；历史轮不带图（桥端只加"[附了图片]"标注）
+  const bridgeMessages = messages.map((m, i) => ({
+    role: m.role,
+    content: m.content,
+    ...(i === messages.length - 1 && Array.isArray(m._imgs) && m._imgs.length
+      ? { images: m._imgs.map((im) => ({ data: im.data, media_type: im.media_type || 'image/jpeg' })) }
+      : m.images?.length ? { had_images: true } : {}),
+  }))
 
   // ── 直连 vs 中转 自动选择 ──────────────────────────────
   // 1) 页面自己的来源就是桥吗？——同源探 /health 看身份标记。
@@ -299,10 +324,10 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   }
 
   if (directBase) {
-    return streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages, payloadModel, signal, onDelta, onThinking, onToolUse })
+    return streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages: bridgeMessages, payloadModel, signal, onDelta, onThinking, onToolUse })
   }
   // 探不到本机桥 → 手机场景，走云端 relay 中转（中转不带思考，只回最终文本）
-  return relayViaWorker({ sys, messages, payloadModel, signal, onDelta })
+  return relayViaWorker({ sys, messages: bridgeMessages, payloadModel, signal, onDelta })
 }
 
 // 探测某来源是不是"本机桥"：/health 必须回带 bridge:'emet-local' 标记。
@@ -466,7 +491,20 @@ async function streamOpenAI({ provider, model, system, messages, temperature, ma
   const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.carry, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   const oaiMessages = [
     ...(sys ? [{ role: 'system', content: sys }] : []),
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ...messages.map((m, i) => {
+      // 当轮末条带图 → OpenAI 兼容的 image_url data URI 块；历史轮不重发（同 Anthropic 路线）
+      const imgs = i === messages.length - 1 && Array.isArray(m._imgs) ? m._imgs : null
+      if (imgs && imgs.length) {
+        return {
+          role: m.role,
+          content: [
+            ...imgs.map((im) => ({ type: 'image_url', image_url: { url: `data:${im.media_type || 'image/jpeg'};base64,${im.data}` } })),
+            { type: 'text', text: m.content },
+          ],
+        }
+      }
+      return { role: m.role, content: m.content }
+    }),
   ]
   const body = { model, stream: true, max_tokens: maxTokens || 4096, messages: oaiMessages }
   // temperature 仅 OpenAI 兼容协议发送（Anthropic 原生那些模型不接受）

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil } from 'lucide-react'
+import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil, ImagePlus } from 'lucide-react'
 import { marked } from 'marked'
-import { chatSystemPrompt, memInject } from '../api.js'
+import { chatSystemPrompt, memInject, chatImageUpload, chatImageUrl } from '../api.js'
+import { compressImage } from '../utils/image.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
 import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from '../utils/providers.js'
@@ -46,6 +47,37 @@ function copyText(t) {
     () => showToast('已复制'),
     () => showToast('复制失败'),
   )
+}
+
+// ── 聊天图片：当轮 base64 内存缓存（id → {data, media_type}）──
+// 消息体只存 id 引用（会话 KV 不装 base64）；发送瞬间刚压缩过必有缓存，
+// 重roll/编辑重发时没有就从 worker 拉回来转一次。历史轮不重发图（只发当轮）。
+const _chatImgData = new Map()
+async function resolveChatImages(ids) {
+  const out = []
+  for (const id of ids || []) {
+    if (_chatImgData.has(id)) {
+      out.push(_chatImgData.get(id))
+      continue
+    }
+    try {
+      const r = await fetch(chatImageUrl(id))
+      if (!r.ok) continue
+      const blob = await r.blob()
+      const b64 = await new Promise((res, rej) => {
+        const fr = new FileReader()
+        fr.onload = () => res(String(fr.result).split(',')[1])
+        fr.onerror = () => rej(new Error('图片读取失败'))
+        fr.readAsDataURL(blob)
+      })
+      const rec = { data: b64, media_type: blob.type || 'image/jpeg' }
+      _chatImgData.set(id, rec)
+      out.push(rec)
+    } catch {
+      /* 单张拉不回就少一张，不拦聊天 */
+    }
+  }
+  return out
 }
 
 // 分气泡模式：按空行把回复拆成段（一段一个气泡，Telegram 式）。
@@ -196,6 +228,7 @@ function UserMsg({ m, favOn, onFav, idx, count, onSwitch, onEdit }) {
   const [metaOpen, setMetaOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const [viewImg, setViewImg] = useState(null) // 点缩略图看大图；null = 关闭
   const startEdit = () => {
     setDraft(m.content || '')
     setEditing(true)
@@ -241,6 +274,18 @@ function UserMsg({ m, favOn, onFav, idx, count, onSwitch, onEdit }) {
           >
             {m.content}
           </button>
+        )}
+        {!editing && m.images?.length > 0 && (
+          <div className="chatx-msgimgs">
+            {m.images.map((id) => (
+              <img key={id} src={chatImageUrl(id)} alt="" loading="lazy" onClick={() => setViewImg(chatImageUrl(id))} />
+            ))}
+          </div>
+        )}
+        {viewImg && (
+          <div className="img-lightbox" onClick={() => setViewImg(null)}>
+            <img src={viewImg} alt="" />
+          </div>
         )}
         {!editing && (
           <VariantSwitcher idx={idx} count={count} align="right" onPrev={() => onSwitch(idx - 1)} onNext={() => onSwitch(idx + 1)} />
@@ -298,6 +343,8 @@ export default function Chat() {
   const [sessions, setSessions] = useState(loadSessions)
   const [curId, setCurId] = useState(() => loadSessions().find((s) => !s.deleted)?.id || null)
   const [input, setInput] = useState('')
+  const [chatImgs, setChatImgs] = useState([]) // 待发送图片 [{data, media_type, preview}]，最多 3 张
+  const chatFileRef = useRef(null)
   const [streaming, setStreaming] = useState(false)
   const [sideOpen, setSideOpen] = useState(false) // 移动端侧栏抽屉；桌面常驻
   const [sideQuery, setSideQuery] = useState('')
@@ -611,9 +658,17 @@ export default function Chat() {
       const before = genIdx >= 0 ? seq.slice(0, genIdx) : seq
       const full = before
         .filter((m) => m.content && !m.distill && !m.error)
-        .map((m) => ({ role: m.role, content: m.content }))
+        .map((m) => ({ role: m.role, content: m.content, ...(m.images?.length ? { images: m.images } : {}) }))
       // 锚定窗口（算法见顶部 anchorStart）；窗口外的旧对话由滚动摘要兜着（见 maybeCompress）
       const history = full.slice(anchorStart(full, a.contextCount))
+
+      // 当轮图片：末条 user 消息带存图引用 → 解析回 base64 挂 _imgs（发送瞬间在内存缓存里，
+      // 重roll 时从 worker 拉回）。只有末条真发图；历史轮图不重发，通道层只见 images 标记。
+      const lastH = history[history.length - 1]
+      if (lastH?.role === 'user' && lastH.images?.length) {
+        const imgs = await resolveChatImages(lastH.images)
+        if (imgs.length) lastH._imgs = imgs
+      }
 
       // 本会话的滚动摘要垫进 system（第 4 个缓存断点；无摘要则不占）
       if (sess?.summary) system.summary = sess.summary
@@ -729,12 +784,46 @@ export default function Chat() {
     schedulePush(curId)
   }
 
+  // 选图即压缩（最长边1280/JPEG0.82），出缩略预览；重复选同一张允许
+  const pickChatImages = async (e) => {
+    const files = [...(e.target.files || [])]
+    e.target.value = ''
+    if (!files.length) return
+    const room = 3 - chatImgs.length
+    if (room <= 0) {
+      showToast('最多 3 张图')
+      return
+    }
+    try {
+      const picked = []
+      for (const f of files.slice(0, room)) picked.push(await compressImage(f))
+      setChatImgs((prev) => [...prev, ...picked])
+    } catch (err) {
+      showToast(err?.message || '图片处理失败')
+    }
+  }
+
   const send = async () => {
     const text = input.trim()
-    if (!text || streaming) return
+    if ((!text && chatImgs.length === 0) || streaming) return
     if (!target) {
       showToast('请先在设置页添加供应商')
       return
+    }
+
+    // 带图先上传拿 id：失败就中断发送（图和文字都留在输入区，不丢内容）
+    let imgIds = null
+    if (chatImgs.length) {
+      try {
+        const r = await chatImageUpload(chatImgs.map(({ data, media_type }) => ({ data, media_type })))
+        imgIds = Array.isArray(r?.ids) && r.ids.length ? r.ids : null
+        if (!imgIds) throw new Error('图片没有存上，请再试一次')
+        // 发送瞬间的 base64 进内存缓存，本轮请求直接用、不用再拉回来
+        imgIds.forEach((id, i) => _chatImgData.set(id, { data: chatImgs[i].data, media_type: chatImgs[i].media_type }))
+      } catch (e) {
+        showToast(e?.message || '图片上传失败')
+        return
+      }
     }
 
     // 没有当前会话就建一个，标题取首条消息前 14 字
@@ -744,7 +833,7 @@ export default function Chat() {
       sid = 'c' + Date.now()
       const session = {
         id: sid,
-        title: text.replace(/\s+/g, ' ').slice(0, 14),
+        title: (text || '发来了图片').replace(/\s+/g, ' ').slice(0, 14),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         messages: [],
@@ -754,8 +843,10 @@ export default function Chat() {
     }
 
     setInput('')
+    setChatImgs([])
     // 追加用户消息 + 空的 assistant 占位，各自成一个新 slot
-    const uMsg = newMessage('user', { content: text })
+    // 纯图无文字时 content 用 [图片] 占位：上下文过滤/合并都以 content 非空为前提，别给空串
+    const uMsg = newMessage('user', { content: text || '[图片]', ...(imgIds ? { images: imgIds } : {}) })
     uMsg.slot = uMsg.mid
     const ph = newMessage('assistant', { content: '', thinking: '', tools: [] })
     ph.slot = ph.mid
@@ -1176,7 +1267,32 @@ export default function Chat() {
 
         {/* 输入区 */}
         <div className="chatx-inputwrap">
+          {chatImgs.length > 0 && (
+            <div className="feed-compose__previews chatx-imgpreviews">
+              {chatImgs.map((im, i) => (
+                <div key={i} className="feed-compose__preview">
+                  <img src={im.preview} alt="" />
+                  <button
+                    className="feed-compose__preview-del"
+                    onClick={() => setChatImgs((prev) => prev.filter((_, j) => j !== i))}
+                    aria-label="移除图片"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="chat-input chatx-input">
+            <button
+              className="chatx-attach"
+              onClick={() => chatFileRef.current?.click()}
+              disabled={streaming || chatImgs.length >= 3}
+              aria-label="发图片"
+            >
+              <ImagePlus size={18} />
+            </button>
+            <input ref={chatFileRef} type="file" accept="image/*" multiple hidden onChange={pickChatImages} />
             <textarea
               rows={1}
               value={input}
@@ -1189,7 +1305,7 @@ export default function Chat() {
                 <Square size={15} fill="currentColor" />
               </button>
             ) : (
-              <button className="chat-send" disabled={!input.trim()} onClick={send} aria-label="发送">
+              <button className="chat-send" disabled={!input.trim() && chatImgs.length === 0} onClick={send} aria-label="发送">
                 <Send size={17} />
               </button>
             )}
