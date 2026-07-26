@@ -352,6 +352,10 @@ export function momentUpdate(id, patch) {
 export function momentDelete(id) {
   return writeJSON('DELETE', `/api/moment/${id}`)
 }
+// 瞬记语义搜索（Recall 同款向量检索，layer=moment）：返回 { results: [{id,...}] }
+export function momentSearch(query, n = 12) {
+  return writeJSON('POST', '/api/mem2/moment-search', { query, n })
+}
 
 // ── 年轮：瞬记 / 日记（一期第 5 步）──────────────────────
 export async function momentAll() {
@@ -466,6 +470,15 @@ export function feedComment(id, content, author = 'yomi') {
 }
 export function feedCommentDelete(id, cid) {
   return request(`/api/feed/${id}/comment/${cid}`, { method: 'DELETE' })
+}
+
+// ── 聊天图片（发消息带图）：先传图拿 id，消息体只存 id 引用 ──
+// images: [{ data: base64, media_type }]（≤3、compressImage 压过）→ { ids }
+export function chatImageUpload(images) {
+  return request('/api/chat-image', { method: 'POST', body: { images } })
+}
+export function chatImageUrl(id) {
+  return `${BASE_URL}/api/chat-image/${id}?key=${encodeURIComponent(getAdminKey())}`
 }
 
 // ── 留言/灵感/信件的编辑与删除（worker 路由早已就绪，纯前端补齐）──
@@ -793,10 +806,24 @@ export function emotionDelete({ id, date }) {
 
 // ── 喝水 / 运动（日计数，走 KV 直存）──────────────
 export function waterGet(date) {
-  return getJSON('/api/water', { date })
+  return getJSON('/api/water', { date }) // { date, count, total_ml, entries:[{id,ts,ml,kind}] }
 }
 export function waterSet(date, count) {
   return request('/api/water', { method: 'POST', body: { date, count } })
+}
+// 喝水明细：一条 = ml + 饮品类别 + 服务端时间戳
+export function waterEntryAdd({ date, ml, kind }) {
+  return request('/api/water/entry', { method: 'POST', body: { date, ml, kind } })
+}
+export function waterEntryDelete({ date, id }) {
+  return request(`/api/water/entry?date=${encodeURIComponent(date)}&id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+// 喝水提醒（cron 推送）：{ enabled, interval_min, start_hour, end_hour, target_cups }
+export function waterReminderConfigGet() {
+  return getJSON('/api/config/water-reminder')
+}
+export function waterReminderConfigSet(cfg) {
+  return request('/api/config/water-reminder', { method: 'POST', body: cfg })
 }
 export function exerciseGet(date) {
   return getJSON('/api/exercise', { date })

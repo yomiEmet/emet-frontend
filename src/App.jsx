@@ -23,6 +23,7 @@ import Messages from './pages/Messages.jsx'
 import SpacePage from './pages/SpacePage.jsx'
 import IdeasPage from './pages/IdeasPage.jsx'
 import MoodPage from './pages/MoodPage.jsx'
+import WaterPage from './pages/WaterPage.jsx'
 import Settings from './pages/Settings.jsx'
 import IdleJournal from './pages/IdleJournal.jsx'
 import PeriodCalendar from './pages/PeriodCalendar.jsx'
@@ -33,7 +34,7 @@ export default function App() {
   // 档案页是整屏独立布局，隐藏全局底部 TabBar。
   const location = useLocation()
   // 档案与共读阅读器是整屏沉浸布局，隐藏底部 TabBar（阅读器底部有批注条，避免重叠）
-  const hideTabBar = location.pathname === '/archive' || location.pathname === '/mood' || location.pathname.startsWith('/books/')
+  const hideTabBar = location.pathname === '/archive' || location.pathname === '/mood' || location.pathname === '/water' || location.pathname.startsWith('/books/')
 
   // 启动时从云端拉设置（仅有密钥时）；若云端有更新则刷新一次让各组件重读。
   // 刷新后本地已是最新，再拉不会更新 → 不会循环。
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/tags" element={<Tags />} />
         <Route path="/tags/:tag" element={<TagDetail />} />
         <Route path="/mood" element={<MoodPage />} />
+        <Route path="/water" element={<WaterPage />} />
         <Route path="/space" element={<SpacePage />} />
         <Route path="/space/messages" element={<Messages />} />
         <Route path="/space/ideas" element={<IdeasPage />} />

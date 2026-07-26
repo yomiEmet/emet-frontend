@@ -8,6 +8,7 @@ import PushToggle from '../components/PushToggle.jsx'
 import HeartbeatToggle from '../components/HeartbeatToggle.jsx'
 import DailyToggle from '../components/DailyToggle.jsx'
 import NightGuardToggle from '../components/NightGuardToggle.jsx'
+import WaterReminderToggle from '../components/WaterReminderToggle.jsx'
 import KeepaliveToggle from '../components/KeepaliveToggle.jsx'
 import IdleToggle from '../components/IdleToggle.jsx'
 import DreamToggle from '../components/DreamToggle.jsx'
@@ -231,6 +232,7 @@ export default function Settings() {
           <PushToggle />
           <HeartbeatToggle />
           <NightGuardToggle />
+          <WaterReminderToggle />
           <DailyToggle />
           <IdleToggle />
           <DreamToggle />
