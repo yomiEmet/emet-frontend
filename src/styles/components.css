@@ -2362,6 +2362,44 @@
   border-radius: 4px;
 }
 
+/* ── 聊天发图（与动态发图同一套预览组件，聊天侧补自己的排布）── */
+.chatx-attach {
+  flex: none;
+  background: none;
+  border: none;
+  padding: 6px 2px 6px 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.chatx-attach:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.chatx-imgpreviews {
+  margin: 0 0 8px;
+}
+
+.chatx-msgimgs {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+
+.chatx-msgimgs img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: block;
+}
+
 /* ════════════════════════════════════════
    独处手账（二期 2-2）
    ════════════════════════════════════════ */

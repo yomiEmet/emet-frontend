@@ -308,7 +308,8 @@ function readBody(req) {
     req.on('data', (c) => {
       chunks.push(c)
       size += c.length
-      if (size > 2 * 1024 * 1024) reject(new Error('payload too large'))
+      // 12MB：带图消息（≤3 张压缩图 base64）+ 长历史也够；纯文字时代的 2MB 会拦发图
+      if (size > 12 * 1024 * 1024) reject(new Error('payload too large'))
     })
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
     req.on('error', reject)
@@ -350,7 +351,8 @@ function composeSystem(baseSystem, messages) {
   const history = lastUserIdx >= 0 ? messages.slice(0, lastUserIdx) : messages
   if (history.length === 0) return sys
   const transcript = history
-    .map((m) => (m.role === 'user' ? '用户' : '你') + '：' + (m.content || '').toString().trim())
+    // 历史轮的图不重发（文件早清了），只标注"当时带过图"，让上下文读得通
+    .map((m) => (m.role === 'user' ? '用户' : '你') + '：' + ((m.images && m.images.length) || m.had_images ? '［附了图片］' : '') + (m.content || '').toString().trim())
     .filter((s) => s.length > 2)
     .join('\n')
   if (!transcript) return sys
@@ -366,7 +368,31 @@ function composeSystem(baseSystem, messages) {
 function runClaude({ system, messages, model }, cb = {}) {
   const { onText, onThink, onSpawn, onTool } = cb
   return new Promise((resolve) => {
-    const promptText = buildPromptText(messages)
+    // ── 当轮图片：末条 user 消息带 images（[{data: base64, media_type}]）→ 落到桥目录的
+    //    临时文件，prompt 里给路径让 claude 用 Read 亲眼看（-p 无法直接吃 base64 消息块）。
+    //    权限用 --allowedTools Read(桥目录/**) 收口：模型读不了这个目录之外的任何文件。
+    const imgFiles = []
+    let lastUser = null
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { lastUser = messages[i]; break }
+    }
+    if (lastUser && Array.isArray(lastUser.images)) {
+      const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }
+      for (let i = 0; i < Math.min(lastUser.images.length, 3); i++) {
+        const im = lastUser.images[i] || {}
+        if (typeof im.data !== 'string' || !im.data) continue
+        try {
+          const fp = path.join(CHAT_CWD, `img-${Date.now()}-${i}.${EXT[im.media_type] || 'jpg'}`)
+          fs.writeFileSync(fp, Buffer.from(im.data.replace(/^data:[^;]+;base64,/, ''), 'base64'))
+          imgFiles.push(fp)
+        } catch { /* 单张落盘失败就少一张，不拦聊天 */ }
+      }
+    }
+
+    let promptText = buildPromptText(messages)
+    if (imgFiles.length) {
+      promptText = `（静怡随这条消息发来 ${imgFiles.length} 张图片，已保存为：\n${imgFiles.join('\n')}\n先用 Read 工具逐张看完图片再回复。回复里别提文件路径、别提"用工具查看"这类技术细节——就像你直接看到了她发的图。）\n\n${promptText}`
+    }
     const baseSystem = composeSystem(system, messages)
     const modelUsed = model && model.trim() ? model.trim() : '(claude 默认模型)'
     const systemFull = baseSystem
@@ -381,6 +407,8 @@ function runClaude({ system, messages, model }, cb = {}) {
       ? systemFull + '\n\n（系统说明：你接着 Emet 记忆库的读写工具。查记忆/日记/心情/动态/当前状态时，先用 ToolSearch 找到对应工具再调用，查不到就如实说、不要编造。写操作（记住某事、写日记、记心情、留言、记账等）在她明确要求或明显同意时才做，别自作主张；写完看工具的实际返回再告知结果，返回里有 error 就如实说失败，不要报成功。删除类工具你没有，别答应帮她删东西。）'
       : systemFull
 
+    // 发图时才开 Read（只许读桥目录，正斜杠形式的权限模式 Windows 也认）；平时一个内置工具不给
+    const readPattern = 'Read(' + CHAT_CWD.replace(/\\/g, '/') + '/**)'
     const args = [
       '-p', '--system-prompt', systemWithTools,
       '--effort', 'high', // 逼出思考过程
@@ -388,9 +416,11 @@ function runClaude({ system, messages, model }, cb = {}) {
     ]
     if (MCP_ENABLED) {
       // ToolSearch 是 MCP 延迟加载的引擎，必须保留；其余内置工具一个不给
-      args.push('--tools', 'ToolSearch', '--mcp-config', MCP_CFG_PATH, '--strict-mcp-config', '--allowedTools', 'mcp__emet')
+      args.push('--tools', imgFiles.length ? 'ToolSearch,Read' : 'ToolSearch', '--mcp-config', MCP_CFG_PATH, '--strict-mcp-config',
+        '--allowedTools', imgFiles.length ? 'mcp__emet,' + readPattern : 'mcp__emet')
     } else {
-      args.push('--tools', '')
+      args.push('--tools', imgFiles.length ? 'Read' : '')
+      if (imgFiles.length) args.push('--allowedTools', readPattern)
     }
     if (model && model.trim()) args.push('--model', model.trim())
 
@@ -434,7 +464,8 @@ function runClaude({ system, messages, model }, cb = {}) {
       } else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_start') {
         const cb2 = ev.event.content_block || {}
         if (cb2.type === 'tool_use' && cb2.id) {
-          if (cb2.name === 'ToolSearch') hiddenToolIds.add(cb2.id)
+          // ToolSearch 是内部引擎、Read 是看图动作——都对用户隐藏（"他看了图"而不是"他调了工具"）
+          if (cb2.name === 'ToolSearch' || cb2.name === 'Read') hiddenToolIds.add(cb2.id)
           else {
             toolMeta.set(cb2.id, { name: cb2.name })
             onTool?.({ phase: 'start', id: cb2.id, name: cb2.name })
@@ -442,7 +473,7 @@ function runClaude({ system, messages, model }, cb = {}) {
         }
       } else if (ev.type === 'assistant' && Array.isArray(ev.message?.content)) {
         for (const b of ev.message.content) {
-          if (b.type === 'tool_use' && b.id && !hiddenToolIds.has(b.id) && b.name !== 'ToolSearch') {
+          if (b.type === 'tool_use' && b.id && !hiddenToolIds.has(b.id) && b.name !== 'ToolSearch' && b.name !== 'Read') {
             toolMeta.set(b.id, { name: b.name, input: b.input })
             onTool?.({ phase: 'input', id: b.id, name: b.name, input: b.input })
           }
@@ -488,6 +519,8 @@ function runClaude({ system, messages, model }, cb = {}) {
 
     child.on('close', (code) => {
       if (buf.trim()) handleLine(buf) // 收尾残行
+      // 图片临时文件用完即删（下一轮历史不重发图，留着只占地方）
+      for (const fp of imgFiles) { try { fs.unlinkSync(fp) } catch { /* 已删/被占都无所谓 */ } }
       const stampOut = new Date().toISOString().slice(11, 19)
       console.log(`[${stampOut}] ← claude --model ${modelUsed} 完成 (exit ${code})`)
       const finalText = full || resultText
