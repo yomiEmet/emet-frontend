@@ -7,7 +7,7 @@ import { CATEGORIES } from '../utils/categories.js'
 import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, formatDateFriendly, weekdayZh } from '../utils/time.js'
 import { DIARY_AUTHORS, diaryAuthorLabel } from '../utils/authors.js'
 import { showToast } from '../utils/toast.js'
-import { memoryAll, countByCategory, momentAll, diaryAll, diaryDate, getData } from '../api.js'
+import { memoryAll, countByCategory, momentAll, momentSearch, diaryAll, diaryDate, getData } from '../api.js'
 import { smartSearch } from '../utils/search.js'
 
 const FILTERS = [{ key: 'all', label: '全部' }, ...CATEGORIES]
@@ -516,6 +516,34 @@ function MomentTimeline() {
   // 搜索：smartSearch 按相关性排（与记忆 tab 同一引擎），此时不按月分组
   const searched = useMemo(() => (list && q ? smartSearch(list, q) : null), [list, q])
 
+  // 语义联想（Recall 同款向量检索）：本地关键词搜不到的换说法也能捞回来。
+  // 防抖 450ms；失败静默（只剩本地结果，离线不碍事）。null=未搜，[]=无命中。
+  const [semHits, setSemHits] = useState(null)
+  useEffect(() => {
+    if (!q) {
+      setSemHits(null)
+      return
+    }
+    let alive = true
+    const timer = setTimeout(() => {
+      momentSearch(q)
+        .then((r) => alive && setSemHits(r?.results || []))
+        .catch(() => alive && setSemHits([]))
+    }, 450)
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [q])
+
+  // 语义命中映射回本地列表对象（渲染/跳转复用现有条目；已被本地结果覆盖的去重）
+  const semExtra = useMemo(() => {
+    if (!q || !semHits || !list) return []
+    const seen = new Set((searched || []).map((m) => m.id))
+    const byId = new Map(list.map((m) => [m.id, m]))
+    return semHits.map((h) => byId.get(h.id)).filter((m) => m && !seen.has(m.id))
+  }, [q, semHits, searched, list])
+
   // 按东八区月份分组（list 已按时间倒序）
   const groups = useMemo(() => {
     if (!list || q) return []
@@ -659,12 +687,17 @@ function MomentTimeline() {
       )}
 
       {q ? (
-        /* 搜索结果：按相关性平铺，不分月 */
+        /* 搜索结果：本地关键词命中在前，语义联想补在后（不分月）*/
         <div className="timeline">
-          {searched?.length ? (
-            <div className="tl-month">{searched.map(renderItem)}</div>
-          ) : (
-            <p className="faint list-hint">没有匹配的瞬记</p>
+          {searched?.length ? <div className="tl-month">{searched.map(renderItem)}</div> : null}
+          {semExtra.length > 0 && (
+            <>
+              <p className="faint list-hint">语义联想</p>
+              <div className="tl-month">{semExtra.map(renderItem)}</div>
+            </>
+          )}
+          {!searched?.length && !semExtra.length && (
+            <p className="faint list-hint">{semHits === null ? '搜索中…' : '没有匹配的瞬记'}</p>
           )}
         </div>
       ) : (
