@@ -109,6 +109,10 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
     systemBlocks = []
     if (system.stable) systemBlocks.push({ type: 'text', text: system.stable, cache_control: { type: 'ephemeral', ttl: '1h' } })
     if (system.semi) systemBlocks.push({ type: 'text', text: system.semi, cache_control: { type: 'ephemeral', ttl: '1h' } })
+    // 跨窗口衔接（会话内静态、正文自带标题行）：不单独占断点——后面的 summary 断点或 BP4
+    // 会把它罩进缓存前缀。放 summary 之前：summary 会滚动重写，衔接永远不动，顺序反了
+    // 每次摘要更新都会把衔接一起挤出缓存前缀。
+    if (system.carry) systemBlocks.push({ type: 'text', text: system.carry })
     // 滚动摘要（Step3b）：只在锚点前移时更新（约每 10 轮），与窗口重建同拍，缓存代价顺带摊掉。
     // 断点用量：stable + semi + summary + BP4 = 4，正好顶满上限。
     if (system.summary) systemBlocks.push({ type: 'text', text: '【本次对话此前内容的摘要】\n' + system.summary, cache_control: { type: 'ephemeral', ttl: '1h' } })
@@ -272,8 +276,8 @@ async function streamAnthropic({ provider, model, system, messages, maxTokens, t
 //   POST {baseUrl}/chat   body { system, messages }
 //   响应：SSE 流，默认事件 data: { text }；自定义事件 done / error
 async function streamClaudeCli({ provider, model, system, messages, signal, onDelta, onThinking, onToolUse }) {
-  // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去
-  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
+  // system 可能是分段对象（见 chatSystemPrompt）；本机桥只吃字符串，拼回去（含跨窗口衔接段）
+  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.carry, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   // model 透传给后端；跳过"本机订阅"这种占位（让 claude 走自己的默认）
   const payloadModel = model && model !== '本机订阅' ? model : ''
 
@@ -458,8 +462,8 @@ function sleep(ms, signal) {
 
 // ── OpenAI 兼容（中转站常见格式）─────────────────────────
 async function streamOpenAI({ provider, model, system, messages, temperature, maxTokens, onDelta, onThinking, signal }) {
-  // system 可能是分段对象（见 chatSystemPrompt）；OpenAI 兼容格式只吃字符串，拼回去
-  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
+  // system 可能是分段对象（见 chatSystemPrompt）；OpenAI 兼容格式只吃字符串，拼回去（含跨窗口衔接段）
+  const sys = system && typeof system === 'object' ? [system.stable, system.semi, system.carry, system.summary ? '【本次对话此前内容的摘要】\n' + system.summary : '', system.volatile].filter(Boolean).join('\n') : system
   const oaiMessages = [
     ...(sys ? [{ role: 'system', content: sys }] : []),
     ...messages.map((m) => ({ role: m.role, content: m.content })),

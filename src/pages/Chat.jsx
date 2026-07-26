@@ -9,7 +9,7 @@ import { loadProviders, getActiveTarget, setActiveTarget, isProviderReady } from
 import { loadAssistant, saveAssistant } from '../utils/assistant.js'
 import AssistantSettings, { AssistantAvatar } from '../components/AssistantSettings.jsx'
 import { showToast } from '../utils/toast.js'
-import { formatCardTime } from '../utils/time.js'
+import { formatCardTime, toCST } from '../utils/time.js'
 // 会话存储集中在 utils/sessions.js（设置页导出/导入共用同一来源）
 import { loadSessions, saveSessions as persistSessions, newMessage } from '../utils/sessions.js'
 import { pull, schedulePush, deleteRemote } from '../utils/sync.js'
@@ -107,6 +107,69 @@ function buildRows(session, streamingMid) {
     rows.push({ slot: s, m: variants[idx], idx, count: variants.length, variantMids: variants.map((v) => v.mid) })
   }
   return rows
+}
+
+// ── 跨窗口衔接（carry）：开新窗口时把上一个活跃窗口的滚动摘要+结尾原文快照进新会话，
+//    注入 system（见 runTurn / anthropic.js）→ 换窗口像没换过一样，窗口只是时间上的切分。
+//    快照存会话 carry 字段：创建时定格、之后不变（缓存前缀稳定），随会话云同步。──
+const CARRY_TAIL_MSGS = 8 // 结尾原文最多带几条
+const CARRY_TAIL_CHARS = 400 // 每条截断
+const CARRY_TAIL_TOTAL = 2400 // 结尾原文总字数封顶（超了从最早的行开始丢）
+
+// 会话的激活内容序列：与滚动摘要 summaryUpTo 的下标语义共用一套
+//（maybeCompress / prepareCarry / buildCarry 三处必须用同一个构造，否则摘要覆盖范围会错位）
+function contentSeq(s) {
+  return buildRows(s, null).map((r) => r.m).filter((m) => m.content && !m.distill && !m.error)
+}
+
+// 上一个活跃窗口：非删除、有真实内容、时间最新的会话
+function latestRealSession(sessions, excludeId) {
+  let best = null
+  let bestT = -1
+  for (const s of sessions) {
+    if (!s || s.deleted || s.id === excludeId) continue
+    if (!contentSeq(s).length) continue
+    const t = new Date(s.updated_at || s.created_at || 0).getTime() || 0
+    if (t > bestT) {
+      bestT = t
+      best = s
+    }
+  }
+  return best
+}
+
+// "2026年7月26日 03:12"（东八区）——衔接头里的绝对时间，配合 volatile 里的当前时间，
+// 模型自己就能拿捏"刚才/昨天/上周"
+function carryTimeZh(iso) {
+  if (!iso) return '时间不详'
+  const d = toCST(iso)
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+// 即时版衔接快照（不调模型，永远可用）：上一窗口的滚动摘要（如有）+ 结尾原文。
+// prev 没有真实内容时返回 null。
+function buildCarry(prev, aName) {
+  const seq = contentSeq(prev)
+  if (!seq.length) return null
+  const tail = seq.slice(-CARRY_TAIL_MSGS)
+  const lines = tail.map((m) => {
+    let t = (m.content || '').trim().replace(/\s+/g, ' ')
+    if (t.length > CARRY_TAIL_CHARS) t = t.slice(0, CARRY_TAIL_CHARS) + '…'
+    return `${m.role === 'user' ? '静怡' : aName}：${t}`
+  })
+  while (lines.length > 1 && lines.join('\n').length > CARRY_TAIL_TOTAL) lines.shift()
+  const endedAt = tail[tail.length - 1]?.ts || prev.updated_at || ''
+  const title = (prev.title || '未命名对话').trim()
+  const text = [
+    '【上一段对话的衔接】',
+    `你和静怡的对话按窗口切分，这是上一个窗口「${title}」的收尾，最后一条消息在 ${carryTimeZh(endedAt)}。` +
+      '对照当前时间拿捏分寸：隔得近就自然接着聊，隔得久就当作上次聊过的事，不必刻意复述。',
+    ...(prev.summary ? ['', '较早部分的摘要：', prev.summary] : []),
+    '',
+    '结尾原文：',
+    ...lines,
+  ].join('\n')
+  return { from: prev.id, title, endedAt, text }
 }
 
 // 版本切换器 < i/n >：只在同一位置有多个版本时出现
@@ -247,6 +310,7 @@ export default function Chat() {
   const [streamingMid, setStreamingMid] = useState(null) // 正在生成的占位 mid（渲染光标 + 组上下文）
   const bottomRef = useRef(null)
   const abortRef = useRef(null)
+  const pendingCarryRef = useRef(null) // { prevId, promise }：点「新对话」时的跨窗口衔接预热
 
   const pickModel = (providerId, model) => {
     setActiveTarget(providerId, model)
@@ -377,6 +441,10 @@ export default function Chat() {
 
   const newSession = () => {
     if (streaming) return
+    // 跨窗口衔接预热：点「新对话」这一刻就锁定上一个活跃窗口、开始准备衔接内容
+    //（可能含一次摘要补全），等首条消息真正发出时多半已就绪，不拖第一句话的响应
+    const prev = latestRealSession(loadSessions())
+    pendingCarryRef.current = prev ? { prevId: prev.id, promise: prepareCarry(prev.id) } : null
     setCurId(null)
     setSideOpen(false)
   }
@@ -463,8 +531,8 @@ export default function Chat() {
     try {
       const s = loadSessions().find((x) => x.id === sid)
       if (!s) return
-      // 只压缩当前激活的变体序列（切走的旧版本不进摘要）
-      const full = buildRows(s, null).map((r) => r.m).filter((m) => m.content && !m.distill && !m.error)
+      // 只压缩当前激活的变体序列（切走的旧版本不进摘要）；构造必须与 carry 侧共用 contentSeq
+      const full = contentSeq(s)
       const start = anchorStart(full, loadAssistant().contextCount)
       const upTo = s.summaryUpTo || 0
       if (start <= upTo) return // 没有新滑出的消息
@@ -486,6 +554,42 @@ export default function Chat() {
     } catch {
       /* 摘要失败不影响聊天 */
     }
+  }
+
+  // 衔接预热（跨窗口记忆）：若上一窗口有大段内容未被滚动摘要覆盖（短/中会话从没触发过
+  // maybeCompress），补跑一次摘要合并并写回上一会话——summaryUpTo 只前进，多设备合并
+  // 天然兼容（mergeSession 成对取进度更远的一方）。失败/无供应商静默降级为即时版快照。
+  const prepareCarry = async (prevId) => {
+    const load = () => loadSessions().find((x) => x.id === prevId)
+    const aName = loadAssistant().name || 'Emet'
+    const prev = load()
+    if (!prev) return null
+    try {
+      const seq = contentSeq(prev)
+      const head = Math.max(0, seq.length - CARRY_TAIL_MSGS) // 结尾原文之外的部分才需要摘要盖住
+      const upTo = prev.summaryUpTo || 0
+      if (head - upTo >= 5) {
+        const lines = seq
+          .slice(upTo, head)
+          .map((m) => `${m.role === 'user' ? '静怡' : aName}：${(m.content || '').trim()}`)
+          .join('\n')
+        const prompt = (prev.summary ? `【旧摘要】\n${prev.summary}\n\n` : '') + `【新滑出窗口的对话】\n${lines}`
+        const text = (await streamChat({ system: SUMMARY_SYSTEM, messages: [{ role: 'user', content: prompt }], maxTokens: 1000 })).trim()
+        if (text) {
+          update((all) =>
+            all.map((x) =>
+              x.id === prevId
+                ? { ...x, summary: text.slice(0, 1200), summaryUpTo: head, updated_at: new Date().toISOString() }
+                : x,
+            ),
+          )
+          schedulePush(prevId)
+        }
+      }
+    } catch {
+      /* 摘要补全失败 → 用现有摘要+结尾原文兜底 */
+    }
+    return buildCarry(load() || prev, aName)
   }
 
   // 组装请求并跑一轮流式。genMid = 要生成的那条 assistant 占位 mid。
@@ -513,6 +617,8 @@ export default function Chat() {
 
       // 本会话的滚动摘要垫进 system（第 4 个缓存断点；无摘要则不占）
       if (sess?.summary) system.summary = sess.summary
+      // 跨窗口衔接快照（会话内静态）：垫在 semi 与 summary 之间、不占断点（见 anthropic.js）
+      if (sess?.carry?.text) system.carry = sess.carry.text
 
       // Paramecium 目录注入：按当前话题检索记忆标题目录（用户道=最近3条user消息，
       // echo道=上条回复的余味）。5s 超时降级为不注入，绝不拦聊天。
@@ -633,6 +739,7 @@ export default function Chat() {
 
     // 没有当前会话就建一个，标题取首条消息前 14 字
     let sid = curId
+    const isNew = !sid
     if (!sid) {
       sid = 'c' + Date.now()
       const session = {
@@ -657,6 +764,23 @@ export default function Chat() {
         s.id === sid ? { ...s, updated_at: new Date().toISOString(), messages: [...s.messages, uMsg, ph] } : s,
       ),
     )
+
+    // 跨窗口衔接：新窗口把上一个活跃窗口的摘要+结尾快照进本会话（记忆跨窗口连续，
+    // 窗口只是时间上的切分）。预热没就绪最多等 4 秒；超时/没预热用即时版；没有上一窗口跳过。
+    // 放在消息回显之后：她的话即时上屏，只有 Emet 开口最多晚这几秒。
+    if (isNew) {
+      const prevSess = latestRealSession(loadSessions(), sid)
+      if (prevSess) {
+        const pending = pendingCarryRef.current
+        let carry = null
+        if (pending?.prevId === prevSess.id) {
+          carry = await Promise.race([pending.promise, new Promise((r) => setTimeout(r, 4000))])
+        }
+        if (!carry) carry = buildCarry(prevSess, loadAssistant().name || 'Emet')
+        if (carry) update((all) => all.map((s) => (s.id === sid ? { ...s, carry } : s)))
+      }
+      pendingCarryRef.current = null
+    }
 
     await runTurn(sid, ph.mid)
   }
@@ -856,6 +980,13 @@ export default function Chat() {
         )}
         {rows.length === 0 && target && (
           <p className="faint chat-empty">说点什么吧。</p>
+        )}
+        {/* 跨窗口衔接标记：像一条时间切分线，点开可见从上一窗口带过来的内容 */}
+        {cur?.carry && (
+          <details className="chatx-carry">
+            <summary>衔接自「{cur.carry.title}」 · {formatCardTime(cur.carry.endedAt)}</summary>
+            <pre>{cur.carry.text}</pre>
+          </details>
         )}
         {rows.map((row, i) => {
           const m = row.m
