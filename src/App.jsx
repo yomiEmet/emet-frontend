@@ -25,6 +25,7 @@ import IdeasPage from './pages/IdeasPage.jsx'
 import MoodPage from './pages/MoodPage.jsx'
 import WaterPage from './pages/WaterPage.jsx'
 import Settings from './pages/Settings.jsx'
+import Automations from './pages/Automations.jsx'
 import IdleJournal from './pages/IdleJournal.jsx'
 import PeriodCalendar from './pages/PeriodCalendar.jsx'
 import Bookshelf from './pages/Bookshelf.jsx'
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/space/ideas" element={<IdeasPage />} />
         <Route path="/mail" element={<MailRedirect />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/automations" element={<Automations />} />
         <Route path="/archive" element={<ArchivePage />} />
         <Route path="/idle" element={<IdleJournal />} />
         <Route path="/period" element={<PeriodCalendar />} />

@@ -238,6 +238,14 @@ export default function Settings() {
           <DreamToggle />
           <FeedReactToggle />
           <AnnivToggle />
+          {/* 自动化控制台入口：上面每个自动化的 prompt/渠道/模型都在里面改 */}
+          <button type="button" className="set-row" onClick={() => navigate('/automations')}>
+            <span className="set-row__main">
+              <span className="set-row__name">自动化控制台</span>
+              <span className="set-row__desc">看和改每个自动化背后的 prompt、渠道、模型</span>
+            </span>
+            <ChevronRight size={16} className="set-caret" />
+          </button>
         </div>
       </section>
 

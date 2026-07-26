@@ -472,6 +472,14 @@ export function feedCommentDelete(id, cid) {
   return request(`/api/feed/${id}/comment/${cid}`, { method: 'DELETE' })
 }
 
+// ── 自动化控制台：各自动化的 prompt 模板/渠道/模型（/automations 页）──
+export function autopromptGet() {
+  return getJSON('/api/autoprompt') // { config, defs }
+}
+export function autopromptSet(body) {
+  return request('/api/autoprompt', { method: 'POST', body }) // { task, providerId?, model?, prompt? }，空串=清除
+}
+
 // ── 聊天图片（发消息带图）：先传图拿 id，消息体只存 id 引用 ──
 // images: [{ data: base64, media_type }]（≤3、compressImage 压过）→ { ids }
 export function chatImageUpload(images) {
