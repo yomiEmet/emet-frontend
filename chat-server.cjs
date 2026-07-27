@@ -41,6 +41,11 @@ const DEFAULT_ORIGINS = [
   // 线上 Cloudflare Pages 前端也放行：让部署好的 https 页面能连本机桥
   // （配合下面 corsHeaders 里的 allow-private-network 头，过浏览器的“本地网络访问”握手）
   'https://emet-frontend.pages.dev',
+  // 分家后：emethome.com=云端家(Pages)。在电脑上开它时，前端会探 localhost:8000
+  // 桥直连（流式），这里放行该来源；cc.emethome.com 经隧道同源直连本不需要 CORS，
+  // 一并列上防前端探测路径变化。
+  'https://emethome.com',
+  'https://cc.emethome.com',
 ]
 const EXTRA_ORIGINS = (process.env.CC_BRIDGE_CORS || '')
   .split(',')
