@@ -6,7 +6,7 @@
 // - 本机 claude-cli：POST {baseUrl}/chat，把对话+system 交给本机 chat-server.cjs，
 //   后端 spawn `claude -p` 把订阅额度当聊天用，文字流 SSE 吐回（无 [DONE]，靠 done/error 事件）
 import { getActiveTarget } from './providers.js'
-import { request, BASE_URL, getAdminKey } from '../api/client.js'
+import { request } from '../api/client.js'
 
 // baseUrl 归一：去尾斜杠；没带 /v1 的补上
 function endpoint(base, path) {
@@ -308,13 +308,11 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
       : m.images?.length ? { had_images: true } : {}),
   }))
 
-  // ── 直连 vs 中转 自动选择 ──────────────────────────────
-  // 1) 页面自己的来源就是桥吗？——同源探 /health 看身份标记。
-  //    命中说明本页由桥托管：localhost:8000（电脑/同网）或 emethome.com（隧道）。
-  //    同源直连既免 CORS 又能 SSE 流式，最快。pages.dev 这种 SPA 对 /health 回 index.html，
-  //    没有标记 → 不误判。
-  // 2) 否则探 provider.baseUrl（电脑 dev 页探本机 localhost 桥）。
-  // 3) 都探不到 → 手机线上无桥 → 云端中转。
+  // ── 直连通道自动选择（信箱中转已退役 2026-07-31：无流式无思考还慢，静怡拍板拔掉）──
+  // 1) 页面自己的来源就是桥吗？——同源探 /health 看身份标记（cc.emethome.com / localhost:8000）。
+  // 2) 否则探 provider.baseUrl（电脑上开云端家 → 探本机 localhost 桥，最快）。
+  // 3) 否则探 cc 门（手机上开云端家 → 带 Access 登录 cookie 跨域直连，需每月在 cc 门登录一次）。
+  // 全探不到 → 直接明说怎么恢复，不再悄悄降级成又慢又哑的信箱。
   let directBase = null
   if (typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol)) {
     const sameOrigin = window.location.origin.replace(/\/+$/, '')
@@ -324,21 +322,24 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
     const cand = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
     if (await bridgeReachable(cand)) directBase = cand
   }
-
-  if (directBase) {
-    try {
-      return await streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages: bridgeMessages, payloadModel, signal, onDelta, onThinking, onToolUse })
-    } catch (e) {
-      // 405/404 = 探测误判，那个"桥"其实是静态托管（旧缓存/域名搬家）→ 静默回落中转，别把 405 甩给用户
-      if (e && (e.status === 405 || e.status === 404)) {
-        return relayViaWorker({ sys, messages: bridgeMessages, payloadModel, signal, onDelta })
-      }
-      throw e
-    }
+  if (!directBase && typeof window !== 'undefined' && window.location.origin !== CC_DOOR) {
+    if (await bridgeReachable(CC_DOOR)) directBase = CC_DOOR
   }
-  // 探不到本机桥 → 手机场景，走云端 relay 中转（中转不带思考，只回最终文本）
-  return relayViaWorker({ sys, messages: bridgeMessages, payloadModel, signal, onDelta })
+
+  if (!directBase) throw new Error(NO_BRIDGE_MSG)
+  try {
+    return await streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages: bridgeMessages, payloadModel, signal, onDelta, onThinking, onToolUse })
+  } catch (e) {
+    // 405/404 = 探测误判，那个"桥"其实是静态托管（旧缓存/域名搬家）→ 同样给恢复指引
+    if (e && (e.status === 405 || e.status === 404)) throw new Error(NO_BRIDGE_MSG)
+    throw e
+  }
 }
+
+// 书房门：电脑开着时的流式直连入口（Access 邮箱锁在前，浏览器带登录 cookie 过闸）
+const CC_DOOR = 'https://cc.emethome.com'
+const NO_BRIDGE_MSG =
+  '流式通道没接上：手机→打开 cc.emethome.com 登录一次再回来；电脑→确认「启动本机聊天」窗口开着（还不行就双击重开一次）。'
 
 // 探测某来源是不是"本机桥"：/health 必须回带 bridge:'emet-local' 标记。
 // 只看 r.ok 不够——SPA（pages.dev）对任意路径都回 index.html 200，会误判。
@@ -348,7 +349,8 @@ async function bridgeReachable(base) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 1500)
     // no-store：绕开 SW/HTTP 缓存——/health 是实时身份探测，吃到旧缓存会误判直连
-    const r = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store' })
+    // credentials:'include'：探 cc 门要带 Access 登录 cookie（同站子域，Lax 也会带）；对 localhost 无副作用
+    const r = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store', credentials: 'include' })
     clearTimeout(timer)
     if (!r.ok) return false
     const j = await r.json().catch(() => null)
@@ -370,6 +372,7 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
       headers,
       body: JSON.stringify({ system: sys, messages, model: payloadModel }),
       signal,
+      credentials: 'include', // 走 cc 门要带 Access 登录 cookie；同源/localhost 场景无副作用
     })
   } catch (e) {
     throw new Error('连不上本机后端：' + (e?.message || e) + '。请先在电脑上启动本机桥')
@@ -424,77 +427,8 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
   return full
 }
 
-// 云端中转：把问题投给 worker，电脑上的桥会认领并跑，再从 worker 取结果。
-// 手机在线上 Emet 用这条路——不需要装桥、不需要填暗号，凭已存的访问密钥即可。
-async function relayViaWorker({ sys, messages, payloadModel, signal, onDelta }) {
-  if (!getAdminKey()) throw new Error('请先在设置页填写访问密钥')
-  const headers = { 'content-type': 'application/json', 'X-Admin-Key': getAdminKey() }
-
-  // 1) 投递
-  let ask
-  try {
-    const r = await fetch(BASE_URL + '/api/relay/ask', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ system: sys, messages, model: payloadModel }),
-      signal,
-    })
-    if (!r.ok) await throwHttpError(r)
-    ask = await r.json()
-  } catch (e) {
-    if (e.name === 'AbortError') throw e
-    throw new Error('发送失败：' + (e?.message || e))
-  }
-  if (!ask?.id) throw new Error('中转未返回任务号')
-
-  // 2) 轮询结果（最长约 240s，与 worker 里 relay:ans 的 TTL 对齐）
-  // 首查快（0.4s）后续 0.8s 一次，尽量压低"查信箱"的感知延迟
-  const started = Date.now()
-  let first = true
-  for (;;) {
-    if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-    await sleep(first ? 400 : 800, signal)
-    first = false
-    let poll
-    try {
-      const r = await fetch(BASE_URL + '/api/relay/poll?id=' + encodeURIComponent(ask.id), { headers, signal })
-      // 认证/权限类错误是确定性的，别当"还在等"干耗——立即失败给准信
-      if (r.status === 401 || r.status === 403) {
-        throw new Error('访问密钥失效，请到设置页重新填写')
-      }
-      if (!r.ok) await throwHttpError(r)
-      poll = await r.json()
-    } catch (e) {
-      if (e.name === 'AbortError') throw e
-      // 确定性错误（上面抛的密钥失效）直接冒泡；仅网络抖动才继续等
-      if (/密钥失效/.test(e.message || '')) throw e
-      poll = { pending: true }
-    }
-    if (poll?.done) {
-      if (!poll.ok) throw new Error(poll.error || '本机桥执行失败')
-      const text = poll.text || ''
-      onDelta?.(text, text) // 中转不流式，一次性给全文
-      return text
-    }
-    // 放宽到 240s：本机 claude -p 长回答/冷启动可能过百秒；与 worker 坑位 TTL(300s) 对齐留余量
-    if (Date.now() - started > 240000) {
-      throw new Error('电脑上的本机桥没有响应（超时）。确认电脑开着、桥在运行')
-    }
-  }
-}
-
-// 可被 abort 打断的 sleep
-function sleep(ms, signal) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms)
-    if (signal) {
-      signal.addEventListener('abort', () => {
-        clearTimeout(t)
-        reject(new DOMException('aborted', 'AbortError'))
-      }, { once: true })
-    }
-  })
-}
+// （云端信箱中转 relayViaWorker 已于 2026-07-31 退役删除：无流式无思考还慢。
+//   worker 侧 /api/relay/* 接口暂留但无人调用；如需考古看 git 历史。）
 
 // ── OpenAI 兼容（中转站常见格式）─────────────────────────
 async function streamOpenAI({ provider, model, system, messages, temperature, maxTokens, onDelta, onThinking, signal }) {

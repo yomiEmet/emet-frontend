@@ -23,7 +23,9 @@ const { spawn, execSync } = require('child_process')
 // 且必须同时设 CC_BRIDGE_TOKEN（暗号）——否则同网别人也能白用你的额度。
 const HOST = (process.env.CC_BRIDGE_HOST || '127.0.0.1').trim()
 const PORT = Number(process.env.CC_BRIDGE_PORT) || 8000
-const NO_RELAY = process.env.CC_NO_RELAY === '1' // 测试用：跳过中转轮询，避免和主桥抢活
+// 中转已退役（2026-07-31 静怡拍板：无流式无思考还慢，被 cc 门跨域直连取代）。
+// 默认不再轮询云端信箱；如需临时复活设 CC_RELAY=1（worker 侧接口仍在）。
+const RELAY_ON = process.env.CC_RELAY === '1'
 
 // ── 鉴权：可选的 Bearer Token（环境变量 CC_BRIDGE_TOKEN）─────────────
 // 设了：所有 /chat 请求必须带 Authorization: Bearer <同样的字符串>
@@ -223,6 +225,9 @@ function corsHeaders(req) {
     'access-control-allow-origin': allow,
     'access-control-allow-methods': 'POST, GET, OPTIONS',
     'access-control-allow-headers': 'content-type, authorization',
+    // 云端家(emethome.com)跨域直连 cc 门要带 Access 登录 cookie（credentials:'include'），
+    // 带凭证的跨域请求浏览器要求响应必须有下面这行（且 allow-origin 不能是 *，上面是精确回显，满足）
+    'access-control-allow-credentials': 'true',
     // https 公网页面（Pages）访问本机 http://localhost 属于 Private Network Access，
     // 浏览器预检会带 Access-Control-Request-Private-Network: true，服务端必须回应下面这行才放行。
     'access-control-allow-private-network': 'true',
@@ -629,10 +634,10 @@ server.listen(PORT, HOST, () => {
   if (EXTRA_ORIGINS.length) {
     console.log(`  额外 CORS：${EXTRA_ORIGINS.join(', ')}`)
   }
-  if (ADMIN_KEY && !NO_RELAY) {
+  if (ADMIN_KEY && RELAY_ON) {
     relaySelfTestThenLoop()
   } else {
-    console.log(`  手机中转：未开（缺 .cc-admin-key）—— 只影响手机线上聊天，本机直连不受影响`)
+    console.log('  手机中转：已退役（手机流式请走 cc.emethome.com；临时复活设 CC_RELAY=1）')
   }
   console.log('  退出按 Ctrl+C')
 })
