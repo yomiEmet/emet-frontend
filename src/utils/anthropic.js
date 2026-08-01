@@ -365,6 +365,15 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
   const headers = { 'content-type': 'application/json' }
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 的 CC_BRIDGE_TOKEN
   if (apiKey) headers.authorization = 'Bearer ' + apiKey
+  // cc 门在 Access 登录墙后面：浏览器的"预检"请求(OPTIONS)按规范不带 cookie，
+  // 会被登录墙拦下 → 整个跨域直连失败，除非去 Cloudflare 后台配一堆 CORS(静怡看不懂)。
+  // 解法：把请求伪装成"简单请求"(text/plain + 无 authorization 头) → 浏览器不发预检，
+  // 带着登录 cookie 的正式请求直达。桥端 readBody 解析从不看 content-type；
+  // cc 门的鉴权靠 Access 注入的邮箱头，桥不看暗号——两个头都可以安全省掉。
+  if (base === CC_DOOR) {
+    headers['content-type'] = 'text/plain;charset=UTF-8'
+    delete headers.authorization
+  }
   let res
   try {
     res = await fetch(base + '/chat', {
