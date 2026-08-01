@@ -66,7 +66,9 @@ async function throwHttpError(res) {
   } catch {
     /* 非 JSON 错误体 */
   }
-  throw new Error(msg)
+  const err = new Error(msg)
+  err.status = res.status // 让调用方能按状态码分流（如 405=对象根本不是桥 → 回落中转）
+  throw err
 }
 
 // 合并 usage：message_start 带 input/cache 字段，message_delta 带最终 output_tokens，
@@ -324,7 +326,15 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   }
 
   if (directBase) {
-    return streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages: bridgeMessages, payloadModel, signal, onDelta, onThinking, onToolUse })
+    try {
+      return await streamClaudeDirect({ base: directBase, apiKey: provider.apiKey, sys, messages: bridgeMessages, payloadModel, signal, onDelta, onThinking, onToolUse })
+    } catch (e) {
+      // 405/404 = 探测误判，那个"桥"其实是静态托管（旧缓存/域名搬家）→ 静默回落中转，别把 405 甩给用户
+      if (e && (e.status === 405 || e.status === 404)) {
+        return relayViaWorker({ sys, messages: bridgeMessages, payloadModel, signal, onDelta })
+      }
+      throw e
+    }
   }
   // 探不到本机桥 → 手机场景，走云端 relay 中转（中转不带思考，只回最终文本）
   return relayViaWorker({ sys, messages: bridgeMessages, payloadModel, signal, onDelta })
@@ -337,7 +347,8 @@ async function bridgeReachable(base) {
   try {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 1500)
-    const r = await fetch(base + '/health', { signal: ctrl.signal })
+    // no-store：绕开 SW/HTTP 缓存——/health 是实时身份探测，吃到旧缓存会误判直连
+    const r = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store' })
     clearTimeout(timer)
     if (!r.ok) return false
     const j = await r.json().catch(() => null)

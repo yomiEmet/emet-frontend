@@ -9,7 +9,7 @@ const KEY = 'admin-key'
 // ── 离线缓存（app shell）──────────────────────────────────
 // 网页本体/图标缓存到本地，断网也能打开 App。后端 API 跨域，一律放行不缓存。
 // 改动缓存策略时把版本号 +1，activate 会清掉旧缓存。
-const CACHE = 'emet-shell-v1'
+const CACHE = 'emet-shell-v2' // v2: 修分家后遗症——旧缓存里存着隧道时代的 /health 桥标记,害前端误判直连(手机405)
 // 安装时预存这些（带 hash 的 JS/CSS 文件名构建时才知道，靠运行时首次联网自动缓存）
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/favicon.svg']
 
@@ -48,6 +48,9 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return // 写请求不缓存
   const url = new URL(req.url)
   if (url.origin !== self.location.origin) return // 后端 API 等跨域请求：放行不碰
+  // 桥探测/聊天端点绝不缓存：/health 的应答是"这页由谁托管"的实时身份，
+  // 缓存它会让前端在域名搬家后误判直连（2026-07-27 手机 405 实案）
+  if (url.pathname === '/health' || url.pathname === '/chat') return
 
   // 打开页面（SPA 导航）：网络优先，断网回落缓存的 index.html
   if (req.mode === 'navigate') {
