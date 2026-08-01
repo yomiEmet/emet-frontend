@@ -6,7 +6,7 @@
 // - 本机 claude-cli：POST {baseUrl}/chat，把对话+system 交给本机 chat-server.cjs，
 //   后端 spawn `claude -p` 把订阅额度当聊天用，文字流 SSE 吐回（无 [DONE]，靠 done/error 事件）
 import { getActiveTarget } from './providers.js'
-import { request } from '../api/client.js'
+import { request, getAdminKey } from '../api/client.js'
 
 // baseUrl 归一：去尾斜杠；没带 /v1 的补上
 function endpoint(base, path) {
@@ -322,8 +322,8 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
     const cand = (provider.baseUrl || 'http://localhost:8000').replace(/\/+$/, '')
     if (await bridgeReachable(cand)) directBase = cand
   }
-  if (!directBase && typeof window !== 'undefined' && window.location.origin !== CC_DOOR) {
-    if (await bridgeReachable(CC_DOOR)) directBase = CC_DOOR
+  if (!directBase && typeof window !== 'undefined' && window.location.origin !== BRIDGE_DOOR) {
+    if (await bridgeReachable(BRIDGE_DOOR)) directBase = BRIDGE_DOOR
   }
 
   if (!directBase) throw new Error(NO_BRIDGE_MSG)
@@ -332,14 +332,16 @@ async function streamClaudeCli({ provider, model, system, messages, signal, onDe
   } catch (e) {
     // 405/404 = 探测误判，那个"桥"其实是静态托管（旧缓存/域名搬家）→ 同样给恢复指引
     if (e && (e.status === 405 || e.status === 404)) throw new Error(NO_BRIDGE_MSG)
+    if (e && e.status === 401) throw new Error('聊天钥匙没对上：到设置页确认「访问密钥」已填（和看记忆用的是同一把）。')
     throw e
   }
 }
 
-// 书房门：电脑开着时的流式直连入口（Access 邮箱锁在前，浏览器带登录 cookie 过闸）
-const CC_DOOR = 'https://cc.emethome.com'
+// 聊天直连门：不挂 Access（苹果的 PWA 和浏览器 cookie 不互通，邮箱锁的票带不过去），
+// 鉴权靠 Emet 访问密钥/暗号——和数据库同款保护，任何设备零配置零刷脸。
+const BRIDGE_DOOR = 'https://bridge.emethome.com'
 const NO_BRIDGE_MSG =
-  '流式通道没接上：手机→打开 cc.emethome.com 登录一次再回来；电脑→确认「启动本机聊天」窗口开着（还不行就双击重开一次）。'
+  '流式通道没接上：确认家里电脑开着、「启动本机聊天」窗口在跑（还不行就双击重开一次）。'
 
 // 探测某来源是不是"本机桥"：/health 必须回带 bridge:'emet-local' 标记。
 // 只看 r.ok 不够——SPA（pages.dev）对任意路径都回 index.html 200，会误判。
@@ -349,8 +351,7 @@ async function bridgeReachable(base) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), 1500)
     // no-store：绕开 SW/HTTP 缓存——/health 是实时身份探测，吃到旧缓存会误判直连
-    // credentials:'include'：探 cc 门要带 Access 登录 cookie（同站子域，Lax 也会带）；对 localhost 无副作用
-    const r = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store', credentials: 'include' })
+    const r = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store' })
     clearTimeout(timer)
     if (!r.ok) return false
     const j = await r.json().catch(() => null)
@@ -365,15 +366,10 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
   const headers = { 'content-type': 'application/json' }
   // apiKey 在 claude-cli 协议里是"暗号"，对应 chat-server 的 CC_BRIDGE_TOKEN
   if (apiKey) headers.authorization = 'Bearer ' + apiKey
-  // cc 门在 Access 登录墙后面：浏览器的"预检"请求(OPTIONS)按规范不带 cookie，
-  // 会被登录墙拦下 → 整个跨域直连失败，除非去 Cloudflare 后台配一堆 CORS(静怡看不懂)。
-  // 解法：把请求伪装成"简单请求"(text/plain + 无 authorization 头) → 浏览器不发预检，
-  // 带着登录 cookie 的正式请求直达。桥端 readBody 解析从不看 content-type；
-  // cc 门的鉴权靠 Access 注入的邮箱头，桥不看暗号——两个头都可以安全省掉。
-  if (base === CC_DOOR) {
-    headers['content-type'] = 'text/plain;charset=UTF-8'
-    delete headers.authorization
-  }
+  // Emet 访问密钥同权开门（桥端 checkAuth 二选一认）：设备本来就存着它看记忆，
+  // 顺手带上 → 手机/新设备聊天零配置，不再依赖 Access cookie（苹果口袋不互通的坑）
+  const ak = getAdminKey()
+  if (ak) headers['x-admin-key'] = ak
   let res
   try {
     res = await fetch(base + '/chat', {
@@ -381,7 +377,6 @@ async function streamClaudeDirect({ base, apiKey, sys, messages, payloadModel, s
       headers,
       body: JSON.stringify({ system: sys, messages, model: payloadModel }),
       signal,
-      credentials: 'include', // 走 cc 门要带 Access 登录 cookie；同源/localhost 场景无副作用
     })
   } catch (e) {
     throw new Error('连不上本机后端：' + (e?.message || e) + '。请先在电脑上启动本机桥')

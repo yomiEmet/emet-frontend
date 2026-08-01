@@ -224,7 +224,7 @@ function corsHeaders(req) {
   return {
     'access-control-allow-origin': allow,
     'access-control-allow-methods': 'POST, GET, OPTIONS',
-    'access-control-allow-headers': 'content-type, authorization',
+    'access-control-allow-headers': 'content-type, authorization, x-admin-key',
     // 云端家(emethome.com)跨域直连 cc 门要带 Access 登录 cookie（credentials:'include'），
     // 带凭证的跨域请求浏览器要求响应必须有下面这行（且 allow-origin 不能是 *，上面是精确回显，满足）
     'access-control-allow-credentials': 'true',
@@ -298,14 +298,21 @@ function serveStatic(req, res) {
 //      而隧道已被 Access 用邮箱验证码挡过一道 → 可信，手机因此无需暗号。
 //   ② 本机直连：带对的 Bearer 暗号（保护本机 8000 端口，防同机其它程序乱调）。
 function checkAuth(req, res) {
-  const accessEmail = (req.headers['cf-access-authenticated-user-email'] || '').trim()
-  if (accessEmail) return true // 经 Access 验证过的隧道请求
-  if (!AUTH_TOKEN) return true
+  // 两把真钥匙，二选一：
+  // ① 暗号（CC_BRIDGE_TOKEN，Bearer 头）——电脑直连的老钥匙
+  // ② Emet 访问密钥（X-Admin-Key，与 worker 同一把）——手机/任意设备零配置，
+  //    前端本来就存着它看记忆，聊天顺手带上即可
+  // 刻意不再信 cf-access-authenticated-user-email 头：bridge.emethome.com 这扇门
+  // 前面没有 Access，谁都能伪造一行"自称验过邮箱"的头，信它=白给。cc 门的
+  // 同源页面同样带 X-Admin-Key，走②，不受影响。
+  if (!AUTH_TOKEN && !ADMIN_KEY) return true
   const h = (req.headers.authorization || '').trim()
   const got = h.startsWith('Bearer ') ? h.slice(7).trim() : ''
-  if (got && got === AUTH_TOKEN) return true
+  if (got && AUTH_TOKEN && got === AUTH_TOKEN) return true
+  const adminHdr = (req.headers['x-admin-key'] || '').trim()
+  if (adminHdr && ADMIN_KEY && adminHdr === ADMIN_KEY) return true
   res.writeHead(401, { 'content-type': 'application/json; charset=utf-8', ...corsHeaders(req) })
-  res.end(JSON.stringify({ error: 'auth required: 请求需带 Authorization: Bearer <CC_BRIDGE_TOKEN>' }))
+  res.end(JSON.stringify({ error: 'auth required: 请带暗号(Bearer)或 Emet 访问密钥(X-Admin-Key)' }))
   return false
 }
 
