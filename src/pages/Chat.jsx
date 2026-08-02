@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil, ImagePlus } from 'lucide-react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { chatSystemPrompt, memInject, chatImageUpload, chatImageUrl } from '../api.js'
 import { compressImage } from '../utils/image.js'
 import { streamChat } from '../utils/anthropic.js'
@@ -16,6 +17,12 @@ import { loadSessions, saveSessions as persistSessions, newMessage } from '../ut
 import { pull, schedulePush, deleteRemote } from '../utils/sync.js'
 
 marked.setOptions({ breaks: true, gfm: true })
+
+// 消毒防线：marked v18 会原样透传 markdown 里的裸 HTML（<img onerror>、javascript: 链接等）。
+// Emet 的回复虽是"自己人"，但她挂着能读外部内容的工具——被读到的内容若含注入，
+// 可能诱导她在回复里"回声"出恶意 HTML，进而偷走浏览器里的访问密钥。
+// 所有模型输出渲染前统一过 DOMPurify；流式光标 span 是我们自己的静态字符串，在消毒后追加。
+const renderSafeMarkdown = (text) => DOMPurify.sanitize(marked.parse(text || ''))
 
 // ── 对话沉淀：独立一次请求，让模型把对话里值得长期保存的内容用工具存进记忆库 ──
 const DISTILL_SYSTEM =
@@ -1175,7 +1182,7 @@ export default function Chat() {
                         className="chat-bubble chat-bubble--emet chatx-tgbubble"
                         dangerouslySetInnerHTML={{
                           __html:
-                            marked.parse(p) +
+                            renderSafeMarkdown(p) +
                             (streaming && isStreamingRow && pi === parts.length - 1
                               ? '<span class="chat-cursor">▍</span>'
                               : ''),
@@ -1187,10 +1194,10 @@ export default function Chat() {
               ) : (
                 <div
                   className="chat-bubble chat-bubble--emet"
-                  // Emet 的输出走 Markdown（自己人，信任渲染）
+                  // Emet 的输出走 Markdown + DOMPurify 消毒（防工具读到的内容借她的嘴注入）
                   dangerouslySetInnerHTML={{
                     __html:
-                      marked.parse(m.content || '') +
+                      renderSafeMarkdown(m.content || '') +
                       (streaming && isStreamingRow ? '<span class="chat-cursor">▍</span>' : ''),
                   }}
                 />

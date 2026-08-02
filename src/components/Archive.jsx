@@ -459,7 +459,12 @@ function inline(s) {
   r = r.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
   r = r.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   r = r.replace(/(?<!\*)\*([^\*\n]+)\*(?!\*)/g, '<em>$1</em>');
-  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  // 链接协议白名单：只放行 http(s) 与相对路径，挡掉 [x](javascript:...) 这类可执行链接
+  r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, text, url) => {
+    const u = String(url).trim();
+    if (!/^(https?:|\/|#|\.\/)/i.test(u)) return text;
+    return `<a href="${u}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  });
   return r;
 }
 
