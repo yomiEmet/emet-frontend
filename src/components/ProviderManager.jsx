@@ -250,10 +250,17 @@ function ProviderForm({ draft, onSave, onClose }) {
               </p>
             </>
           ) : (
-            <label className="prov-field">
-              <span>API Key</span>
-              <input type="password" value={d.apiKey} placeholder="sk-…" onChange={(e) => set('apiKey', e.target.value)} />
-            </label>
+            <>
+              <label className="prov-field">
+                <span>API Key</span>
+                <input type="password" value={d.apiKey} placeholder="sk-…" onChange={(e) => set('apiKey', e.target.value)} />
+              </label>
+              {/* 明示同步范围：供应商配置（含这把 Key）会随设置同步存进你自己的 Cloudflare
+                  后端，换设备才能免填。与「Emet 访问密钥只存本机」不同，别让人误会。*/}
+              <p className="faint prov-tip" style={{ margin: '2px 0 8px' }}>
+                这把 Key 会随「设置同步」保存到你自己的 Emet 后端（换手机/电脑免重填）。不想让它离开本机就别填在这里。
+              </p>
+            </>
           )}
 
           <div className="prov-field">

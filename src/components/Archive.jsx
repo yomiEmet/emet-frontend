@@ -646,6 +646,7 @@ export default function Archive({ onExit }) {
   // 版本信息 { importedAt, convCount }:先用本地缓存即时显示,云端拉到后更新
   const [version, setVersion] = useState(() => loadVersion());
   const [booting, setBooting] = useState(true);   // 首次从云端加载中
+  const [pullErr, setPullErr] = useState(null);   // 云端拉取失败(与"没存过档案"区分)
   const hydratedRef = useRef(false);              // 首次水合完成前不回推
   const prevDataRef = useRef(null);               // 判定 data 是否因新上传而变化
 
@@ -666,7 +667,8 @@ export default function Archive({ onExit }) {
           }
         }
       })
-      .catch(() => {})
+      // 云端拉取失败要说出来：否则会渲染成"拖入 zip"的空上传页，像从没存过档案
+      .catch((e) => { setPullErr(e); })
       .finally(() => {
         setBooting(false);
         // 延后置位:让本次注入触发的推送 effect 先因 hydratedRef=false 跳过
@@ -891,6 +893,13 @@ export default function Archive({ onExit }) {
             </button>
           )}
           <div className="empty-inner">
+            {/* 云端拉取失败 ≠ 没存过档案：先把真实原因摆出来，避免让人以为档案没了 */}
+            {pullErr && (
+              <div className="error-box" style={{ marginBottom: 14 }}>
+                云端档案没拉下来（{pullErr?.status === 401 ? '访问密钥不对，去设置页填一下' : '网络或后端出问题了'}）。
+                你之前存的档案还在云端，刷新页面重试即可——不用重新上传 zip。
+              </div>
+            )}
             <div className="empty-mark">ARCHIVE</div>
             <h1 className="empty-title">Claude 对话档案</h1>
             <p className="empty-sub">把 Anthropic 给你的导出 zip 直接拖进来——一步搞定。或者解压后的文件夹/json 也行,前端本地解析,文件不会离开你的设备。</p>

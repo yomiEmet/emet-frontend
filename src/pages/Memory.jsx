@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, CalendarDays, Plus, X, List, LayoutGrid, ArrowUpDown, Check } from 'lucide-react'
 import MemoryCard from '../components/MemoryCard.jsx'
+import LoadError from '../components/LoadError.jsx'
 import Galaxy from '../components/Galaxy.jsx'
 import { CATEGORIES } from '../utils/categories.js'
 import { monthLabel, monthKeyOf, shortDateZh, timeOfDayZh, formatDateZh, formatDateFriendly, weekdayZh } from '../utils/time.js'
@@ -98,14 +99,25 @@ function MemoryManage({ mode = 'memory' }) {
 
   const load = () =>
     memoryAll()
+      .then((list) => { setAll(list); setLoadErr(null) })
+      .catch((e) => { setAll([]); setLoadErr(e) })
+
+  // 加载失败要与"真的没有数据"区分开：失败时记下错误，列表区显示原因 + 重试，
+  // 而不是显示"没有匹配的记忆"让人以为数据没了（Codex 体检 #9/#16）
+  const [loadErr, setLoadErr] = useState(null)
+  const reload = () => {
+    setAll(null)
+    setLoadErr(null)
+    memoryAll()
       .then(setAll)
-      .catch(() => setAll([]))
+      .catch((e) => { setAll([]); setLoadErr(e) })
+  }
 
   useEffect(() => {
     let alive = true
     memoryAll()
-      .then((list) => alive && setAll(list))
-      .catch(() => alive && setAll([]))
+      .then((list) => { if (alive) { setAll(list); setLoadErr(null) } })
+      .catch((e) => { if (alive) { setAll([]); setLoadErr(e) } })
     return () => {
       alive = false
     }
@@ -376,6 +388,8 @@ function MemoryManage({ mode = 'memory' }) {
       <div className={'mem-list' + (view === 'list' ? ' mem-list--compact' : ' stack')} ref={listRef}>
         {all === null ? (
           <p className="faint list-hint">加载中…</p>
+        ) : loadErr ? (
+          <LoadError err={loadErr} onRetry={reload} />
         ) : list.length === 0 ? (
           <p className="faint list-hint">{isLog ? '还没有日志' : '没有匹配的记忆'}</p>
         ) : (
@@ -499,15 +513,24 @@ function PeriodReviewList({ author, emptyHint }) {
 function MomentTimeline() {
   const navigate = useNavigate()
   const [list, setList] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [query, setQuery] = useState('')
   const q = query.trim()
 
+  const reload = () => {
+    setList(null)
+    setLoadErr(null)
+    momentAll()
+      .then(setList)
+      .catch((e) => { setList([]); setLoadErr(e) })
+  }
+
   useEffect(() => {
     let alive = true
     momentAll()
-      .then((l) => alive && setList(l))
-      .catch(() => alive && setList([]))
+      .then((l) => { if (alive) { setList(l); setLoadErr(null) } })
+      .catch((e) => { if (alive) { setList([]); setLoadErr(e) } })
     return () => {
       alive = false
     }
@@ -578,6 +601,7 @@ function MomentTimeline() {
   }
 
   if (list === null) return <p className="faint list-hint">加载中…</p>
+  if (loadErr) return <LoadError err={loadErr} onRetry={reload} />
   if (list.length === 0) {
     return (
       <>
@@ -725,16 +749,25 @@ function MomentTimeline() {
 function DiaryList() {
   const navigate = useNavigate()
   const [list, setList] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [author, setAuthor] = useState('all')
   // 同日多篇时哪些日期处于展开态
   const [expandedDates, setExpandedDates] = useState(() => new Set())
   const [drawerOpen, setDrawerOpen] = useState(false)
 
+  const reload = () => {
+    setList(null)
+    setLoadErr(null)
+    diaryAll()
+      .then(setList)
+      .catch((e) => { setList([]); setLoadErr(e) })
+  }
+
   useEffect(() => {
     let alive = true
     diaryAll()
-      .then((l) => alive && setList(l))
-      .catch(() => alive && setList([]))
+      .then((l) => { if (alive) { setList(l); setLoadErr(null) } })
+      .catch((e) => { if (alive) { setList([]); setLoadErr(e) } })
     return () => {
       alive = false
     }
@@ -877,6 +910,8 @@ function DiaryList() {
       <div className="stack">
         {list === null ? (
           <p className="faint list-hint">加载中…</p>
+        ) : loadErr ? (
+          <LoadError err={loadErr} onRetry={reload} />
         ) : grouped.length === 0 ? (
           <p className="faint list-hint">没有日记</p>
         ) : (

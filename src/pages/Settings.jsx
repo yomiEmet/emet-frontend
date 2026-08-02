@@ -199,7 +199,8 @@ export default function Settings() {
                 )}
               </span>
               <p className="faint" style={{ fontSize: 11, lineHeight: 1.5 }}>
-                访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库。
+                访问密钥只存在本机浏览器（localStorage），不写进代码、不提交仓库、也不随设置同步上云。
+                （注意：下面「AI 供应商」里填的 API Key 属于设置的一部分，会同步到你自己的后端。）
               </p>
             </div>
           </div>

@@ -100,21 +100,23 @@ function loadAllData() {
   return Promise.all(
     DATA_TYPES.map((t) =>
       getJSON('/api/data?only=' + t).then(
-        (r) => [t, r[t] || []],
-        () => [t, null], // 单类失败先记 null，下面判断整体成败
+        (r) => [t, r[t] || [], null],
+        (err) => [t, null, err], // 单类失败先记 null + 原始错误，下面判断整体成败
       ),
     ),
   ).then((pairs) => {
     const d = {}
-    let anyFail = false
-    for (const [t, v] of pairs) {
-      if (v == null) anyFail = true
+    let firstErr = null
+    for (const [t, v, err] of pairs) {
+      if (v == null && !firstErr) firstErr = err
       d[t] = v || []
     }
-    // 有任一类彻底失败就当整体失败（不写半截缓存，避免"部分空白"假象）
-    if (anyFail) {
-      const e = new Error('部分数据加载失败')
+    // 有任一类彻底失败就当整体失败（不写半截缓存，避免"部分空白"假象）。
+    // 透传首个真实错误的 status，页面才能说清是"密钥不对"还是"后端出错"（而非笼统的"没拉全"）
+    if (firstErr !== null || pairs.some(([, v]) => v == null)) {
+      const e = new Error(firstErr?.message || '部分数据加载失败')
       e.partial = true
+      if (firstErr?.status) e.status = firstErr.status
       throw e
     }
     return d

@@ -2402,6 +2402,54 @@
   display: block;
 }
 
+/* 加载失败提示（LoadError）：替代"空列表假装没数据" */
+.load-error {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  background: var(--surface-2, rgba(200, 120, 80, 0.04));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.load-error--compact {
+  padding: 10px 12px;
+}
+
+.load-error__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.load-error__hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-faint, #888);
+}
+
+.load-error__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+
+.load-error__retry:active {
+  opacity: 0.6;
+}
+
 /* AuthImg 占位：图片经 fetch+blob 取回前的同尺寸骨架（密钥走请求头，不进 URL）*/
 .authimg-ph {
   background: var(--surface-2, rgba(128, 128, 128, 0.08));
