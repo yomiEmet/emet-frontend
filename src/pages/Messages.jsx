@@ -24,6 +24,7 @@ import {
   feedCommentDelete,
 } from '../api.js'
 import AuthImg from '../components/AuthImg.jsx'
+import LoadError from '../components/LoadError.jsx'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 import { compressImage } from '../utils/image.js'
@@ -186,20 +187,35 @@ const LETTER_FILTERS = [
 
 function LetterBoard() {
   const [list, setList] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [kind, setKind] = useState('all')
   const [composeOpen, setComposeOpen] = useState(false)
 
   const load = () =>
     letterAll()
-      .then(setList)
+      .then((l) => {
+        setList(l)
+        setLoadErr(null)
+      })
       // 刷新失败保留旧列表（首载失败才落空态），别把已显示的内容清掉
-      .catch(() => setList((prev) => prev || []))
+      .catch((e) => {
+        setLoadErr(e)
+        setList((prev) => prev || [])
+      })
 
   useEffect(() => {
     let alive = true
     letterAll()
-      .then((l) => alive && setList(l))
-      .catch(() => alive && setList([]))
+      .then((l) => {
+        if (!alive) return
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setList([])
+        setLoadErr(e)
+      })
     return () => {
       alive = false
     }
@@ -244,19 +260,21 @@ function LetterBoard() {
         />
       )}
 
-      {filtered.length === 0 ? (
+      {loadErr && <LoadError err={loadErr} onRetry={load} compact={filtered.length > 0} />}
+
+      {filtered.length === 0 && !loadErr ? (
         <div className="letter-empty">
           <div className="letter-empty__line" />
           <p className="letter-empty__text">还没有信</p>
           <div className="letter-empty__line" />
         </div>
-      ) : (
+      ) : filtered.length > 0 ? (
         <div className="letter-list">
           {filtered.map((l) => (
             <LetterCard key={l.id} letter={l} onChanged={load} />
           ))}
         </div>
-      )}
+      ) : null}
 
       {/* 新建信件（旧版信件 tab 的 FAB，迁移补齐）*/}
       <button className="fab" onClick={() => setComposeOpen(true)} aria-label="写信">
@@ -442,20 +460,35 @@ function LetterCard({ letter, onChanged }) {
 // ════════════════ 留言板 ════════════════
 function MessageBoard() {
   const [list, setList] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const taRef = useRef(null)
 
   const load = () =>
     messageAll()
-      .then(setList)
-      .catch(() => setList((prev) => prev || []))
+      .then((l) => {
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        setLoadErr(e)
+        setList((prev) => prev || [])
+      })
 
   useEffect(() => {
     let alive = true
     messageAll()
-      .then((l) => alive && setList(l))
-      .catch(() => alive && setList([]))
+      .then((l) => {
+        if (!alive) return
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setList([])
+        setLoadErr(e)
+      })
     return () => {
       alive = false
     }
@@ -499,10 +532,15 @@ function MessageBoard() {
       <div className="stack">
         {list === null ? (
           <p className="faint list-hint">加载中…</p>
-        ) : list.length === 0 ? (
-          <p className="faint list-hint">还没有留言</p>
         ) : (
-          list.map((m) => <MsgCard key={m.id} m={m} onChanged={load} />)
+          <>
+            {loadErr && <LoadError err={loadErr} onRetry={load} compact={list.length > 0} />}
+            {list.length === 0 && !loadErr ? (
+              <p className="faint list-hint">还没有留言</p>
+            ) : (
+              list.map((m) => <MsgCard key={m.id} m={m} onChanged={load} />)
+            )}
+          </>
         )}
       </div>
 
@@ -609,6 +647,7 @@ function MsgCard({ m, onChanged }) {
 // ════════════════ 灵感板 ════════════════
 function IdeaBoard() {
   const [list, setList] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [content, setContent] = useState('')
   const [tagsInput, setTagsInput] = useState('')
@@ -616,14 +655,28 @@ function IdeaBoard() {
 
   const load = () =>
     ideaAll()
-      .then(setList)
-      .catch(() => setList((prev) => prev || []))
+      .then((l) => {
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        setLoadErr(e)
+        setList((prev) => prev || [])
+      })
 
   useEffect(() => {
     let alive = true
     ideaAll()
-      .then((l) => alive && setList(l))
-      .catch(() => alive && setList([]))
+      .then((l) => {
+        if (!alive) return
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setList([])
+        setLoadErr(e)
+      })
     return () => {
       alive = false
     }
@@ -692,10 +745,15 @@ function IdeaBoard() {
       <div className="stack">
         {list === null ? (
           <p className="faint list-hint">加载中…</p>
-        ) : list.length === 0 ? (
-          <p className="faint list-hint">还没有灵感</p>
         ) : (
-          list.map((i) => <IdeaCard key={i.id} idea={i} busy={busy} onChanged={load} onRemove={remove} />)
+          <>
+            {loadErr && <LoadError err={loadErr} onRetry={load} compact={list.length > 0} />}
+            {list.length === 0 && !loadErr ? (
+              <p className="faint list-hint">还没有灵感</p>
+            ) : (
+              list.map((i) => <IdeaCard key={i.id} idea={i} busy={busy} onChanged={load} onRemove={remove} />)
+            )}
+          </>
         )}
       </div>
 
@@ -804,6 +862,7 @@ const FEED_SOURCE_LABEL = { 'idle-auto': '独处', dream: '梦' }
 function FeedBoard() {
   const [items, setItems] = useState(null)
   const [nextBefore, setNextBefore] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [text, setText] = useState('')
   const [imgs, setImgs] = useState([]) // [{ data, media_type, preview }]，最多 3 张
   const [sending, setSending] = useState(false)
@@ -834,9 +893,13 @@ function FeedBoard() {
       .then((r) => {
         setItems(r.items || [])
         setNextBefore(r.next_before || null)
+        setLoadErr(null)
       })
       // 刷新失败保留旧列表（与留言板同策略）
-      .catch(() => setItems((prev) => prev || []))
+      .catch((e) => {
+        setLoadErr(e)
+        setItems((prev) => prev || [])
+      })
 
   useEffect(() => {
     let alive = true
@@ -845,8 +908,13 @@ function FeedBoard() {
         if (!alive) return
         setItems(r.items || [])
         setNextBefore(r.next_before || null)
+        setLoadErr(null)
       })
-      .catch(() => alive && setItems([]))
+      .catch((e) => {
+        if (!alive) return
+        setItems([])
+        setLoadErr(e)
+      })
     return () => {
       alive = false
     }
@@ -951,10 +1019,15 @@ function FeedBoard() {
       <div className="stack">
         {items === null ? (
           <p className="faint list-hint">加载中…</p>
-        ) : items.length === 0 ? (
-          <p className="faint list-hint">还没有动态</p>
         ) : (
-          items.map((f) => <FeedCard key={f.id} f={f} onPatch={patchItem} onRemove={removeItem} />)
+          <>
+            {loadErr && <LoadError err={loadErr} onRetry={loadFirst} compact={items.length > 0} />}
+            {items.length === 0 && !loadErr ? (
+              <p className="faint list-hint">还没有动态</p>
+            ) : (
+              items.map((f) => <FeedCard key={f.id} f={f} onPatch={patchItem} onRemove={removeItem} />)
+            )}
+          </>
         )}
         {nextBefore && (
           <button className="mini-btn feed-more" onClick={loadMore} disabled={loadingMore}>

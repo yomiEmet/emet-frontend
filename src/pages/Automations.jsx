@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react'
 import { autopromptGet, autopromptSet } from '../api.js'
 import { request } from '../api/client.js'
+import LoadError from '../components/LoadError.jsx'
 import { loadProviders } from '../utils/providers.js'
 import { showToast } from '../utils/toast.js'
 
@@ -19,22 +20,27 @@ export default function Automations() {
   // 渠道列表以云端 settings:global 为准（worker 后台真正 resolve 的就是它），本地列表兜底
   const [providers, setProviders] = useState(() => loadProviders().filter((p) => p.enabled))
 
-  useEffect(() => {
-    let alive = true
+  const reload = (isAlive = () => true) => {
+    setErr(null)
     autopromptGet()
       .then((r) => {
-        if (!alive) return
+        if (!isAlive()) return
         setDefs(r.defs || {})
         setConfig(r.config || {})
       })
-      .catch((e) => alive && setErr(e?.message || '加载失败'))
+      .catch((e) => isAlive() && setErr(e))
     request('/api/settings')
       .then((r) => {
-        if (!alive) return
+        if (!isAlive()) return
         const cloud = (r?.settings?.providers || []).filter((p) => p.enabled)
         if (cloud.length) setProviders(cloud.map((p) => ({ id: p.id, name: p.name, models: p.models || [] })))
       })
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    let alive = true
+    reload(() => alive)
     return () => {
       alive = false
     }
@@ -51,7 +57,7 @@ export default function Automations() {
         模板里的 {'{{变量}}'} 会在运行时被真实素材替换；清空模板保存 = 恢复默认。
         注意：这些任务在云端跑，「本机 Claude（订阅）」够不着——选了它也会自动退回可用渠道。
       </p>
-      {err && <p className="faint ap-hint">加载失败：{err}</p>}
+      {err && <LoadError err={err} onRetry={() => reload()} />}
       {!defs && !err && <p className="faint ap-hint">加载中…</p>}
       {defs && (
         <div className="stack">

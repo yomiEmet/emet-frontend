@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useLayoutEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, Plus, X } from 'lucide-react'
 import { ideaAll, ideaCreate, ideaUpdate, ideaDelete } from '../api.js'
+import LoadError from '../components/LoadError.jsx'
 import { showToast } from '../utils/toast.js'
 
 const NOTE_COLORS = [
@@ -27,6 +28,7 @@ function AutoTextarea({ value, className, ...rest }) {
 export default function IdeasPage() {
   const navigate = useNavigate()
   const [list, setList] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
   const [formOpen, setFormOpen] = useState(false)
   const [content, setContent] = useState('')
   const [tagsInput, setTagsInput] = useState('')
@@ -34,14 +36,28 @@ export default function IdeasPage() {
 
   const load = () =>
     ideaAll()
-      .then(setList)
-      .catch(() => setList((prev) => prev || []))
+      .then((l) => {
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        setLoadErr(e)
+        setList((prev) => prev || [])
+      })
 
   useEffect(() => {
     let alive = true
     ideaAll()
-      .then((l) => alive && setList(l))
-      .catch(() => alive && setList([]))
+      .then((l) => {
+        if (!alive) return
+        setList(l)
+        setLoadErr(null)
+      })
+      .catch((e) => {
+        if (!alive) return
+        setList([])
+        setLoadErr(e)
+      })
     return () => { alive = false }
   }, [])
 
@@ -120,21 +136,26 @@ export default function IdeasPage() {
 
       {list === null ? (
         <p className="faint list-hint">加载中…</p>
-      ) : list.length === 0 ? (
-        <p className="faint list-hint">还没有灵感</p>
       ) : (
-        <div className="ideas-masonry">
-          {list.map((idea, idx) => (
-            <StickyNote
-              key={idea.id}
-              idea={idea}
-              color={NOTE_COLORS[idx % NOTE_COLORS.length]}
-              busy={busy}
-              onChanged={load}
-              onRemove={() => remove(idea.id)}
-            />
-          ))}
-        </div>
+        <>
+          {loadErr && <LoadError err={loadErr} onRetry={load} compact={list.length > 0} />}
+          {list.length === 0 && !loadErr ? (
+            <p className="faint list-hint">还没有灵感</p>
+          ) : list.length > 0 ? (
+            <div className="ideas-masonry">
+              {list.map((idea, idx) => (
+                <StickyNote
+                  key={idea.id}
+                  idea={idea}
+                  color={NOTE_COLORS[idx % NOTE_COLORS.length]}
+                  busy={busy}
+                  onChanged={load}
+                  onRemove={() => remove(idea.id)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </>
       )}
 
       <button className="fab" onClick={() => setFormOpen(true)} aria-label="记灵感">
