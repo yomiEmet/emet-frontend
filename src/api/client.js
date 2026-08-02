@@ -14,7 +14,7 @@
 
 import { showToast } from '../utils/toast.js'
 
-export const BASE_URL = 'https://emet-memoty-v66.aandxiaobao.workers.dev'
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://emet-memoty-v66.aandxiaobao.workers.dev'
 
 // ── 访问密钥：全项目唯一存储键（写操作旧逻辑也用的就是它，无第二套）──
 const KEY_STORAGE = 'emet.adminKey'
