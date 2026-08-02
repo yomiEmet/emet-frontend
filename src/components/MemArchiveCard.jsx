@@ -74,7 +74,7 @@ export default function MemArchiveCard() {
     <>
       <SetRow label="原文存档" desc={archiveDesc} />
       <SetRow label="自动摘录" desc={extractDesc}>
-        <IosSwitch on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
+        <IosSwitch ariaLabel="自动摘录开关" on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
       </SetRow>
       {enabled && (
         <SetRow label="摘录模型" desc="留空 = 跟随聊天模型">

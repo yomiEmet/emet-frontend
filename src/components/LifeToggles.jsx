@@ -12,7 +12,7 @@ export function ReceiptToggle() {
   const enabled = !!cfg?.enabled
   return (
     <SetRow label="今日小票" desc="主页小票卡：随手记今天做了什么">
-      <IosSwitch on={enabled} onChange={() => setCfg({ ...cfg, enabled: !enabled })} />
+      <IosSwitch ariaLabel="今日小票开关" on={enabled} onChange={() => setCfg({ ...cfg, enabled: !enabled })} />
     </SetRow>
   )
 }
@@ -35,7 +35,7 @@ export function AnnivToggle() {
   return (
     <>
       <SetRow label="纪念日提醒" desc="临近时 Emet 聊天里自然提一句">
-        <IosSwitch on={enabled} onChange={() => setCfg({ ...cfg, enabled: !enabled })} />
+        <IosSwitch ariaLabel="纪念日提醒开关" on={enabled} onChange={() => setCfg({ ...cfg, enabled: !enabled })} />
       </SetRow>
       {enabled && (
         <SetRow label="提前提醒" desc="0 = 只在当天提">

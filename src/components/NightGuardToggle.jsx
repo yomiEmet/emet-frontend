@@ -37,7 +37,7 @@ export default function NightGuardToggle() {
 
   return (
     <SetRow label="凌晨守护" desc="23:30–03:00 催睡提醒">
-      <IosSwitch on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
+      <IosSwitch ariaLabel="凌晨守护开关" on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
     </SetRow>
   )
 }

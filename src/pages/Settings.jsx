@@ -275,6 +275,7 @@ export default function Settings() {
           </Row>
           <Row label="深色模式">
             <IosSwitch
+              ariaLabel="深色模式开关"
               on={theme === 'night'}
               onChange={() => setTheme(theme === 'night' ? 'paper' : 'night')}
             />

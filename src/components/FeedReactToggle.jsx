@@ -39,7 +39,7 @@ export default function FeedReactToggle() {
 
   return (
     <SetRow label="动态回应" desc="Emet 会路过你的动态：点赞、评论、接话">
-      <IosSwitch on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
+      <IosSwitch ariaLabel="动态回应开关" on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
     </SetRow>
   )
 }

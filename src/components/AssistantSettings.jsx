@@ -88,7 +88,7 @@ export default function AssistantSettings({ onChange }) {
 
       {/* 分气泡模式 */}
       <SetRow label="分气泡模式" desc="回复按段落拆成气泡，双击进观察模式">
-        <IosSwitch on={!!a.bubbleMode} onChange={() => apply({ bubbleMode: !a.bubbleMode })} />
+        <IosSwitch ariaLabel="分气泡模式开关" on={!!a.bubbleMode} onChange={() => apply({ bubbleMode: !a.bubbleMode })} />
       </SetRow>
 
       {/* temperature */}

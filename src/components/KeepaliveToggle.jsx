@@ -60,7 +60,7 @@ export default function KeepaliveToggle() {
 
   return (
     <SetRow label="缓存保活" desc={desc}>
-      <IosSwitch on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
+      <IosSwitch ariaLabel="缓存保活开关" on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
     </SetRow>
   )
 }

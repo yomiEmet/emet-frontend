@@ -38,7 +38,7 @@ export default function IdleToggle() {
 
   return (
     <SetRow label="独处时间" desc="白天窗口独处：写手账 / 发动态">
-      <IosSwitch on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
+      <IosSwitch ariaLabel="独处时间开关" on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
     </SetRow>
   )
 }

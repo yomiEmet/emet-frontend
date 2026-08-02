@@ -37,7 +37,7 @@ export default function DailyToggle() {
 
   return (
     <SetRow label="自动笔记" desc="每晚 22:30 自动写当日观察">
-      <IosSwitch on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
+      <IosSwitch ariaLabel="自动笔记开关" on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
     </SetRow>
   )
 }

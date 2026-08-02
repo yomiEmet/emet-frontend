@@ -44,11 +44,11 @@ export default function DreamToggle() {
   return (
     <>
       <SetRow label="做梦" desc="凌晨 4–5 点做一个梦，发在动态流">
-        <IosSwitch on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
+        <IosSwitch ariaLabel="做梦开关" on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
       </SetRow>
       {cfg?.enabled && (
         <SetRow label="做梦后推送" desc="「Emet 做了一个梦」系统通知">
-          <IosSwitch on={!!cfg.push} disabled={busy} onChange={togglePush} />
+          <IosSwitch ariaLabel="做梦后推送开关" on={!!cfg.push} disabled={busy} onChange={togglePush} />
         </SetRow>
       )}
     </>

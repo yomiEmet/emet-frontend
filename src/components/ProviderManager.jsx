@@ -106,7 +106,7 @@ export default function ProviderManager() {
                     {p.models.length} 个模型{p.defaultModel ? ` · ${p.defaultModel}` : ''}
                   </span>
                 </span>
-                <IosSwitch on={!!p.enabled} onChange={() => toggle(p.id)} />
+                <IosSwitch ariaLabel={`${p.name} 供应商开关`} on={!!p.enabled} onChange={() => toggle(p.id)} />
                 <ChevronRight size={16} className={'set-caret' + (open ? ' is-open' : '')} />
               </button>
               <div className={'set-collapse' + (open ? ' is-open' : '')}>

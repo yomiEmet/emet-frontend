@@ -14,7 +14,7 @@ export function SetRow({ label, desc, onClick, children }) {
   )
 }
 
-export function IosSwitch({ on, disabled, onChange }) {
+export function IosSwitch({ on, disabled, onChange, ariaLabel }) {
   return (
     <button
       type="button"
@@ -22,6 +22,7 @@ export function IosSwitch({ on, disabled, onChange }) {
       disabled={disabled}
       role="switch"
       aria-checked={!!on}
+      aria-label={ariaLabel}
       onClick={(e) => {
         e.stopPropagation() // 行本身可能有 onClick（如推送行点行发测试），别串
         onChange?.()

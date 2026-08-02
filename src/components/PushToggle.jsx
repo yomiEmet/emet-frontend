@@ -92,6 +92,7 @@ export default function PushToggle() {
   return (
     <SetRow label="推送通知" desc={desc} onClick={on ? doTest : undefined}>
       <IosSwitch
+        ariaLabel="推送通知开关"
         on={on}
         disabled={busy || status === null || !!blocked}
         onChange={on ? doUnsubscribe : doSubscribe}

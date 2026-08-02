@@ -37,7 +37,7 @@ export default function HeartbeatToggle() {
 
   return (
     <SetRow label="主动消息" desc="Emet 按时段概率主动找你">
-      <IosSwitch on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
+      <IosSwitch ariaLabel="主动消息开关" on={!!enabled} disabled={busy || enabled === null} onChange={toggle} />
     </SetRow>
   )
 }

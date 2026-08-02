@@ -199,7 +199,7 @@ export default function WaterPage() {
               {cfg ? `${cfg.start_hour}:00–${cfg.end_hour}:00 落后进度才提醒` : '加载中…'}
             </span>
           </span>
-          <IosSwitch on={!!cfg?.enabled} disabled={!cfg} onChange={() => saveCfg({ enabled: !cfg.enabled })} />
+          <IosSwitch ariaLabel="喝水提醒开关" on={!!cfg?.enabled} disabled={!cfg} onChange={() => saveCfg({ enabled: !cfg.enabled })} />
         </div>
         {cfg?.enabled && (
           <div className="set-row">

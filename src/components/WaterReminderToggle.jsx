@@ -40,7 +40,7 @@ export default function WaterReminderToggle() {
 
   return (
     <SetRow label="喝水提醒" desc={desc}>
-      <IosSwitch on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
+      <IosSwitch ariaLabel="喝水提醒开关" on={!!cfg?.enabled} disabled={busy || cfg === null} onChange={toggle} />
     </SetRow>
   )
 }
