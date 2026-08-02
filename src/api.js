@@ -445,10 +445,9 @@ export function feedCreate(content, images) {
     },
   })
 }
-// 图片直链：<img> 带不了请求头，走 ?key= 双鉴权（worker 端与 health/mcp 同款闸门）
-export function feedImageUrl(id) {
-  return `${BASE_URL}/api/feed-image/${id}?key=${encodeURIComponent(getAdminKey())}`
-}
+// 注：图片直链 feedImageUrl/chatImageUrl 已于 2026-08-02 退役——密钥进 URL 会渗进
+// 浏览器历史/DOM/日志。改用 components/AuthImg.jsx：fetch 带 X-Admin-Key 头 → blob URL。
+// worker 端两种鉴权都认（checkMcpAuth：头或 ?key=），故后端无需改动。
 // 动态回应（朋友圈化）：Emet 延迟路过点赞/评论的总开关，config 路由与独处/做梦同款
 export function feedReactConfigGet() {
   return getJSON('/api/config/feed-react') // { config: { enabled, model } }
@@ -484,9 +483,6 @@ export function autopromptSet(body) {
 // images: [{ data: base64, media_type }]（≤3、compressImage 压过）→ { ids }
 export function chatImageUpload(images) {
   return request('/api/chat-image', { method: 'POST', body: { images } })
-}
-export function chatImageUrl(id) {
-  return `${BASE_URL}/api/chat-image/${id}?key=${encodeURIComponent(getAdminKey())}`
 }
 
 // ── 留言/灵感/信件的编辑与删除（worker 路由早已就绪，纯前端补齐）──

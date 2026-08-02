@@ -2328,7 +2328,8 @@
   grid-template-columns: repeat(3, 1fr);
 }
 
-.feed-card__imgs img {
+.feed-card__imgs img,
+.feed-card__imgs .authimg-ph {
   width: 100%;
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -2390,7 +2391,8 @@
   justify-content: flex-end;
 }
 
-.chatx-msgimgs img {
+.chatx-msgimgs img,
+.chatx-msgimgs .authimg-ph {
   width: 96px;
   height: 96px;
   object-fit: cover;
@@ -2398,6 +2400,33 @@
   border: 1px solid var(--border);
   cursor: pointer;
   display: block;
+}
+
+/* AuthImg 占位：图片经 fetch+blob 取回前的同尺寸骨架（密钥走请求头，不进 URL）*/
+.authimg-ph {
+  background: var(--surface-2, rgba(128, 128, 128, 0.08));
+  animation: authimg-pulse 1.4s ease-in-out infinite;
+}
+
+.authimg-ph.is-failed {
+  animation: none;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(128, 128, 128, 0.06),
+    rgba(128, 128, 128, 0.06) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+}
+
+@keyframes authimg-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.9;
+  }
 }
 
 /* ════════════════════════════════════════

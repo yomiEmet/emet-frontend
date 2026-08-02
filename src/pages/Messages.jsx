@@ -22,8 +22,8 @@ import {
   feedLike,
   feedComment,
   feedCommentDelete,
-  feedImageUrl,
 } from '../api.js'
+import AuthImg from '../components/AuthImg.jsx'
 import { shortDateZh, timeOfDayZh, formatDateZh } from '../utils/time.js'
 import { showToast } from '../utils/toast.js'
 import { compressImage } from '../utils/image.js'
@@ -1113,20 +1113,14 @@ function FeedCard({ f, onPatch, onRemove }) {
       {images.length > 0 && (
         <div className="feed-card__imgs" data-n={Math.min(images.length, 3)}>
           {images.map((id) => (
-            <img
-              key={id}
-              src={feedImageUrl(id)}
-              alt=""
-              loading="lazy"
-              onClick={() => setViewImg(feedImageUrl(id))}
-            />
+            <AuthImg key={id} kind="feed" id={id} onClick={() => setViewImg(id)} />
           ))}
         </div>
       )}
 
       {viewImg && (
         <div className="img-lightbox" onClick={() => setViewImg(null)}>
-          <img src={viewImg} alt="" />
+          <AuthImg kind="feed" id={viewImg} />
         </div>
       )}
 

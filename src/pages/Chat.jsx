@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { Send, Plus, Menu, Search, X, Square, ChevronDown, ChevronLeft, ChevronRight, Check, Wrench, Sparkles, Copy, RotateCcw, Star, Pencil, ImagePlus } from 'lucide-react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { chatSystemPrompt, memInject, chatImageUpload, chatImageUrl } from '../api.js'
+import { chatSystemPrompt, memInject, chatImageUpload } from '../api.js'
+import { BASE_URL, getAdminKey } from '../api/client.js'
+import AuthImg from '../components/AuthImg.jsx'
 import { compressImage } from '../utils/image.js'
 import { streamChat } from '../utils/anthropic.js'
 import { listAnthropicTools, callTool } from '../utils/mcp.js'
@@ -68,7 +70,10 @@ async function resolveChatImages(ids) {
       continue
     }
     try {
-      const r = await fetch(chatImageUrl(id))
+      // 带 X-Admin-Key 头取图（密钥不进 URL）；与 AuthImg 同源同缓存策略
+      const r = await fetch(`${BASE_URL}/api/chat-image/${encodeURIComponent(id)}`, {
+        headers: getAdminKey() ? { 'X-Admin-Key': getAdminKey() } : {},
+      })
       if (!r.ok) continue
       const blob = await r.blob()
       const b64 = await new Promise((res, rej) => {
@@ -285,13 +290,13 @@ function UserMsg({ m, favOn, onFav, idx, count, onSwitch, onEdit }) {
         {!editing && m.images?.length > 0 && (
           <div className="chatx-msgimgs">
             {m.images.map((id) => (
-              <img key={id} src={chatImageUrl(id)} alt="" loading="lazy" onClick={() => setViewImg(chatImageUrl(id))} />
+              <AuthImg key={id} kind="chat" id={id} onClick={() => setViewImg({ kind: 'chat', id })} />
             ))}
           </div>
         )}
         {viewImg && (
           <div className="img-lightbox" onClick={() => setViewImg(null)}>
-            <img src={viewImg} alt="" />
+            <AuthImg kind={viewImg.kind} id={viewImg.id} />
           </div>
         )}
         {!editing && (
