@@ -15,6 +15,7 @@ import { nowCST, logicalDayKey, nowLogical } from './utils/time.js'
 import { loadAssistant } from './utils/assistant.js'
 import { smartSearch } from './utils/search.js'
 import { BASE_URL, request, getAdminKey } from './api/client.js'
+import { createDataLoader } from './api/dataLoader.js'
 
 // BASE_URL 现在定义在统一请求模块 client.js，这里再导出一次，兼容旧引用
 export { BASE_URL }
@@ -38,9 +39,7 @@ async function writeJSON(method, path, body) {
   return json
 }
 
-// ── 本地持久缓存（localStorage）────────────────────────────
-// 目的：冷启动/重开 App 时先用上次的数据秒显示，再后台刷新（stale-while-revalidate）。
-// 存不下（配额满/隐私模式）一律静默跳过，绝不影响使用。私密数据只存本机。
+// 星图保留原有本地缓存；记录列表不再读取旧快照，失败必须显示出来。
 const DATA_CACHE_KEY = 'emet.cache.data.v1'
 const VIZ_CACHE_KEY = 'emet.cache.viz.v1'
 
@@ -87,87 +86,20 @@ function emitDataUpdate() {
   })
 }
 
-// ── /api/data 缓存（内存 + 本地持久，stale-while-revalidate）──
-let _dataPromise = null
-let _dataRevalidating = false
+const dataLoader = createDataLoader({
+  requestType: (type, cursor) => getJSON('/api/data', { only: type, cursor }),
+  getOwner: getAdminKey,
+})
 
-// 数据涨到 1000+ 条时，一把拉全部会撞 Worker 单次调用 1000 子请求上限 → 后端 1101 崩。
-// 改为 7 类各拉一次（后端 ?only=<类>），每次独立 Worker 调用各有独立额度，再合并成
-// 老的 { memories, moments, ... } 形状——前端其它地方无感。
-const DATA_TYPES = ['memories', 'moments', 'diaries', 'messages', 'handoffs', 'ideas', 'games']
-
-function loadAllData() {
-  return Promise.all(
-    DATA_TYPES.map((t) =>
-      getJSON('/api/data?only=' + t).then(
-        (r) => [t, r[t] || [], null],
-        (err) => [t, null, err], // 单类失败先记 null + 原始错误，下面判断整体成败
-      ),
-    ),
-  ).then((pairs) => {
-    const d = {}
-    let firstErr = null
-    for (const [t, v, err] of pairs) {
-      if (v == null && !firstErr) firstErr = err
-      d[t] = v || []
-    }
-    // 有任一类彻底失败就当整体失败（不写半截缓存，避免"部分空白"假象）。
-    // 透传首个真实错误的 status，页面才能说清是"密钥不对"还是"后端出错"（而非笼统的"没拉全"）
-    if (firstErr !== null || pairs.some(([, v]) => v == null)) {
-      const e = new Error(firstErr?.message || '部分数据加载失败')
-      e.partial = true
-      if (firstErr?.status) e.status = firstErr.status
-      throw e
-    }
-    return d
-  })
+// 类型专属读取只会因自身失败而拒绝；总览保留成功板块并附带 _errors。
+export function getDataType(type, force = false) {
+  return dataLoader.read(type, force)
 }
-
-function fetchData() {
-  return loadAllData()
-    .then((d) => {
-      writeCache(DATA_CACHE_KEY, d)
-      return d
-    })
-    .catch((e) => {
-      _dataPromise = null // 失败不缓存，下次可重试
-      throw e
-    })
-}
-
-// 后台静默刷新：成功则更新本地+内存并通知；失败继续用缓存；401 清掉本地私密缓存
-function revalidateData() {
-  if (_dataRevalidating) return
-  _dataRevalidating = true
-  loadAllData()
-    .then((d) => {
-      writeCache(DATA_CACHE_KEY, d)
-      _dataPromise = Promise.resolve(d)
-      emitDataUpdate()
-    })
-    .catch((e) => {
-      if (e && e.status === 401) clearPersistCache()
-    })
-    .finally(() => {
-      _dataRevalidating = false
-    })
-}
-
 export function getData(force = false) {
-  if (force) _dataPromise = null
-  if (!_dataPromise) {
-    const cached = force ? null : readCache(DATA_CACHE_KEY)
-    if (cached) {
-      _dataPromise = Promise.resolve(cached) // 秒显示缓存
-      revalidateData() // 后台刷新最新
-    } else {
-      _dataPromise = fetchData() // 无缓存：正常走网络
-    }
-  }
-  return _dataPromise
+  return dataLoader.readAll(force)
 }
 export function invalidateData() {
-  _dataPromise = null
+  dataLoader.invalidate()
   _vizPromise = null // 星图缓存一并失效：连藤/拆藤后再进星图能看到最新（修 Bug 2）
   clearPersistCache() // 写后清本地缓存，强制下次走网络，避免看到写前的旧数据
 }
@@ -216,8 +148,7 @@ function sortMemories(list, sort) {
 
 // ── 记忆 ─────────────────────────────────────────────────
 export async function memoryList({ category = 'all', sort = 'recent', limit = 300 } = {}) {
-  const data = await getData()
-  let list = (data.memories || []).map(normMemory)
+  let list = (await getDataType('memories')).map(normMemory)
   if (category && category !== 'all') list = list.filter((m) => m.category === category)
   return { items: sortMemories(list, sort).slice(0, limit) }
 }
@@ -225,8 +156,7 @@ export async function memoryList({ category = 'all', sort = 'recent', limit = 30
 // 走 smartSearch（关键词分词+三维加权）。withLinked=true 时把命中条目的藤蔓另一头也带出（弱分排在直接命中之后）。
 // 空查询沿用旧逻辑（按 recent 排），保持浏览态行为不变。
 export async function memorySearch({ query, category = 'all', withLinked = false } = {}) {
-  const data = await getData()
-  let list = (data.memories || []).map(normMemory)
+  let list = (await getDataType('memories')).map(normMemory)
   if (category && category !== 'all') list = list.filter((m) => m.category === category)
   const q = (query || '').trim()
   if (!q) return { items: sortMemories(list, 'recent') }
@@ -234,9 +164,8 @@ export async function memorySearch({ query, category = 'all', withLinked = false
 }
 
 // 全部记忆（归一化），记忆页一次拉取后本地筛选/排序/统计/按月。
-export async function memoryAll() {
-  const data = await getData()
-  return (data.memories || []).map(normMemory)
+export async function memoryAll(force = false) {
+  return (await getDataType('memories', force)).map(normMemory)
 }
 
 // 单条记忆（含 linked/link_rel）——从已缓存的 /api/data 里取，避免多余请求。
@@ -360,9 +289,8 @@ export function momentSearch(query, n = 12) {
 }
 
 // ── 年轮：瞬记 / 日记（一期第 5 步）──────────────────────
-export async function momentAll() {
-  const data = await getData()
-  return [...(data.moments || [])].sort(byCreatedDesc)
+export async function momentAll(force = false) {
+  return [...(await getDataType('moments', force))].sort(byCreatedDesc)
 }
 
 // 日记展示日期优先 diary_date（补写的日记 created_at 是补写时间，不是日记当天）
@@ -370,9 +298,8 @@ export function diaryDate(d) {
   return d.diary_date || (d.created_at || '').slice(0, 10)
 }
 
-export async function diaryAll() {
-  const data = await getData()
-  return [...(data.diaries || [])].sort((a, b) => {
+export async function diaryAll(force = false) {
+  return [...(await getDataType('diaries', force))].sort((a, b) => {
     const da = diaryDate(a)
     const db = diaryDate(b)
     return da < db ? 1 : da > db ? -1 : byCreatedDesc(a, b)
@@ -385,9 +312,8 @@ export async function diaryGet(id) {
 }
 
 // ── 留言板 / 灵感板（一期第 6 步，写入走 X-Admin-Key）────
-export async function messageAll() {
-  const data = await getData()
-  return [...(data.messages || [])].sort(byCreatedDesc)
+export async function messageAll(force = false) {
+  return [...(await getDataType('messages', force))].sort(byCreatedDesc)
 }
 
 // 后端 message_leave：不传 from/to 会默认成 emet→yomi，前端发的一律 yomi→emet
@@ -395,17 +321,15 @@ export function messageLeave(content) {
   return writeJSON('POST', '/api/message', { content, from: 'yomi', to: 'emet' })
 }
 
-export async function ideaAll() {
-  const data = await getData()
-  return [...(data.ideas || [])].sort(byCreatedDesc)
+export async function ideaAll(force = false) {
+  return [...(await getDataType('ideas', force))].sort(byCreatedDesc)
 }
 
 // ── 信件：交接信 / 日常信，共用 handoffs 表 用 kind 区分 ──
 // 字段: id / title / content / kind ('handoff'|'daily') / created_at / locked / window_from
 // 旧版若没存 kind，按 'handoff' 兜底（迁移前的数据都是交接信）。
-export async function letterAll() {
-  const data = await getData()
-  return [...(data.handoffs || [])]
+export async function letterAll(force = false) {
+  return [...(await getDataType('handoffs', force))]
     .map((h) => ({
       id: h.id,
       title: h.title || (h.window_from ? `交接信 · ${h.window_from}` : '交接信'),
@@ -839,8 +763,9 @@ export function exerciseSet(date, minutes) {
 }
 
 // ── 主页摘要：一次 /api/data 算出 whisper + 各项计数 ──────
-export async function homeSummary() {
-  const d = await getData()
+export async function homeSummary(force = false) {
+  const d = await getData(force)
+  const errors = d._errors || {}
   const messages = d.messages || []
   const diaries = d.diaries || []
   const moments = [...(d.moments || [])].sort(byCreatedDesc)
@@ -863,14 +788,15 @@ export async function homeSummary() {
   return {
     whisper: whisperM?.content || '',
     sleep,
+    errors,
     counts: {
-      memory: (d.memories || []).length,
-      moment: (d.moments || []).length,
-      diary: diaries.filter((x) => x.author !== 'story').length,
-      story: diaries.filter((x) => x.author === 'story').length,
-      letter: (d.handoffs || []).length,
-      game: (d.games || []).length,
-      monthMessages,
+      memory: errors.memories ? null : (d.memories || []).length,
+      moment: errors.moments ? null : (d.moments || []).length,
+      diary: errors.diaries ? null : diaries.filter((x) => x.author !== 'story').length,
+      story: errors.diaries ? null : diaries.filter((x) => x.author === 'story').length,
+      letter: errors.handoffs ? null : (d.handoffs || []).length,
+      game: errors.games ? null : (d.games || []).length,
+      monthMessages: errors.messages ? null : monthMessages,
     },
   }
 }
