@@ -21,18 +21,18 @@ export function explainError(err) {
     return { title: '连不上后端', hint: '看看手机/电脑网络（或代理）是否正常，然后重试。数据都在云端，没有丢。' }
   }
   if (/部分数据加载失败/.test(msg)) {
-    return { title: '数据没拉全', hint: '有一类数据没取到，已停下来避免显示半截内容。点重试通常就好了。' }
+    return { title: '部分记录读取失败', hint: '失败的板块可以单独重试，其它板块继续显示。' }
   }
   return { title: '加载失败', hint: msg ? `原因：${msg}` : '未知原因，点重试看看。数据都在云端，没有丢。' }
 }
 
-export default function LoadError({ err, onRetry, compact = false }) {
+export default function LoadError({ err, onRetry, compact = false, label }) {
   const { title, hint } = explainError(err)
   return (
     <div className={'load-error' + (compact ? ' load-error--compact' : '')} role="alert">
       <div className="load-error__head">
         <AlertTriangle size={14} />
-        <span>{title}</span>
+        <span>{label ? `${label}读取失败` : title}</span>
       </div>
       <p className="load-error__hint">{hint}</p>
       {onRetry && (

@@ -9,6 +9,7 @@ import TodoList from '../components/TodoList.jsx'
 import ReceiptCard from '../components/ReceiptCard.jsx'
 import UnifiedCalendar from '../components/UnifiedCalendar.jsx'
 import MilestoneList from '../components/MilestoneList.jsx'
+import LoadError from '../components/LoadError.jsx'
 import { greeting, longDate, daysTogether, sinceLabel, nowCST, nowLogical, dayKey, logicalDayKey } from '../utils/time.js'
 import { homeSummary, subscribeData } from '../api.js'
 import { loadSessions } from '../utils/sessions.js'
@@ -36,14 +37,24 @@ function Num({ value }) {
 export default function Home() {
   const now = nowCST()
   const [summary, setSummary] = useState(null)
+  const [loadErr, setLoadErr] = useState(null)
+  const [reload, setReload] = useState(0)
   const [chatCounts, setChatCounts] = useState(() => chatDayCounts())
 
   useEffect(() => {
     let alive = true
     const load = () => {
       homeSummary()
-        .then((s) => alive && setSummary(s))
-        .catch(() => alive && setSummary(null))
+        .then((s) => {
+          if (!alive) return
+          setSummary(s)
+          setLoadErr(null)
+        })
+        .catch((e) => {
+          if (!alive) return
+          setSummary(null)
+          setLoadErr(e)
+        })
       setChatCounts(chatDayCounts())
     }
     load()
@@ -52,11 +63,14 @@ export default function Home() {
       .catch(() => {})
     const unsub = subscribeData(load)
     return () => { alive = false; unsub() }
-  }, [])
+  }, [reload])
 
   const todayMessages = chatCounts.get(dayKey(nowLogical())) || 0
   const counts = summary?.counts || {}
   const sleepHours = summary?.sleep || null
+  const errors = summary?.errors || {}
+  const retry = () => setReload((n) => n + 1)
+  const labels = { memories: '记忆', moments: '瞬记', diaries: '日记', messages: '留言', handoffs: '信件', ideas: '灵感', games: '游戏' }
 
   return (
     <div className="page home-stack">
@@ -73,7 +87,12 @@ export default function Home() {
         </div>
       </header>
 
-      <WhisperCard text={summary?.whisper || WHISPER_FALLBACK} />
+      {loadErr && <LoadError err={loadErr} onRetry={retry} />}
+      {errors.moments ? (
+        <LoadError err={errors.moments} label="瞬记与睡眠" onRetry={retry} />
+      ) : (
+        <WhisperCard text={summary?.whisper || WHISPER_FALLBACK} />
+      )}
 
       {/* ── 今日状态：2x2 网格 + 1 全宽行 ── */}
       <section>
@@ -129,6 +148,9 @@ export default function Home() {
           本月消息 <Num value={counts.monthMessages} />
         </span>
       </section>
+      {Object.entries(errors).filter(([type]) => type !== 'moments').map(([type, err]) => (
+        <LoadError key={type} err={err} label={labels[type] || type} onRetry={retry} compact />
+      ))}
     </div>
   )
 }

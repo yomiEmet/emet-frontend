@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return // 后端 API 等跨域请求：放行不碰
   // 桥探测/聊天端点绝不缓存：/health 的应答是"这页由谁托管"的实时身份，
   // 缓存它会让前端在域名搬家后误判直连（2026-07-27 手机 405 实案）
-  if (url.pathname === '/health' || url.pathname === '/chat') return
+  if (url.pathname === '/health' || url.pathname === '/chat' || url.pathname.startsWith('/api/')) return
 
   // 打开页面（SPA 导航）：网络优先，断网回落缓存的 index.html
   if (req.mode === 'navigate') {

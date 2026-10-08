@@ -62,6 +62,10 @@ export async function request(path, { method = 'GET', params, body } = {}) {
   if (key) headers['X-Admin-Key'] = key // 读写都带；缺失则后端 401，走下面统一处理
 
   const init = { method, headers }
+  if (method === 'GET') {
+    init.cache = 'no-store'
+    if (typeof AbortSignal.timeout === 'function') init.signal = AbortSignal.timeout(25000)
+  }
   if (body !== undefined) {
     headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(body)
@@ -81,5 +85,11 @@ export async function request(path, { method = 'GET', params, body } = {}) {
     err.status = res.status
     throw err
   }
-  return res.json()
+  const json = await res.json()
+  if (method === 'GET' && typeof json?.error === 'string') {
+    const err = new Error(json.error)
+    err.status = res.status
+    throw err
+  }
+  return json
 }
